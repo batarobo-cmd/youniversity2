@@ -6,13 +6,14 @@
   import { t } from '$lib/i18n';
   import { WS_EVENTS } from '@youniversity2/shared';
   import { lastMessage } from '$lib/stores/realtime';
+  import '$lib/styles/courses.css';
 
   let courses = $state<Array<Record<string, unknown>>>([]);
   let loading = $state(true);
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
-      if (!auth) goto('/login');
+      if (!auth) goto('/');
     });
 
     loadCourses();
@@ -41,29 +42,29 @@
   }
 </script>
 
-<h1 style="margin-bottom: 1.5rem;">{t('courses.title', $locale)}</h1>
+<div class="page-header">
+  <h1>{t('courses.title', $locale)}</h1>
+</div>
 
 {#if loading}
-  <p style="color: var(--color-muted);">Načítavam...</p>
+  <p class="loading-text">{t('courses.title', $locale)}...</p>
 {:else if courses.length === 0}
-  <p style="color: var(--color-muted);">{t('courses.empty', $locale)}</p>
+  <div class="empty-state">{t('courses.empty', $locale)}</div>
 {:else}
-  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
-    {#each courses as course}
-      <div class="card">
-        <h3 style="margin-bottom: 0.5rem;">{course.title as string}</h3>
-        <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1rem;">
-          {(course.description as string)?.slice(0, 120)}...
-        </p>
-        {#if course.isPublished}
-          <span class="badge badge-success">Published</span>
-        {:else}
-          <span class="badge badge-warning">Draft</span>
-        {/if}
-        <div style="margin-top: 1rem;">
-          <a href="/courses/{course.id}" class="btn">{t('courses.open', $locale)}</a>
+  <div class="courses-grid">
+    {#each courses as course, i}
+      <article class="course-tile" style="animation-delay: {i * 50}ms">
+        <h3>{course.title as string}</h3>
+        <p class="course-tile-desc">{(course.description as string)?.slice(0, 160)}</p>
+        <div class="course-tile-footer">
+          {#if course.isPublished}
+            <span class="badge badge-success">Published</span>
+          {:else}
+            <span class="badge badge-warning">Draft</span>
+          {/if}
+          <a href="/courses/{course.id}" class="btn btn-sm">{t('courses.open', $locale)} →</a>
         </div>
-      </div>
+      </article>
     {/each}
   </div>
 {/if}

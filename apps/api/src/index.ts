@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { dashboardRoutes } from './routes/dashboard';
 import { authRoutes } from './routes/auth';
 import { courseRoutes } from './routes/courses';
 import { enrollmentRoutes } from './routes/enrollments';
@@ -27,6 +28,7 @@ app.use(
 app.get('/health', (c) => c.json({ status: 'ok', service: 'youniversity2-api' }));
 
 app.route('/api/auth', authRoutes);
+app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/courses', courseRoutes);
 app.route('/api/enrollments', enrollmentRoutes);
 app.route('/api/progress', progressRoutes);

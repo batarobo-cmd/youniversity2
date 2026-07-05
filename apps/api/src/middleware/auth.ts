@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Context, Next } from 'hono';
 import { config } from '../config';
 import type { UserRole } from '@youniversity2/shared';
+import { touchSession, getSessionUser } from '../services/session';
 
 export interface AuthUser {
   id: string;
@@ -35,20 +36,40 @@ export async function verifyToken(token: string): Promise<AuthUser | null> {
   }
 }
 
-export async function authMiddleware(c: Context, next: Next) {
+function extractSessionId(c: Context): string | null {
   const header = c.req.header('Authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (header?.startsWith('Bearer ')) return header.slice(7);
+  const cookie = c.req.header('Cookie');
+  if (cookie) {
+    const match = cookie.match(/(?:^|;\s*)yo2_session=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
 
-  if (!token) {
+function extractTabId(c: Context): string | null {
+  return c.req.header('X-Tab-Session') ?? null;
+}
+
+async function resolveUser(c: Context, isHeartbeat = false): Promise<AuthUser | null> {
+  const sessionId = extractSessionId(c);
+  if (!sessionId) return null;
+
+  const tabId = extractTabId(c);
+  const user = await touchSession(sessionId, { isHeartbeat, tabId });
+  if (user) return user;
+
+  // Spätná kompatibilita: staré JWT v cookie/localStorage
+  return verifyToken(sessionId);
+}
+
+export async function authMiddleware(c: Context, next: Next) {
+  const user = await resolveUser(c, false);
+  if (!user) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
-
-  const user = await verifyToken(token);
-  if (!user) {
-    return c.json({ error: 'Invalid token' }, 401);
-  }
-
   c.set('user', user);
+  c.set('sessionId', extractSessionId(c));
   await next();
 }
 
@@ -63,11 +84,21 @@ export function requireRole(...roles: UserRole[]) {
 }
 
 export async function optionalAuth(c: Context, next: Next) {
-  const header = c.req.header('Authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
-  if (token) {
-    const user = await verifyToken(token);
-    if (user) c.set('user', user);
-  }
+  const user = await resolveUser(c, false);
+  if (user) c.set('user', user);
   await next();
+}
+
+export async function resolveSessionFromToken(token: string, tabId?: string | null) {
+  const user = await touchSession(token, { tabId });
+  if (user) return user;
+  return verifyToken(token);
+}
+
+export async function resolveWebSocketSession(token: string): Promise<AuthUser | null> {
+  const user = await getSessionUser(token);
+  if (user) {
+    return touchSession(token, { isHeartbeat: true });
+  }
+  return verifyToken(token);
 }

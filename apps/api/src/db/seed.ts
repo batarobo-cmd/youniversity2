@@ -46,6 +46,10 @@ async function seed() {
     process.exit(0);
   }
 
+  const courseStart = new Date();
+  const courseEnd = new Date();
+  courseEnd.setMonth(courseEnd.getMonth() + 3);
+
   const [course] = await db
     .insert(courses)
     .values({
@@ -53,6 +57,8 @@ async function seed() {
       defaultLocale: 'sk',
       isPublished: true,
       createdById: admin.id,
+      startsAt: courseStart,
+      endsAt: courseEnd,
     })
     .returning();
 
@@ -131,10 +137,13 @@ async function seed() {
   ]);
 
   if (student) {
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + 2);
     await db.insert(enrollments).values({
       userId: student.id,
       courseId: course.id,
       status: 'active',
+      expiresAt,
     });
   }
 

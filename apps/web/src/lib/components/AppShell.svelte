@@ -1,0 +1,57 @@
+<script lang="ts">
+  import { locale, user, isAdmin } from '$lib/stores/auth';
+  import { page } from '$app/stores';
+  import { t } from '$lib/i18n';
+  import type { User } from '@youniversity2/shared';
+  import LocaleMenu from '$lib/components/LocaleMenu.svelte';
+  import ProfileMenu from '$lib/components/ProfileMenu.svelte';
+  import '$lib/styles/app-shell.css';
+
+  let { serverUser = null, children }: { serverUser?: User | null; children: import('svelte').Snippet } = $props();
+
+  const displayUser = $derived($user ?? serverUser);
+
+  function isActive(path: string) {
+    return $page.url.pathname === path || $page.url.pathname.startsWith(path + '/');
+  }
+</script>
+
+<div class="app-shell">
+  <header class="app-banner">
+    <div class="app-banner-inner">
+      <a href="/dashboard" class="app-logo">
+        <span class="app-logo-mark">YO</span>
+        {t('app.title', $locale)}
+      </a>
+
+      <nav class="app-nav">
+        <a
+          href="/dashboard"
+          class="app-nav-link"
+          class:active={isActive('/dashboard') &&
+            !$page.url.pathname.includes('/profile') &&
+            !$page.url.pathname.includes('/admin')}
+        >
+          {t('nav.dashboard', $locale)}
+        </a>
+        <a href="/courses" class="app-nav-link" class:active={isActive('/courses')}>
+          {t('nav.courses', $locale)}
+        </a>
+        {#if $isAdmin}
+          <a href="/dashboard/admin" class="app-nav-link" class:active={isActive('/dashboard/admin')}>
+            {t('nav.manage', $locale)}
+          </a>
+        {/if}
+      </nav>
+
+      <div class="app-actions">
+        <LocaleMenu />
+        <ProfileMenu user={displayUser} />
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    {@render children()}
+  </main>
+</div>

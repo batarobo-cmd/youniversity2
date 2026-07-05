@@ -7,6 +7,7 @@
   import { t } from '$lib/i18n';
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
   import { WS_EVENTS } from '@youniversity2/shared';
+  import '$lib/styles/courses.css';
 
   let course = $state<Record<string, unknown> | null>(null);
   let progress = $state<Array<Record<string, unknown>>>([]);
@@ -17,7 +18,7 @@
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
-      if (!auth) goto('/login');
+      if (!auth) goto('/');
     });
 
     loadCourse();
@@ -75,38 +76,45 @@
 </script>
 
 {#if loading}
-  <p style="color: var(--color-muted);">Načítavam kurz...</p>
+  <p class="loading-text">Načítavam kurz...</p>
 {:else if !course}
-  <p>Kurz nebol nájdený.</p>
+  <div class="empty-state">Kurz nebol nájdený.</div>
 {:else}
-  <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem;">
-    <aside>
-      <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">{course.title as string}</h1>
-      <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
-        {course.description as string}
-      </p>
+  <div class="course-layout">
+    <aside class="course-sidebar">
+      <div class="course-sidebar-header">
+        <h1>{course.title as string}</h1>
+        <p>{course.description as string}</p>
+      </div>
 
       {#if $isAdmin}
-        <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          <button onclick={() => translateCourse('en')}>{t('admin.translate', $locale)} → EN</button>
-          <button onclick={() => translateCourse('de')}>{t('admin.translate', $locale)} → DE</button>
+        <div class="course-admin-actions">
+          <button class="btn btn-ghost btn-sm" onclick={() => translateCourse('en')}>
+            {t('admin.translate', $locale)} → EN
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick={() => translateCourse('de')}>
+            {t('admin.translate', $locale)} → DE
+          </button>
         </div>
       {/if}
 
-      <h2 style="font-size: 1rem; margin-bottom: 0.75rem;">{t('course.modules', $locale)}</h2>
+      <h2 style="font-size: 0.75rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem;">
+        {t('course.modules', $locale)}
+      </h2>
 
       {#each (course.modules as Array<Record<string, unknown>>) ?? [] as mod}
-        <div class="card" style="margin-bottom: 0.75rem; padding: 0.75rem;">
-          <h3 style="font-size: 0.95rem; margin-bottom: 0.5rem;">{mod.title as string}</h3>
+        <div class="module-block">
+          <h3>{mod.title as string}</h3>
           {#each (mod.lessons as Array<Record<string, unknown>>) ?? [] as lesson}
             {@const prog = getLessonProgress(lesson.id as string)}
             <button
+              class="lesson-btn"
+              class:active={activeLesson?.id === lesson.id}
               onclick={() => openLesson(lesson)}
-              style="display: block; width: 100%; text-align: left; margin-bottom: 0.25rem; background: {activeLesson?.id === lesson.id ? 'var(--color-primary)' : 'transparent'}; border: 1px solid var(--color-border); color: var(--color-text); padding: 0.4rem 0.6rem; font-size: 0.85rem;"
             >
               {lesson.title as string}
               {#if prog?.isComplete}
-                <span style="float: right;">✓</span>
+                <span class="check">✓</span>
               {/if}
             </button>
           {/each}
@@ -114,25 +122,26 @@
       {/each}
     </aside>
 
-    <section class="card">
+    <section class="lesson-content-panel">
       {#if activeLesson}
-        <h2 style="margin-bottom: 1rem;">{activeLesson.title as string}</h2>
+        <h2>{activeLesson.title as string}</h2>
 
         {#if activeLesson.type === 'embed' || activeLesson.type === 'video'}
           {@const config = activeLesson.config as Record<string, unknown>}
           {#if config.embedUrl}
-            <div style="position: relative; padding-bottom: 56.25%; height: 0; margin-bottom: 1rem;">
+            <div class="video-wrap">
               <iframe
                 src={config.embedUrl as string}
                 title={activeLesson.title as string}
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: var(--radius);"
                 allowfullscreen
               ></iframe>
             </div>
           {/if}
           <button onclick={() => markComplete(activeLesson!.id as string)}>Označiť ako dokončené</button>
         {:else if activeLesson.type === 'quiz'}
-          <p style="margin-bottom: 1rem;">Test — MVP verzia. Kliknite pre simuláciu úspešného testu (skóre 85%).</p>
+          <p style="margin-bottom: 1.25rem; color: var(--color-text-secondary); font-size: 0.9375rem;">
+            Test — MVP verzia. Kliknite pre simuláciu úspešného testu (skóre 85%).
+          </p>
           <button
             onclick={async () => {
               await api.updateProgress({
@@ -147,13 +156,13 @@
             Odoslať test (demo)
           </button>
         {:else}
-          <div style="margin-bottom: 1rem;">
+          <div style="margin-bottom: 1.25rem; line-height: 1.7; color: var(--color-text-secondary);">
             {(activeLesson.content as string) ?? 'Obsah lekcie.'}
           </div>
           <button onclick={() => markComplete(activeLesson!.id as string)}>Označiť ako prečítané</button>
         {/if}
       {:else}
-        <p style="color: var(--color-muted);">Vyberte lekciu zo zoznamu vľavo.</p>
+        <p class="empty-hint">Vyberte lekciu zo zoznamu vľavo.</p>
       {/if}
     </section>
   </div>

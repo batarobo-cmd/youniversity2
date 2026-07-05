@@ -1,13 +1,13 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import type { User } from '@youniversity2/shared';
 import { DEFAULT_LOCALE, type Locale } from '@youniversity2/shared';
+import { SESSION_STORAGE_KEY } from '../session';
 
-const TOKEN_KEY = 'yo2_token';
 const LOCALE_KEY = 'yo2_locale';
 
-function loadToken(): string | null {
+function loadSessionId(): string | null {
   if (typeof localStorage === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(SESSION_STORAGE_KEY);
 }
 
 function loadLocale(): Locale {
@@ -15,29 +15,52 @@ function loadLocale(): Locale {
   return (localStorage.getItem(LOCALE_KEY) as Locale) ?? DEFAULT_LOCALE;
 }
 
-export const token = writable<string | null>(loadToken());
+/** Session ID (opaque token) — nie JWT */
+export const token = writable<string | null>(null);
 export const user = writable<User | null>(null);
 export const locale = writable<Locale>(loadLocale());
+export const authReady = writable(false);
 
-export const isAuthenticated = derived(user, ($user) => $user !== null);
+export const isAuthenticated = derived(token, ($token) => $token !== null);
 export const isAdmin = derived(user, ($user) => $user?.role === 'admin' || $user?.role === 'instructor');
 
-export function setAuth(accessToken: string, authUser: User) {
-  localStorage.setItem(TOKEN_KEY, accessToken);
-  token.set(accessToken);
+if (typeof window !== 'undefined') {
+  const stored = loadSessionId();
+  if (stored) token.set(stored);
+}
+
+export function setAuth(sessionId: string, authUser: User) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  }
+  token.set(sessionId);
   user.set(authUser);
+  authReady.set(true);
   if (authUser.preferredLocale) {
     setLocale(authUser.preferredLocale as Locale);
   }
 }
 
 export function clearAuth() {
-  localStorage.removeItem(TOKEN_KEY);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    // Odstráň starý JWT ak existuje
+    localStorage.removeItem('yo2_token');
+  }
   token.set(null);
   user.set(null);
+  authReady.set(true);
 }
 
 export function setLocale(newLocale: Locale) {
   localStorage.setItem(LOCALE_KEY, newLocale);
   locale.set(newLocale);
+}
+
+export function syncSessionFromServer(sessionId: string) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  }
+  token.set(sessionId);
+  authReady.set(true);
 }

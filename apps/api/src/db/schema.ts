@@ -29,22 +29,33 @@ export const completionRuleTypeEnum = pgEnum('completion_rule_type', [
 ]);
 export const translationSourceEnum = pgEnum('translation_source', ['manual', 'ai']);
 
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  name: varchar('name', { length: 255 }).notNull(),
-  role: userRoleEnum('role').notNull().default('student'),
-  preferredLocale: varchar('preferred_locale', { length: 10 }).notNull().default('sk'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const oauthProviderEnum = pgEnum('oauth_provider', ['google', 'microsoft']);
+
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    passwordHash: text('password_hash'),
+    name: varchar('name', { length: 255 }).notNull(),
+    role: userRoleEnum('role').notNull().default('student'),
+    preferredLocale: varchar('preferred_locale', { length: 10 }).notNull().default('sk'),
+    oauthProvider: oauthProviderEnum('oauth_provider'),
+    oauthId: varchar('oauth_id', { length: 255 }),
+    avatarUrl: varchar('avatar_url', { length: 500 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('oauth_provider_id_idx').on(t.oauthProvider, t.oauthId)],
+);
 
 export const courses = pgTable('courses', {
   id: uuid('id').primaryKey().defaultRandom(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   defaultLocale: varchar('default_locale', { length: 10 }).notNull().default('sk'),
   isPublished: boolean('is_published').notNull().default(false),
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  endsAt: timestamp('ends_at', { withTimezone: true }),
   createdById: uuid('created_by_id')
     .notNull()
     .references(() => users.id),

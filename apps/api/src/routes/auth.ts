@@ -4,8 +4,16 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '../db';
 import { users } from '../db/schema';
-import { signToken } from '../middleware/auth';
+import { authMiddleware, type AuthUser } from '../middleware/auth';
+import { createSession, destroySession, touchSession } from '../services/session';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
+import {
+  getAuthorizationUrl,
+  getEnabledProviders,
+  handleOAuthCallback,
+  serializeUser,
+  type OAuthProvider,
+} from '../services/oauth';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -20,6 +28,71 @@ const loginSchema = z.object({
 });
 
 export const authRoutes = new Hono();
+
+authRoutes.get('/oauth/providers', (c) => {
+  return c.json(getEnabledProviders());
+});
+
+authRoutes.get('/oauth/:provider', async (c) => {
+  const provider = c.req.param('provider') as OAuthProvider;
+  if (provider !== 'google' && provider !== 'microsoft') {
+    return c.json({ error: 'Unknown provider' }, 400);
+  }
+
+  const url = await getAuthorizationUrl(provider);
+  if (!url) {
+    return c.json({ error: 'OAuth provider not configured' }, 503);
+  }
+
+  return c.redirect(url);
+});
+
+authRoutes.get('/oauth/:provider/callback', async (c) => {
+  const provider = c.req.param('provider') as OAuthProvider;
+  if (provider !== 'google' && provider !== 'microsoft') {
+    return c.json({ error: 'Unknown provider' }, 400);
+  }
+
+  const code = c.req.query('code');
+  const state = c.req.query('state');
+  const error = c.req.query('error');
+
+  if (error || !code || !state) {
+    return c.redirect(`${process.env.WEB_URL ?? 'http://localhost:5173'}/login?error=oauth_denied`);
+  }
+
+  const { redirectUrl } = await handleOAuthCallback(provider, code, state);
+  return c.redirect(redirectUrl);
+});
+
+authRoutes.get('/me', authMiddleware, async (c) => {
+  const authUser = c.get('user') as AuthUser;
+  const [user] = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
+  if (!user) return c.json({ error: 'User not found' }, 404);
+  return c.json(serializeUser(user));
+});
+
+authRoutes.post('/heartbeat', async (c) => {
+  const header = c.req.header('Authorization');
+  const sessionId = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const tabId = c.req.header('X-Tab-Session') ?? null;
+  const user = await touchSession(sessionId, { isHeartbeat: true, tabId });
+  if (!user) {
+    return c.json({ error: 'Session expired' }, 401);
+  }
+  return c.json({ ok: true });
+});
+
+authRoutes.post('/logout', authMiddleware, async (c) => {
+  const sessionId = c.get('sessionId') as string | undefined;
+  if (sessionId) {
+    await destroySession(sessionId);
+  }
+  return c.json({ ok: true });
+});
 
 authRoutes.post('/register', async (c) => {
   const body = registerSchema.safeParse(await c.req.json());
@@ -44,33 +117,17 @@ authRoutes.post('/register', async (c) => {
       preferredLocale: preferredLocale ?? 'sk',
       role: 'student',
     })
-    .returning({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-      preferredLocale: users.preferredLocale,
-      createdAt: users.createdAt,
-    });
+    .returning();
 
-  const token = await signToken({
+  const authUser = {
     id: user.id,
     email: user.email,
     role: user.role,
     name: user.name,
-  });
+  };
+  const sessionId = await createSession(authUser);
 
-  return c.json({
-    accessToken: token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      preferredLocale: user.preferredLocale,
-      createdAt: user.createdAt.toISOString(),
-    },
-  }, 201);
+  return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) }, 201);
 });
 
 authRoutes.post('/login', async (c) => {
@@ -82,26 +139,26 @@ authRoutes.post('/login', async (c) => {
   const { email, password } = body.data;
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  if (!user) {
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
-  const token = await signToken({
+  if (!user.passwordHash) {
+    const provider = user.oauthProvider === 'google' ? 'Google' : 'Microsoft 365';
+    return c.json({ error: `Použite prihlásenie cez ${provider}` }, 401);
+  }
+
+  if (!(await bcrypt.compare(password, user.passwordHash))) {
+    return c.json({ error: 'Invalid credentials' }, 401);
+  }
+
+  const authUser = {
     id: user.id,
     email: user.email,
     role: user.role,
     name: user.name,
-  });
+  };
+  const sessionId = await createSession(authUser);
 
-  return c.json({
-    accessToken: token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      preferredLocale: user.preferredLocale,
-      createdAt: user.createdAt.toISOString(),
-    },
-  });
+  return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) });
 });

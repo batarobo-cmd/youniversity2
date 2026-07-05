@@ -14,6 +14,7 @@ export interface User {
   name: string;
   role: UserRole;
   preferredLocale: Locale;
+  avatarUrl?: string;
   createdAt: string;
 }
 

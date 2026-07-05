@@ -2,6 +2,8 @@ import { writable } from 'svelte/store';
 import { WS_EVENTS, type WsMessage } from '@youniversity2/shared';
 import { get } from 'svelte/store';
 import { token } from './auth';
+import { api } from '../api';
+import { HEARTBEAT_INTERVAL_MS } from '../session';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
@@ -11,6 +13,26 @@ export const activityFeed = writable<Array<{ userName: string; eventType: string
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(async () => {
+    if (!get(token)) return;
+    try {
+      await api.heartbeat();
+    } catch {
+      // Relácia vypršala — layout server redirect pri ďalšom requeste
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+export function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
 
 export function connectWebSocket() {
   const t = get(token);

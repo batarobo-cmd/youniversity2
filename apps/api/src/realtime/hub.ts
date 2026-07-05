@@ -2,7 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import Redis from 'ioredis';
 import { WS_EVENTS, type WsMessage } from '@youniversity2/shared';
 import { config } from '../config';
-import { verifyToken, type AuthUser } from '../middleware/auth';
+import { resolveWebSocketSession, type AuthUser } from '../middleware/auth';
 import { db } from '../db';
 import { activityEvents } from '../db/schema';
 
@@ -193,5 +193,5 @@ export async function authenticateWebSocket(request: Request): Promise<AuthUser 
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
   if (!token) return null;
-  return verifyToken(token);
+  return resolveWebSocketSession(token);
 }
