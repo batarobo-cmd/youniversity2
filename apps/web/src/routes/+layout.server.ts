@@ -9,6 +9,21 @@ function isAuthPath(pathname: string) {
   return pathname === '/' || pathname === '/login' || pathname.startsWith('/auth/');
 }
 
+async function fetchSessionUser(sessionId: string, fetch: typeof globalThis.fetch) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${sessionId}` },
+      });
+      if (res.ok) return await res.json();
+      if (res.status === 401) return { unauthorized: true as const };
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 120));
+    }
+  }
+  return null;
+}
+
 export const load: LayoutServerLoad = async ({ cookies, url, fetch }) => {
   const sessionId = cookies.get(SESSION_COOKIE) ?? null;
   const pathname = url.pathname;
@@ -23,25 +38,19 @@ export const load: LayoutServerLoad = async ({ cookies, url, fetch }) => {
 
   let user = null;
   if (sessionId) {
-    try {
-      const res = await fetch(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${sessionId}` },
+    const result = await fetchSessionUser(sessionId, fetch);
+    if (result && 'unauthorized' in result) {
+      cookies.delete(SESSION_COOKIE, { path: '/' });
+      redirect(303, '/');
+    }
+    if (result && !('unauthorized' in result)) {
+      user = result;
+      cookies.set(SESSION_COOKIE, sessionId, {
+        path: '/',
+        maxAge: SESSION_MAX_AGE,
+        httpOnly: true,
+        sameSite: 'lax',
       });
-      if (res.ok) {
-        user = await res.json();
-        // Obnov cookie TTL pri každom SSR requeste
-        cookies.set(SESSION_COOKIE, sessionId, {
-          path: '/',
-          maxAge: SESSION_MAX_AGE,
-          httpOnly: true,
-          sameSite: 'lax',
-        });
-      } else {
-        cookies.delete(SESSION_COOKIE, { path: '/' });
-        redirect(303, '/');
-      }
-    } catch {
-      // API nedostupné — nechaj prejsť
     }
   }
 

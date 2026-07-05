@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { locale, isAdmin } from '$lib/stores/auth';
+  import { locale, isAdminUser, isPlatformAdminUser } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { t } from '$lib/i18n';
   import type { User } from '@youniversity2/shared';
@@ -13,8 +13,17 @@
   const displayName = $derived(user?.name || user?.email || t('profile.guest', $locale));
   const displayEmail = $derived(user?.email ?? '');
   const roleLabel = $derived(
-    user?.role === 'admin' ? t('profile.roleAdmin', $locale) : t('profile.roleStudent', $locale),
+    !user
+      ? ''
+      : user.role === 'admin'
+        ? t('profile.roleAdmin', $locale)
+        : user.role === 'instructor'
+          ? t('admin.roleInstructor', $locale)
+          : t('profile.roleStudent', $locale),
   );
+
+  const showAdminLinks = $derived(isAdminUser(user));
+  const showPlatformAdminLinks = $derived(isPlatformAdminUser(user));
 
   function toggle() {
     open = !open;
@@ -71,7 +80,9 @@
           {#if displayEmail}
             <span class="profile-menu-email">{displayEmail}</span>
           {/if}
-          <span class="profile-menu-role">{roleLabel}</span>
+          {#if roleLabel}
+            <span class="profile-menu-role">{roleLabel}</span>
+          {/if}
         </div>
       </div>
 
@@ -117,8 +128,8 @@
         {t('nav.dashboard', $locale)}
       </a>
 
-      {#if $isAdmin}
-        <a href="/dashboard/admin" class="profile-menu-item" role="menuitem" onclick={close}>
+      {#if showAdminLinks}
+        <a href="/dashboard/admin/manage" class="profile-menu-item" role="menuitem" onclick={close}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
@@ -128,7 +139,22 @@
               stroke-linejoin="round"
             />
           </svg>
-          {t('nav.manage', $locale)}
+          {t('admin.menuCoursesCategories', $locale)}
+        </a>
+      {/if}
+
+      {#if showPlatformAdminLinks}
+        <a href="/dashboard/admin/users" class="profile-menu-item" role="menuitem" onclick={close}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          {t('admin.menuUsers', $locale)}
         </a>
       {/if}
 

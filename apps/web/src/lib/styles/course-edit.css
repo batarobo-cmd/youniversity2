@@ -1,0 +1,160 @@
+@import './admin-manage.css';
+
+.course-edit {
+  max-width: 960px;
+  animation: fadeSlideUp var(--duration-slow) var(--ease-out) both;
+}
+
+.course-edit-top {
+  margin-bottom: 1.5rem;
+}
+
+.course-edit-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  text-decoration: none;
+  margin-bottom: 0.75rem;
+}
+
+.course-edit-back:hover {
+  color: var(--color-primary);
+}
+
+.course-edit-back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.course-edit-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.course-edit-heading h1 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.course-edit-sub {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  margin-top: 0.25rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.course-edit-tabs {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  background: var(--color-surface-hover);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.course-edit-tab {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
+}
+
+.course-edit-tab:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.course-edit-tab--active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.course-edit-panel .panel-body {
+  padding: 1.25rem;
+}
+
+.course-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 560px;
+}
+
+.course-edit-hint {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin: 0;
+}
+
+.course-edit-section-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0;
+  letter-spacing: -0.01em;
+}
+
+.course-edit-modules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.course-edit-modules li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--color-surface-hover);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+
+.course-edit-modules span {
+  color: var(--color-muted);
+}
+
+.course-edit-enroll-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.course-edit-enroll-row .admin-inline-select {
+  flex: 1;
+  min-width: 200px;
+}
+
+.course-edit-table {
+  margin-top: 0.5rem;
+}
+
+.course-edit-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.course-edit-check input {
+  width: auto;
+}

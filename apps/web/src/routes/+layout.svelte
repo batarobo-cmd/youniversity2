@@ -2,7 +2,7 @@
   import '../app.css';
   import { browser } from '$app/environment';
   import { page } from '$app/stores';
-  import { token, setAuth, syncSessionFromServer, clearAuth } from '$lib/stores/auth';
+  import { token, setAuth, syncSessionFromServer, clearAuth, user as authUser } from '$lib/stores/auth';
   import { connectWebSocket, disconnectWebSocket, startHeartbeat, stopHeartbeat } from '$lib/stores/realtime';
   import { api } from '$lib/api';
   import AppShell from '$lib/components/AppShell.svelte';
@@ -17,29 +17,38 @@
 
   const authPage = $derived(isAuthRoute($page.url.pathname));
 
-  let synced = $state(false);
+  let wsStarted = $state(false);
 
   $effect(() => {
     if (!browser || !authPage) return;
     clearAuth();
-    synced = false;
+    wsStarted = false;
+  });
+
+  /** Sync auth hneď po načítaní layout dát (pred interakciou). */
+  $effect.pre(() => {
+    if (!browser || authPage) return;
+    const sessionToken = data.token;
+    if (!sessionToken) return;
+
+    syncSessionFromServer(sessionToken);
+    if (data.user) {
+      setAuth(sessionToken, data.user as User);
+    }
+  });
+
+  /** Ak server nevrátil user, doplníme cez API. */
+  $effect(() => {
+    if (!browser || authPage || data.user || !data.token) return;
+    void api
+      .getMe(data.token)
+      .then((u) => setAuth(data.token!, u))
+      .catch(() => {});
   });
 
   $effect(() => {
-    if (!browser || synced || !data.token) return;
-    synced = true;
-
-    syncSessionFromServer(data.token);
-    if (data.user) {
-      setAuth(data.token, data.user as User);
-    } else {
-      api
-        .getMe(data.token)
-        .then((u) => setAuth(data.token!, u))
-        .catch(() => {
-          /* API nedostupné — profil sa zobrazí s fallbackom */
-        });
-    }
+    if (!browser || authPage || wsStarted || !data.token) return;
+    wsStarted = true;
 
     connectWebSocket();
     startHeartbeat();
@@ -60,7 +69,7 @@
 {#if authPage}
   {@render children()}
 {:else}
-  <AppShell serverUser={data.user}>
+  <AppShell user={$authUser ?? data.user}>
     <div class="page-enter">
       {@render children()}
     </div>

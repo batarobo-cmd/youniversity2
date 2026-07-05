@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { db } from '../db';
 import { enrollments, courses, users } from '../db/schema';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
-import { broadcastToCourse, broadcastToUser } from '../realtime/hub';
+import { broadcastToCourse, broadcastToUser, broadcastToAdmin } from '../realtime/hub';
+import { WS_EVENTS } from '@youniversity2/shared';
 
 export const enrollmentRoutes = new Hono();
 
@@ -60,13 +61,19 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     .returning();
 
   broadcastToUser(body.data.userId, {
-    type: 'enrollment_changed',
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
     payload: { enrollment, action: 'created' },
     timestamp: new Date().toISOString(),
   });
 
   broadcastToCourse(body.data.courseId, {
-    type: 'enrollment_changed',
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment, action: 'created' },
+    timestamp: new Date().toISOString(),
+  });
+
+  broadcastToAdmin({
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
     payload: { enrollment, action: 'created' },
     timestamp: new Date().toISOString(),
   });
@@ -86,7 +93,13 @@ enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) =>
   if (!enrollment) return c.json({ error: 'Enrollment not found' }, 404);
 
   broadcastToUser(enrollment.userId, {
-    type: 'enrollment_changed',
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment, action: 'revoked' },
+    timestamp: new Date().toISOString(),
+  });
+
+  broadcastToAdmin({
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
     payload: { enrollment, action: 'revoked' },
     timestamp: new Date().toISOString(),
   });

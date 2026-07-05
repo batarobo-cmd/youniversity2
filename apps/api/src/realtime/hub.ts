@@ -89,6 +89,10 @@ async function publish(room: string, message: WsMessage) {
   }
 }
 
+export function broadcastToAdmin(message: WsMessage) {
+  publish('admin:global', message);
+}
+
 export function broadcastToCourse(courseId: string, message: WsMessage) {
   publish(`course:${courseId}`, message);
   publish('admin:global', message);

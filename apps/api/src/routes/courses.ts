@@ -11,17 +11,21 @@ import {
   lessonTranslations,
   enrollments,
   completionRules,
+  certificates,
+  users,
 } from '../db/schema';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
 import { translateContent } from '../services/translation';
-import { broadcastToCourse } from '../realtime/hub';
+import { broadcastToCourse, broadcastToAdmin } from '../realtime/hub';
+import { WS_EVENTS } from '@youniversity2/shared';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
   defaultLocale: z.enum(SUPPORTED_LOCALES).default('sk'),
   title: z.string().min(2),
   description: z.string().optional(),
+  categoryId: z.string().uuid().optional().nullable(),
 });
 
 export const courseRoutes = new Hono();
@@ -72,6 +76,39 @@ courseRoutes.get('/', async (c) => {
       description: translationMap.get(course.id)?.description ?? '',
     })),
   );
+});
+
+courseRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const courseId = c.req.param('id');
+  const body = z
+    .object({
+      categoryId: z.string().uuid().nullable().optional(),
+      slug: z.string().min(2).max(255).optional(),
+    })
+    .safeParse(await c.req.json());
+
+  if (!body.success) return c.json({ error: 'Invalid input' }, 400);
+
+  const [updated] = await db
+    .update(courses)
+    .set({ ...body.data, updatedAt: new Date() })
+    .where(eq(courses.id, courseId))
+    .returning();
+
+  if (!updated) return c.json({ error: 'Course not found' }, 404);
+
+  broadcastToCourse(courseId, {
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId },
+    timestamp: new Date().toISOString(),
+  });
+  broadcastToAdmin({
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId },
+    timestamp: new Date().toISOString(),
+  });
+
+  return c.json(updated);
 });
 
 courseRoutes.get('/:id', async (c) => {
@@ -143,11 +180,11 @@ courseRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
   }
 
-  const { slug, defaultLocale, title, description } = body.data;
+  const { slug, defaultLocale, title, description, categoryId } = body.data;
 
   const [course] = await db
     .insert(courses)
-    .values({ slug, defaultLocale, createdById: user.id })
+    .values({ slug, defaultLocale, categoryId: categoryId ?? null, createdById: user.id })
     .returning();
 
   await db.insert(courseTranslations).values({
@@ -156,6 +193,17 @@ courseRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     title,
     description: description ?? '',
     source: 'manual',
+  });
+
+  broadcastToCourse(course.id, {
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId: course.id, action: 'created' },
+    timestamp: new Date().toISOString(),
+  });
+  broadcastToAdmin({
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId: course.id, action: 'created' },
+    timestamp: new Date().toISOString(),
   });
 
   return c.json(course, 201);
@@ -232,10 +280,167 @@ courseRoutes.patch('/:id/publish', requireRole('admin', 'instructor'), async (c)
   if (!updated) return c.json({ error: 'Course not found' }, 404);
 
   broadcastToCourse(courseId, {
-    type: 'course_updated',
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId, isPublished: updated.isPublished },
+    timestamp: new Date().toISOString(),
+  });
+  broadcastToAdmin({
+    type: WS_EVENTS.COURSE_UPDATED,
     payload: { courseId, isPublished: updated.isPublished },
     timestamp: new Date().toISOString(),
   });
 
   return c.json(updated);
+});
+
+courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c) => {
+  const courseId = c.req.param('id');
+  const body = z
+    .object({
+      title: z.string().min(2).optional(),
+      description: z.string().optional(),
+      slug: z.string().min(2).max(255).optional(),
+      locale: z.enum(SUPPORTED_LOCALES).optional(),
+    })
+    .safeParse(await c.req.json());
+
+  if (!body.success) return c.json({ error: 'Invalid input' }, 400);
+
+  const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+  if (!course) return c.json({ error: 'Course not found' }, 404);
+
+  const loc = body.data.locale ?? course.defaultLocale;
+
+  if (body.data.slug) {
+    await db.update(courses).set({ slug: body.data.slug, updatedAt: new Date() }).where(eq(courses.id, courseId));
+  }
+
+  if (body.data.title !== undefined || body.data.description !== undefined) {
+    const [existing] = await db
+      .select()
+      .from(courseTranslations)
+      .where(and(eq(courseTranslations.courseId, courseId), eq(courseTranslations.locale, loc)))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(courseTranslations)
+        .set({
+          title: body.data.title ?? existing.title,
+          description: body.data.description ?? existing.description,
+          updatedAt: new Date(),
+        })
+        .where(eq(courseTranslations.id, existing.id));
+    } else if (body.data.title) {
+      await db.insert(courseTranslations).values({
+        courseId,
+        locale: loc,
+        title: body.data.title,
+        description: body.data.description ?? '',
+        source: 'manual',
+      });
+    }
+  }
+
+  broadcastToCourse(courseId, {
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId },
+    timestamp: new Date().toISOString(),
+  });
+
+  return c.json({ ok: true });
+});
+
+courseRoutes.get('/:id/certificates', requireRole('admin', 'instructor'), async (c) => {
+  const courseId = c.req.param('id');
+  const rows = await db
+    .select({
+      id: certificates.id,
+      certificateNumber: certificates.certificateNumber,
+      issuedAt: certificates.issuedAt,
+      pdfKey: certificates.pdfKey,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(certificates)
+    .innerJoin(users, eq(certificates.userId, users.id))
+    .where(eq(certificates.courseId, courseId))
+    .orderBy(certificates.issuedAt);
+
+  return c.json(rows);
+});
+
+courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), async (c) => {
+  const courseId = c.req.param('id');
+  const body = z
+    .object({
+      rules: z.array(
+        z.object({
+          type: z.enum([
+            'all_lessons_complete',
+            'video_watch_percent',
+            'quiz_min_score',
+            'lessons_in_order',
+          ]),
+          config: z.record(z.unknown()).default({}),
+          isRequired: z.boolean().default(true),
+        }),
+      ),
+      certificate: z
+        .object({
+          enabled: z.boolean(),
+          titleTemplate: z.string().optional(),
+        })
+        .optional(),
+    })
+    .safeParse(await c.req.json());
+
+  if (!body.success) return c.json({ error: 'Invalid input' }, 400);
+
+  const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+  if (!course) return c.json({ error: 'Course not found' }, 404);
+
+  await db.delete(completionRules).where(eq(completionRules.courseId, courseId));
+
+  const toInsert = body.data.rules.map((rule) => ({
+    courseId,
+    type: rule.type,
+    config: rule.config,
+    isRequired: rule.isRequired,
+  }));
+
+  if (body.data.certificate?.enabled) {
+    const idx = toInsert.findIndex((r) => r.type === 'all_lessons_complete');
+    if (idx >= 0) {
+      toInsert[idx].config = { ...toInsert[idx].config, certificate: body.data.certificate };
+    } else {
+      toInsert.push({
+        courseId,
+        type: 'all_lessons_complete' as const,
+        config: { certificate: body.data.certificate },
+        isRequired: true,
+      });
+    }
+  }
+
+  if (toInsert.length > 0) {
+    await db.insert(completionRules).values(toInsert);
+  }
+
+  const rules = await db.select().from(completionRules).where(eq(completionRules.courseId, courseId));
+  return c.json(rules);
+});
+
+courseRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const courseId = c.req.param('id');
+  const [deleted] = await db.delete(courses).where(eq(courses.id, courseId)).returning();
+  if (!deleted) return c.json({ error: 'Course not found' }, 404);
+
+  broadcastToAdmin({
+    type: WS_EVENTS.COURSE_UPDATED,
+    payload: { courseId, action: 'deleted' },
+    timestamp: new Date().toISOString(),
+  });
+
+  return c.json({ ok: true });
 });

@@ -1,8 +1,6 @@
 import { get } from 'svelte/store';
-import { token, locale } from './stores/auth';
+import { token, locale, API_BASE } from './stores/auth';
 import { getTabSessionId } from './session';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const t = get(token);
@@ -112,6 +110,9 @@ export const api = {
       body: JSON.stringify({ isPublished }),
     }),
 
+  deleteCourse: (id: string) =>
+    request<{ ok: boolean }>(`/api/courses/${id}`, { method: 'DELETE' }),
+
   getEnrollments: (courseId: string) =>
     request<unknown[]>(`/api/enrollments?courseId=${courseId}`),
 
@@ -133,4 +134,120 @@ export const api = {
 
   getActivity: (courseId: string) =>
     request<unknown[]>(`/api/progress/activity/course/${courseId}?limit=50`),
+
+  getCategories: () => request<Array<Record<string, unknown>>>('/api/categories'),
+
+  createCategory: (data: {
+    slug: string;
+    name: string;
+    sortOrder?: number;
+    parentId?: string | null;
+  }) =>
+    request<Record<string, unknown>>('/api/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCategory: (id: string, data: { slug?: string; name?: string; sortOrder?: number }) =>
+    request<Record<string, unknown>>(`/api/categories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCategory: (id: string) =>
+    request<{ ok: boolean }>(`/api/categories/${id}`, { method: 'DELETE' }),
+
+  getStudents: () =>
+    request<Array<{ id: string; name: string; email: string }>>('/api/admin/students'),
+
+  createCourse: (data: {
+    slug: string;
+    title: string;
+    description?: string;
+    categoryId?: string | null;
+    defaultLocale?: string;
+  }) =>
+    request<Record<string, unknown>>('/api/courses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCourse: (id: string, data: { categoryId?: string | null; slug?: string }) =>
+    request<Record<string, unknown>>(`/api/courses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  updateCourseContent: (
+    id: string,
+    data: { title?: string; description?: string; slug?: string; locale?: string },
+  ) =>
+    request<{ ok: boolean }>(`/api/courses/${id}/content`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  getCourseCertificates: (courseId: string) =>
+    request<
+      Array<{
+        id: string;
+        certificateNumber: string;
+        issuedAt: string;
+        userName: string;
+        userEmail: string;
+      }>
+    >(`/api/courses/${courseId}/certificates`),
+
+  updateCompletionRules: (
+    courseId: string,
+    data: {
+      rules: Array<{ type: string; config?: Record<string, unknown>; isRequired?: boolean }>;
+      certificate?: { enabled: boolean; titleTemplate?: string };
+    },
+  ) =>
+    request<unknown[]>(`/api/courses/${courseId}/completion-rules`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  revokeEnrollment: (enrollmentId: string) =>
+    request<Record<string, unknown>>(`/api/enrollments/${enrollmentId}`, { method: 'DELETE' }),
+
+  createEnrollment: (userId: string, courseId: string) =>
+    request<Record<string, unknown>>('/api/enrollments', {
+      method: 'POST',
+      body: JSON.stringify({ userId, courseId }),
+    }),
+
+  getUsers: () => request<Array<Record<string, unknown>>>('/api/admin/users'),
+
+  createUser: (data: {
+    email: string;
+    name: string;
+    password: string;
+    role: string;
+    preferredLocale?: string;
+  }) =>
+    request<Record<string, unknown>>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateUser: (
+    id: string,
+    data: {
+      email?: string;
+      name?: string;
+      role?: string;
+      preferredLocale?: string;
+      password?: string;
+    },
+  ) =>
+    request<Record<string, unknown>>(`/api/admin/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteUser: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/users/${id}`, { method: 'DELETE' }),
 };

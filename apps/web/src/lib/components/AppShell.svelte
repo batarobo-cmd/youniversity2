@@ -1,15 +1,18 @@
 <script lang="ts">
-  import { locale, user, isAdmin } from '$lib/stores/auth';
+  import { locale } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { t } from '$lib/i18n';
   import type { User } from '@youniversity2/shared';
   import LocaleMenu from '$lib/components/LocaleMenu.svelte';
   import ProfileMenu from '$lib/components/ProfileMenu.svelte';
+  import AdminMenu from '$lib/components/AdminMenu.svelte';
   import '$lib/styles/app-shell.css';
+  import '$lib/styles/admin-menu.css';
 
-  let { serverUser = null, children }: { serverUser?: User | null; children: import('svelte').Snippet } = $props();
-
-  const displayUser = $derived($user ?? serverUser);
+  let {
+    user = null,
+    children,
+  }: { user?: User | null; children: import('svelte').Snippet } = $props();
 
   function isActive(path: string) {
     return $page.url.pathname === path || $page.url.pathname.startsWith(path + '/');
@@ -37,16 +40,12 @@
         <a href="/courses" class="app-nav-link" class:active={isActive('/courses')}>
           {t('nav.courses', $locale)}
         </a>
-        {#if $isAdmin}
-          <a href="/dashboard/admin" class="app-nav-link" class:active={isActive('/dashboard/admin')}>
-            {t('nav.manage', $locale)}
-          </a>
-        {/if}
+        <AdminMenu {user} />
       </nav>
 
       <div class="app-actions">
         <LocaleMenu />
-        <ProfileMenu user={displayUser} />
+        <ProfileMenu {user} />
       </div>
     </div>
   </header>

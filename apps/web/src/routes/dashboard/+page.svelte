@@ -1,19 +1,51 @@
-<script lang="ts">
-  import StudentDashboard from '$lib/components/StudentDashboard.svelte';
-  import AdminDashboard from '$lib/components/AdminDashboard.svelte';
-  import type { PageData } from './$types';
-
-  let { data }: { data: PageData } = $props();
-</script>
-
-{#if data.dashboardError}
-  <div class="form-error">{data.dashboardError}</div>
-{:else if data.dashboard}
-  {#if data.dashboard.role === 'student'}
-    <StudentDashboard data={data.dashboard} />
-  {:else}
-    <AdminDashboard data={data.dashboard} />
-  {/if}
-{:else}
-  <p class="loading-text">Načítavam dashboard...</p>
-{/if}
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import StudentDashboard from '$lib/components/StudentDashboard.svelte';
+  import AdminDashboard from '$lib/components/AdminDashboard.svelte';
+  import { api } from '$lib/api';
+  import { subscribeDashboardRefresh } from '$lib/live-dashboard';
+  import type { PageData } from './$types';
+
+  let { data }: { data: PageData } = $props();
+
+  let dashboard = $state(data.dashboard);
+  let dashboardError = $state(data.dashboardError);
+  let refreshing = $state(false);
+
+  $effect(() => {
+    dashboard = data.dashboard;
+    dashboardError = data.dashboardError;
+  });
+
+  onMount(() => {
+    return subscribeDashboardRefresh(() => {
+      void refreshDashboard();
+    });
+  });
+
+  async function refreshDashboard() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      dashboard = (await api.getDashboard()) as PageData['dashboard'];
+      dashboardError = null;
+    } catch {
+      /* ponechaj posledné zobrazené dáta */
+    } finally {
+      refreshing = false;
+    }
+  }
+</script>
+
+{#if dashboardError}
+  <div class="form-error">{dashboardError}</div>
+{:else if dashboard}
+  {#if dashboard.role === 'student'}
+    <StudentDashboard data={dashboard} />
+  {:else}
+    <AdminDashboard data={dashboard} />
+  {/if}
+{:else}
+  <p class="loading-text">Načítavam dashboard...</p>
+{/if}
+

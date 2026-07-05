@@ -5,6 +5,17 @@ import { SESSION_STORAGE_KEY } from '../session';
 
 const LOCALE_KEY = 'yo2_locale';
 
+/** API URL — prázdne = same-origin /api (Vite proxy v dev). */
+export const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
+export function isAdminUser(u: Pick<User, 'role'> | null | undefined): boolean {
+  return u?.role === 'admin' || u?.role === 'instructor';
+}
+
+export function isPlatformAdminUser(u: Pick<User, 'role'> | null | undefined): boolean {
+  return u?.role === 'admin';
+}
+
 function loadSessionId(): string | null {
   if (typeof localStorage === 'undefined') return null;
   return localStorage.getItem(SESSION_STORAGE_KEY);
@@ -22,7 +33,9 @@ export const locale = writable<Locale>(loadLocale());
 export const authReady = writable(false);
 
 export const isAuthenticated = derived(token, ($token) => $token !== null);
-export const isAdmin = derived(user, ($user) => $user?.role === 'admin' || $user?.role === 'instructor');
+export const isAdmin = derived(user, ($user) => isAdminUser($user));
+/** Plný administrátor platformy (správa používateľov, systémové nastavenia). */
+export const isPlatformAdmin = derived(user, ($user) => isPlatformAdminUser($user));
 
 if (typeof window !== 'undefined') {
   const stored = loadSessionId();

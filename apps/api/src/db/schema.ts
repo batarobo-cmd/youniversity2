@@ -31,6 +31,17 @@ export const translationSourceEnum = pgEnum('translation_source', ['manual', 'ai
 
 export const oauthProviderEnum = pgEnum('oauth_provider', ['google', 'microsoft']);
 
+export const courseCategories = pgTable('course_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  parentId: uuid('parent_id').references((): typeof courseCategories.id => courseCategories.id, {
+    onDelete: 'cascade',
+  }),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const users = pgTable(
   'users',
   {
@@ -52,6 +63,7 @@ export const users = pgTable(
 export const courses = pgTable('courses', {
   id: uuid('id').primaryKey().defaultRandom(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
+  categoryId: uuid('category_id').references(() => courseCategories.id, { onDelete: 'set null' }),
   defaultLocale: varchar('default_locale', { length: 10 }).notNull().default('sk'),
   isPublished: boolean('is_published').notNull().default(false),
   startsAt: timestamp('starts_at', { withTimezone: true }),
@@ -232,5 +244,6 @@ export const activityEvents = pgTable('activity_events', {
 });
 
 export type User = typeof users.$inferSelect;
+export type CourseCategory = typeof courseCategories.$inferSelect;
 export type Course = typeof courses.$inferSelect;
 export type Enrollment = typeof enrollments.$inferSelect;

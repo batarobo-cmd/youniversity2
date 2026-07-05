@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { db } from './index';
 import {
   users,
+  courseCategories,
   courses,
   courseTranslations,
   courseModules,
@@ -46,6 +47,12 @@ async function seed() {
     process.exit(0);
   }
 
+  const [category] = await db
+    .insert(courseCategories)
+    .values({ slug: 'vseobecne', name: 'Všeobecné', sortOrder: 0 })
+    .onConflictDoNothing()
+    .returning();
+
   const courseStart = new Date();
   const courseEnd = new Date();
   courseEnd.setMonth(courseEnd.getMonth() + 3);
@@ -54,6 +61,7 @@ async function seed() {
     .insert(courses)
     .values({
       slug: 'uvod-do-youniversity2',
+      categoryId: category?.id ?? null,
       defaultLocale: 'sk',
       isPublished: true,
       createdById: admin.id,
