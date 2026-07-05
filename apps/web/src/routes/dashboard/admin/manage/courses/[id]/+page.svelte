@@ -11,7 +11,7 @@
   import '$lib/styles/admin-users.css';
   import '$lib/styles/course-edit.css';
 
-  type Tab = 'content' | 'evaluation' | 'students' | 'certificate';
+  type Tab = 'settings' | 'content' | 'evaluation' | 'students' | 'certificate';
 
   type CompletionRule = {
     id?: string;
@@ -113,7 +113,7 @@
     }
   }
 
-  async function saveContent(e: Event) {
+  async function saveSettings(e: Event) {
     e.preventDefault();
     saving = true;
     message = '';
@@ -275,17 +275,30 @@
     <p class="empty-state">{t('admin.courseNotFound', $locale)}</p>
   {:else}
     <nav class="course-edit-tabs" aria-label="Course edit">
-      <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'content'} onclick={() => (activeTab = 'content')}>{t('admin.tabContent', $locale)}</button>
-      <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'evaluation'} onclick={() => (activeTab = 'evaluation')}>{t('admin.tabEvaluation', $locale)}</button>
-      <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'students'} onclick={() => (activeTab = 'students')}>{t('admin.tabStudents', $locale)}</button>
-      <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'certificate'} onclick={() => (activeTab = 'certificate')}>{t('admin.tabCertificate', $locale)}</button>
+      <div class="course-edit-tabs-primary">
+        <button
+          type="button"
+          class="course-edit-tab course-edit-tab--primary"
+          class:course-edit-tab--active={activeTab === 'content'}
+          onclick={() => (activeTab = 'content')}
+        >
+          {t('admin.tabContent', $locale)}
+        </button>
+      </div>
+      <span class="course-edit-tabs-divider" aria-hidden="true"></span>
+      <div class="course-edit-tabs-secondary">
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'settings'} onclick={() => (activeTab = 'settings')}>{t('admin.tabSettings', $locale)}</button>
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'evaluation'} onclick={() => (activeTab = 'evaluation')}>{t('admin.tabEvaluation', $locale)}</button>
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'students'} onclick={() => (activeTab = 'students')}>{t('admin.tabStudents', $locale)}</button>
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'certificate'} onclick={() => (activeTab = 'certificate')}>{t('admin.tabCertificate', $locale)}</button>
+      </div>
     </nav>
 
-    {#if activeTab === 'content'}
+    {#if activeTab === 'settings'}
       <section class="panel course-edit-panel">
-        <div class="panel-header"><h2>{t('admin.tabContent', $locale)}</h2></div>
+        <div class="panel-header"><h2>{t('admin.tabSettings', $locale)}</h2></div>
         <div class="panel-body">
-          <form class="course-edit-form" onsubmit={saveContent}>
+          <form class="course-edit-form" onsubmit={saveSettings}>
             <div class="cat-tree-field">
               <label for="course-title">{t('admin.courseTitle', $locale)}</label>
               <input id="course-title" bind:value={title} required />
@@ -298,23 +311,26 @@
               <label for="course-desc">{t('admin.courseDescription', $locale)}</label>
               <textarea id="course-desc" bind:value={description} rows="4"></textarea>
             </div>
-
-            <h3 class="course-edit-section-title">{t('admin.courseStructure', $locale)}</h3>
-            {#if modules.length === 0}
-              <p class="cat-tree-empty">{t('admin.noModules', $locale)}</p>
-            {:else}
-              <ul class="course-edit-modules">
-                {#each modules as mod}
-                  <li>
-                    <strong>{mod.title}</strong>
-                    <span>{((mod.lessons as unknown[]) ?? []).length} {t('course.lessons', $locale).toLowerCase()}</span>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-
             <button type="submit" class="btn btn-sm" disabled={saving}>{t('admin.saveChanges', $locale)}</button>
           </form>
+        </div>
+      </section>
+    {:else if activeTab === 'content'}
+      <section class="panel course-edit-panel">
+        <div class="panel-header"><h2>{t('admin.courseStructure', $locale)}</h2></div>
+        <div class="panel-body">
+          {#if modules.length === 0}
+            <p class="cat-tree-empty">{t('admin.noModules', $locale)}</p>
+          {:else}
+            <ul class="course-edit-modules">
+              {#each modules as mod}
+                <li>
+                  <strong>{mod.title}</strong>
+                  <span>{((mod.lessons as unknown[]) ?? []).length} {t('course.lessons', $locale).toLowerCase()}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
         </div>
       </section>
     {:else if activeTab === 'evaluation'}
