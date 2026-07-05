@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { locale } from '$lib/stores/auth';
+  import { locale, isAdminUser } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { t } from '$lib/i18n';
   import type { User } from '@youniversity2/shared';
@@ -17,6 +17,8 @@
   function isActive(path: string) {
     return $page.url.pathname === path || $page.url.pathname.startsWith(path + '/');
   }
+
+  const showStudentCourses = $derived(!isAdminUser(user));
 </script>
 
 <div class="app-shell">
@@ -37,9 +39,11 @@
         >
           {t('nav.dashboard', $locale)}
         </a>
-        <a href="/courses" class="app-nav-link" class:active={isActive('/courses')}>
-          {t('nav.courses', $locale)}
-        </a>
+        {#if showStudentCourses}
+          <a href="/courses" class="app-nav-link" class:active={isActive('/courses')}>
+            {t('nav.courses', $locale)}
+          </a>
+        {/if}
         <AdminMenu {user} />
       </nav>
 

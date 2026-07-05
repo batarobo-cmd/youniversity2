@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
-import { getStudentDashboard, getAdminDashboard } from '../services/dashboard';
+import { getStudentDashboard, getAdminDashboard, getStudentCourseOverview } from '../services/dashboard';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { serializeUser } from '../services/oauth';
@@ -24,6 +24,18 @@ dashboardRoutes.get('/', async (c) => {
 
   const data = await getStudentDashboard(user.id, locale);
   return c.json({ role: 'student', ...data });
+});
+
+dashboardRoutes.get('/courses-overview', async (c) => {
+  const user = c.get('user') as AuthUser;
+  const locale = c.req.query('locale') ?? 'sk';
+
+  if (user.role === 'admin' || user.role === 'instructor') {
+    return c.json({ error: 'Students only' }, 403);
+  }
+
+  const data = await getStudentCourseOverview(user.id, locale);
+  return c.json(data);
 });
 
 dashboardRoutes.patch('/profile', async (c) => {

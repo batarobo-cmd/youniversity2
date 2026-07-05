@@ -16,14 +16,19 @@
 
   const courseId = $derived($page.params.id);
 
+  $effect(() => {
+    const id = courseId;
+    if (!id) return;
+    activeLesson = null;
+    joinCourse(id);
+    trackActivity('course.opened', id);
+    void loadCourse(id);
+  });
+
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
       if (!auth) goto('/');
     });
-
-    loadCourse();
-    joinCourse(courseId);
-    trackActivity('course.opened', courseId);
 
     const unsubWs = lastMessage.subscribe((msg) => {
       if (!msg) return;
@@ -32,7 +37,7 @@
         msg.type === WS_EVENTS.PROGRESS_UPDATED ||
         msg.type === WS_EVENTS.COMPLETION_EVALUATED
       ) {
-        loadCourse();
+        loadCourse(courseId);
       }
     });
 
@@ -42,11 +47,11 @@
     };
   });
 
-  async function loadCourse() {
+  async function loadCourse(id = courseId) {
     loading = true;
     try {
-      course = await api.getCourse(courseId);
-      progress = (await api.getCourseProgress(courseId)) as Array<Record<string, unknown>>;
+      course = await api.getCourse(id);
+      progress = (await api.getCourseProgress(id)) as Array<Record<string, unknown>>;
     } catch {
       course = null;
     } finally {

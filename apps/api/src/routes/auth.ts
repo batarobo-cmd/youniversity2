@@ -6,6 +6,8 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { createSession, destroySession, touchSession } from '../services/session';
+import { recordLogin } from '../services/login-events';
+import { recordUserActivity } from '../services/activity-log';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
 import {
   getAuthorizationUrl,
@@ -87,10 +89,12 @@ authRoutes.post('/heartbeat', async (c) => {
 });
 
 authRoutes.post('/logout', authMiddleware, async (c) => {
+  const user = c.get('user') as AuthUser;
   const sessionId = c.get('sessionId') as string | undefined;
   if (sessionId) {
     await destroySession(sessionId);
   }
+  void recordUserActivity(user.id, 'auth.logout');
   return c.json({ ok: true });
 });
 
@@ -126,6 +130,7 @@ authRoutes.post('/register', async (c) => {
     name: user.name,
   };
   const sessionId = await createSession(authUser);
+  await recordLogin(user.id, 'password');
 
   return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) }, 201);
 });
@@ -159,6 +164,7 @@ authRoutes.post('/login', async (c) => {
     name: user.name,
   };
   const sessionId = await createSession(authUser);
+  await recordLogin(user.id, 'password');
 
   return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) });
 });

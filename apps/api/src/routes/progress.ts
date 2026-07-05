@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
-import { lessonProgress, activityEvents, lessons, courseModules } from '../db/schema';
+import { lessonProgress, activityEvents, lessons, courseModules, courses } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { evaluateCourseCompletion } from '../services/completion';
 import { broadcastToCourse } from '../realtime/hub';
+import { canStudentViewCourse } from '../services/course-access';
 
 export const progressRoutes = new Hono();
 
@@ -21,6 +22,10 @@ const updateProgressSchema = z.object({
 progressRoutes.get('/course/:courseId', async (c) => {
   const user = c.get('user') as AuthUser;
   const courseId = c.req.param('courseId');
+
+  if (!(await canStudentViewCourse(user, courseId))) {
+    return c.json({ error: 'Course not found' }, 404);
+  }
 
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
   const moduleIds = modules.map((m) => m.id);
@@ -52,6 +57,10 @@ progressRoutes.post('/', async (c) => {
 
   const [mod] = await db.select().from(courseModules).where(eq(courseModules.id, lesson.moduleId)).limit(1);
   if (!mod) return c.json({ error: 'Module not found' }, 404);
+
+  if (!(await canStudentViewCourse(user, mod.courseId))) {
+    return c.json({ error: 'Course not found' }, 404);
+  }
 
   const [existing] = await db
     .select()
@@ -116,6 +125,10 @@ progressRoutes.post('/activity', async (c) => {
     .safeParse(await c.req.json());
 
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
+
+  if (body.data.courseId && !(await canStudentViewCourse(user, body.data.courseId))) {
+    return c.json({ error: 'Course not found' }, 404);
+  }
 
   const [event] = await db
     .insert(activityEvents)

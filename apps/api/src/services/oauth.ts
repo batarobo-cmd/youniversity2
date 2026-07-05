@@ -4,6 +4,7 @@ import { config } from '../config';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { createSession } from './session';
+import { recordLogin } from './login-events';
 
 export type OAuthProvider = 'google' | 'microsoft';
 
@@ -235,6 +236,7 @@ export async function handleOAuthCallback(
       role: user.role,
       name: user.name,
     });
+    await recordLogin(user.id, provider === 'google' ? 'oauth_google' : 'oauth_microsoft');
 
     const params = new URLSearchParams({ session: sessionId });
     return { redirectUrl: `${config.oauth.webUrl}/auth/callback?${params}` };

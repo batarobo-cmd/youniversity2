@@ -17,8 +17,9 @@ import {
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
 import { translateContent } from '../services/translation';
-import { broadcastToCourse, broadcastToAdmin } from '../realtime/hub';
+import { broadcastToCourse, broadcastToAdmin, broadcastToCourseEnrollees } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
+import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
@@ -49,7 +50,7 @@ courseRoutes.get('/', async (c) => {
         courseTranslations,
         and(eq(courseTranslations.courseId, courses.id), eq(courseTranslations.locale, locale)),
       )
-      .where(eq(enrollments.userId, user.id));
+      .where(and(eq(enrollments.userId, user.id), eq(courses.isPublished, true)));
 
     return c.json(
       result.map((r) => ({
@@ -79,6 +80,7 @@ courseRoutes.get('/', async (c) => {
 });
 
 courseRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const body = z
     .object({
@@ -108,15 +110,26 @@ courseRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
     timestamp: new Date().toISOString(),
   });
 
+  const courseTitle = await getCourseTitle(courseId);
+  void recordUserActivity(actor.id, 'course.updated', {
+    courseId,
+    payload: { courseTitle, courseSlug: updated.slug, courseId },
+  });
+
   return c.json(updated);
 });
 
 courseRoutes.get('/:id', async (c) => {
+  const user = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const locale = c.req.query('locale') ?? 'sk';
 
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return c.json({ error: 'Course not found' }, 404);
+
+  if (user.role === 'student' && !course.isPublished) {
+    return c.json({ error: 'Course not found' }, 404);
+  }
 
   const [translation] = await db
     .select()
@@ -206,6 +219,11 @@ courseRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     timestamp: new Date().toISOString(),
   });
 
+  void recordUserActivity(user.id, 'course.created', {
+    courseId: course.id,
+    payload: { courseTitle: title, courseSlug: slug, courseId: course.id },
+  });
+
   return c.json(course, 201);
 });
 
@@ -267,6 +285,7 @@ courseRoutes.post('/:id/translate', requireRole('admin', 'instructor'), async (c
 });
 
 courseRoutes.patch('/:id/publish', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const body = z.object({ isPublished: z.boolean() }).safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
@@ -279,15 +298,20 @@ courseRoutes.patch('/:id/publish', requireRole('admin', 'instructor'), async (c)
 
   if (!updated) return c.json({ error: 'Course not found' }, 404);
 
-  broadcastToCourse(courseId, {
+  const updateMessage = {
     type: WS_EVENTS.COURSE_UPDATED,
     payload: { courseId, isPublished: updated.isPublished },
     timestamp: new Date().toISOString(),
-  });
-  broadcastToAdmin({
-    type: WS_EVENTS.COURSE_UPDATED,
-    payload: { courseId, isPublished: updated.isPublished },
-    timestamp: new Date().toISOString(),
+  };
+
+  broadcastToCourse(courseId, updateMessage);
+  broadcastToAdmin(updateMessage);
+  await broadcastToCourseEnrollees(courseId, updateMessage);
+
+  const courseTitle = await getCourseTitle(courseId);
+  void recordUserActivity(actor.id, updated.isPublished ? 'course.published' : 'course.unpublished', {
+    courseId,
+    payload: { courseTitle, courseSlug: updated.slug, courseId },
   });
 
   return c.json(updated);
@@ -432,14 +456,24 @@ courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), as
 });
 
 courseRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
-  const [deleted] = await db.delete(courses).where(eq(courses.id, courseId)).returning();
-  if (!deleted) return c.json({ error: 'Course not found' }, 404);
+  const courseTitle = await getCourseTitle(courseId);
 
-  broadcastToAdmin({
+  const deleteMessage = {
     type: WS_EVENTS.COURSE_UPDATED,
     payload: { courseId, action: 'deleted' },
     timestamp: new Date().toISOString(),
+  };
+  await broadcastToCourseEnrollees(courseId, deleteMessage);
+
+  const [deleted] = await db.delete(courses).where(eq(courses.id, courseId)).returning();
+  if (!deleted) return c.json({ error: 'Course not found' }, 404);
+
+  broadcastToAdmin(deleteMessage);
+
+  void recordUserActivity(actor.id, 'course.deleted', {
+    payload: { courseTitle, courseSlug: deleted.slug, courseId },
   });
 
   return c.json({ ok: true });

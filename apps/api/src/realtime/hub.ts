@@ -3,8 +3,9 @@ import Redis from 'ioredis';
 import { WS_EVENTS, type WsMessage } from '@youniversity2/shared';
 import { config } from '../config';
 import { resolveWebSocketSession, type AuthUser } from '../middleware/auth';
+import { eq } from 'drizzle-orm';
 import { db } from '../db';
-import { activityEvents } from '../db/schema';
+import { activityEvents, enrollments } from '../db/schema';
 
 interface WsData {
   user: AuthUser;
@@ -100,6 +101,18 @@ export function broadcastToCourse(courseId: string, message: WsMessage) {
 
 export function broadcastToUser(userId: string, message: WsMessage) {
   publish(`user:${userId}`, message);
+}
+
+/** Notify every enrolled user (e.g. publish/unpublish while they are on dashboard). */
+export async function broadcastToCourseEnrollees(courseId: string, message: WsMessage) {
+  const rows = await db
+    .select({ userId: enrollments.userId })
+    .from(enrollments)
+    .where(eq(enrollments.courseId, courseId));
+
+  for (const row of rows) {
+    broadcastToUser(row.userId, message);
+  }
 }
 
 export function createWebSocketHandlers() {

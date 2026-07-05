@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { activityFeed, wsStatus } from '$lib/stores/realtime';
+  import AdminHistoryModal from '$lib/components/AdminHistoryModal.svelte';
   import '$lib/styles/dashboard.css';
 
   interface Props {
@@ -10,10 +10,26 @@
 
   let { data }: Props = $props();
 
+  let historyKind = $state<'registrations' | 'logins' | null>(null);
+
   const stats = $derived(data.stats as Record<string, number>);
   const courses = $derived((data.courses as Array<Record<string, unknown>>) ?? []);
-  const recentEnrollments = $derived((data.recentEnrollments as Array<Record<string, unknown>>) ?? []);
-  const recentActivity = $derived((data.recentActivity as Array<Record<string, unknown>>) ?? []);
+  const recentRegistrations = $derived((data.recentRegistrations as Array<Record<string, unknown>>) ?? []);
+  const recentLogins = $derived((data.recentLogins as Array<Record<string, unknown>>) ?? []);
+
+  function formatDateTime(iso: string) {
+    return new Date(iso).toLocaleString($locale, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  function loginMethodLabel(method: string) {
+    const keys: Record<string, 'dash.loginMethodPassword' | 'dash.loginMethodGoogle' | 'dash.loginMethodMicrosoft'> = {
+      password: 'dash.loginMethodPassword',
+      oauth_google: 'dash.loginMethodGoogle',
+      oauth_microsoft: 'dash.loginMethodMicrosoft',
+    };
+    const key = keys[method];
+    return key ? t(key, $locale) : method;
+  }
 </script>
 
 <div class="dashboard-welcome">
@@ -44,100 +60,117 @@
   </div>
 </div>
 
-<div class="dashboard-grid">
-  <div class="dashboard-main-col">
-    <section class="panel">
-      <div class="panel-header">
-        <h2>{t('dash.courseOverview', $locale)}</h2>
+<div class="dashboard-admin-main">
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <h2>{t('dash.courseOverviewActive', $locale)}</h2>
+        <p class="panel-header-sub">{t('dash.courseOverviewActiveSub', $locale)}</p>
       </div>
-      <div class="panel-body" style="padding: 0;">
-        {#if courses.length === 0}
-          <div class="empty-state">{t('dash.noCourses', $locale)}</div>
-        {:else}
-          <table class="admin-table">
-            <thead>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+      {#if courses.length === 0}
+        <div class="empty-state">{t('dash.noActiveCoursesLastHour', $locale)}</div>
+      {:else}
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>{t('dash.courseName', $locale)}</th>
+              <th>{t('dash.activityLastHour', $locale)}</th>
+              <th>{t('dash.activeUsersLastHour', $locale)}</th>
+              <th>{t('dash.status', $locale)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each courses as course}
               <tr>
-                <th>{t('dash.courseName', $locale)}</th>
-                <th>{t('dash.enrollments', $locale)}</th>
-                <th>{t('dash.status', $locale)}</th>
+                <td><a href="/courses/{course.id}">{course.title as string}</a></td>
+                <td>{course.activityCount as number}</td>
+                <td>{course.activeUsers as number}</td>
+                <td>
+                  {#if course.isPublished}
+                    <span class="badge badge-success">{t('dash.published', $locale)}</span>
+                  {:else}
+                    <span class="badge badge-warning">Draft</span>
+                  {/if}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {#each courses as course}
-                <tr>
-                  <td><a href="/courses/{course.id}">{course.title as string}</a></td>
-                  <td>{course.enrollmentCount as number}</td>
-                  <td>
-                    {#if course.isPublished}
-                      <span class="badge badge-success">{t('dash.published', $locale)}</span>
-                    {:else}
-                      <span class="badge badge-warning">Draft</span>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {/if}
-      </div>
-    </section>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <h2>{t('dash.recentEnrollments', $locale)}</h2>
-      </div>
-      <div class="panel-body" style="padding: 0;">
-        {#if recentEnrollments.length === 0}
-          <div class="empty-state">{t('dash.noEnrollments', $locale)}</div>
-        {:else}
-          <table class="admin-table">
-            <thead>
+  <section class="panel">
+    <div class="panel-header">
+      <h2>{t('dash.recentRegistrations', $locale)}</h2>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => (historyKind = 'registrations')}>
+        {t('dash.viewHistory', $locale)}
+      </button>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+      {#if recentRegistrations.length === 0}
+        <div class="empty-state">{t('dash.noRegistrations', $locale)}</div>
+      {:else}
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>{t('auth.name', $locale)}</th>
+              <th>{t('auth.email', $locale)}</th>
+              <th>{t('dash.registeredAt', $locale)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each recentRegistrations as reg}
               <tr>
-                <th>{t('auth.name', $locale)}</th>
-                <th>{t('auth.email', $locale)}</th>
-                <th>{t('dash.status', $locale)}</th>
+                <td>{reg.userName as string}</td>
+                <td>{reg.userEmail as string}</td>
+                <td>{formatDateTime(reg.registeredAt as string)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each recentEnrollments as enr}
-                <tr>
-                  <td>{enr.userName as string}</td>
-                  <td>{enr.userEmail as string}</td>
-                  <td><span class="badge badge-warning">{enr.status as string}</span></td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {/if}
-      </div>
-    </section>
-  </div>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  </section>
 
-  <div class="dashboard-side-col">
-    <section class="panel">
-      <div class="panel-header">
-        <h2>{t('admin.activity', $locale)}</h2>
-        <span class="badge {$wsStatus === 'connected' ? 'badge-success' : 'badge-danger'}">
-          {$wsStatus === 'connected' ? '🟢' : '🔴'}
-        </span>
-      </div>
-      <div class="panel-body">
-        {#each $activityFeed as item}
-          <div class="activity-item">
-            <span class="activity-time">{item.time}</span>
-            <span><strong>{item.userName}</strong> — {item.eventType}</span>
-          </div>
-        {/each}
-        {#each recentActivity as act}
-          <div class="activity-item" style="opacity: 0.7;">
-            <span class="activity-time">{new Date(act.createdAt as string).toLocaleTimeString()}</span>
-            <span><strong>{act.userName as string}</strong> — {act.eventType as string}</span>
-          </div>
-        {/each}
-        {#if $activityFeed.length === 0 && recentActivity.length === 0}
-          <div class="empty-state">{t('dash.noActivity', $locale)}</div>
-        {/if}
-      </div>
-    </section>
-  </div>
+  <section class="panel">
+    <div class="panel-header">
+      <h2>{t('dash.recentLogins', $locale)}</h2>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => (historyKind = 'logins')}>
+        {t('dash.viewHistory', $locale)}
+      </button>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+      {#if recentLogins.length === 0}
+        <div class="empty-state">{t('dash.noLogins', $locale)}</div>
+      {:else}
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>{t('auth.name', $locale)}</th>
+              <th>{t('auth.email', $locale)}</th>
+              <th>{t('dash.loggedInAt', $locale)}</th>
+              <th>{t('dash.loginMethod', $locale)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each recentLogins as login}
+              <tr>
+                <td>{login.userName as string}</td>
+                <td>{login.userEmail as string}</td>
+                <td>{formatDateTime(login.loggedInAt as string)}</td>
+                <td>{loginMethodLabel(login.method as string)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  </section>
 </div>
+
+{#if historyKind}
+  <AdminHistoryModal kind={historyKind} open={true} onClose={() => (historyKind = null)} />
+{/if}

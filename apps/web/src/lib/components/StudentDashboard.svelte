@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import StudentCourseCard from './StudentCourseCard.svelte';
   import CalendarWidget from './CalendarWidget.svelte';
   import '$lib/styles/dashboard.css';
 
@@ -12,7 +13,8 @@
 
   const stats = $derived(data.stats as Record<string, number>);
   const activeCourses = $derived((data.activeCourses as Array<Record<string, unknown>>) ?? []);
-  const completedCourses = $derived((data.completedCourses as Array<Record<string, unknown>>) ?? []);
+  const completedThisYear = $derived((data.completedThisYear as Array<Record<string, unknown>>) ?? []);
+  const currentYear = $derived((data.currentYear as number) ?? new Date().getFullYear());
   const calendarEvents = $derived((data.calendarEvents as Array<Record<string, unknown>>) ?? []);
   const upcomingDeadlines = $derived((data.upcomingDeadlines as Array<Record<string, unknown>>) ?? []);
   const recentActivity = $derived((data.recentActivity as Array<Record<string, unknown>>) ?? []);
@@ -29,8 +31,8 @@
     <div class="stat-card-label">{t('dash.activeCourses', $locale)}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">{stats.completed}</div>
-    <div class="stat-card-label">{t('dash.completedCourses', $locale)}</div>
+    <div class="stat-card-value">{completedThisYear.length}</div>
+    <div class="stat-card-label">{t('dash.completedThisYear', $locale).replace('{year}', String(currentYear))}</div>
   </div>
   <div class="stat-card">
     <div class="stat-card-value">{stats.certificates}</div>
@@ -46,52 +48,34 @@
   <div class="dashboard-main-col">
     <section class="panel">
       <div class="panel-header">
-        <h2>{t('dash.activeCourses', $locale)}</h2>
+        <h2>{t('dash.activeCoursesRunning', $locale)}</h2>
       </div>
       <div class="panel-body">
         {#if activeCourses.length === 0}
           <div class="empty-state">{t('dash.noActiveCourses', $locale)}</div>
         {:else}
-          {#each activeCourses as course}
-            <div class="course-card">
-              <div class="course-card-info">
-                <h3><a href="/courses/{course.id}">{course.title as string}</a></h3>
-                <p>{course.description as string}</p>
-                <div class="progress-bar-wrap">
-                  <div class="progress-bar-label">
-                    <span>{t('course.progress', $locale)}</span>
-                    <span>{course.progressPercent as number}%</span>
-                  </div>
-                  <div class="progress-bar">
-                    <div class="progress-bar-fill" style="width: {course.progressPercent}%"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          {/each}
+          <div class="student-courses-list">
+            {#each activeCourses as course (course.id)}
+              <StudentCourseCard {course} variant="active" />
+            {/each}
+          </div>
         {/if}
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-header">
-        <h2>{t('dash.completedWithCerts', $locale)}</h2>
+        <h2>{t('dash.completedThisYear', $locale).replace('{year}', String(currentYear))}</h2>
       </div>
       <div class="panel-body">
-        {#if completedCourses.length === 0}
-          <div class="empty-state">{t('dash.noCompletedCourses', $locale)}</div>
+        {#if completedThisYear.length === 0}
+          <div class="empty-state">{t('dash.noCompletedThisYear', $locale).replace('{year}', String(currentYear))}</div>
         {:else}
-          {#each completedCourses as course}
-            <div class="course-card">
-              <div class="course-card-info">
-                <h3><a href="/courses/{course.id}">{course.title as string}</a></h3>
-                {#if course.certificate}
-                  {@const cert = course.certificate as Record<string, string>}
-                  <span class="cert-badge">🏆 {cert.certificateNumber}</span>
-                {/if}
-              </div>
-            </div>
-          {/each}
+          <div class="student-courses-list">
+            {#each completedThisYear as course (course.id)}
+              <StudentCourseCard {course} variant="past" />
+            {/each}
+          </div>
         {/if}
       </div>
     </section>

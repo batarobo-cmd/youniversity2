@@ -243,6 +243,15 @@ export const activityEvents = pgTable('activity_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const loginEvents = pgTable('login_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  method: varchar('method', { length: 32 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type CourseCategory = typeof courseCategories.$inferSelect;
 export type Course = typeof courses.$inferSelect;

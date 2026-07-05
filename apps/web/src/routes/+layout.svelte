@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { token, setAuth, syncSessionFromServer, clearAuth, user as authUser } from '$lib/stores/auth';
   import { connectWebSocket, disconnectWebSocket, startHeartbeat, stopHeartbeat } from '$lib/stores/realtime';
+  import { initActivityTracker, trackPageView } from '$lib/activity-tracker';
   import { api } from '$lib/api';
   import AppShell from '$lib/components/AppShell.svelte';
   import type { LayoutData } from './$types';
@@ -50,6 +51,7 @@
     if (!browser || authPage || wsStarted || !data.token) return;
     wsStarted = true;
 
+    initActivityTracker();
     connectWebSocket();
     startHeartbeat();
 
@@ -63,6 +65,11 @@
       disconnectWebSocket();
       stopHeartbeat();
     };
+  });
+
+  $effect(() => {
+    if (!browser || authPage || !data.token) return;
+    trackPageView($page.url.pathname);
   });
 </script>
 

@@ -278,7 +278,7 @@ input:disabled {
 }
 
 .page-enter {
-  animation: fadeSlideUp var(--duration-slow) var(--ease-out) both;
+  animation: fadeIn 180ms var(--ease-out) both;
 }
 
 .stagger-1 {

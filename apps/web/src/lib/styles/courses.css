@@ -201,3 +201,20 @@
     position: static;
   }
 }
+
+.courses-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.courses-section-empty {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.student-courses-list {
+  display: flex;
+  flex-direction: column;
+}

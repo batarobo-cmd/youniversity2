@@ -105,18 +105,20 @@
         {t('profile.menuSettings', $locale)}
       </a>
 
-      <a href="/courses" class="profile-menu-item" role="menuitem" onclick={close}>
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V6.5A2.5 2.5 0 016.5 4H20v13H6.5A2.5 2.5 0 004 19.5z"
-            stroke="currentColor"
-            stroke-width="1.75"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        {t('profile.menuCourses', $locale)}
-      </a>
+      {#if !showAdminLinks}
+        <a href="/courses" class="profile-menu-item" role="menuitem" onclick={close}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V6.5A2.5 2.5 0 016.5 4H20v13H6.5A2.5 2.5 0 004 19.5z"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          {t('profile.menuCourses', $locale)}
+        </a>
+      {/if}
 
       <a href="/dashboard" class="profile-menu-item" role="menuitem" onclick={close}>
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

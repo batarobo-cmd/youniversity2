@@ -49,6 +49,15 @@ export const api = {
     return request<Record<string, unknown>>(`/api/dashboard?locale=${loc}`);
   },
 
+  getStudentCoursesOverview: () => {
+    const loc = get(locale);
+    return request<{
+      futureCourses: Array<Record<string, unknown>>;
+      activeCourses: Array<Record<string, unknown>>;
+      pastCourses: Array<Record<string, unknown>>;
+    }>(`/api/dashboard/courses-overview?locale=${loc}`);
+  },
+
   updateProfile: (data: {
     name?: string;
     preferredLocale?: string;
@@ -135,6 +144,17 @@ export const api = {
   getActivity: (courseId: string) =>
     request<unknown[]>(`/api/progress/activity/course/${courseId}?limit=50`),
 
+  trackActivity: (data: {
+    eventType: string;
+    courseId?: string;
+    lessonId?: string;
+    payload?: Record<string, unknown>;
+  }) =>
+    request<unknown>('/api/progress/activity', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   getCategories: () => request<Array<Record<string, unknown>>>('/api/categories'),
 
   createCategory: (data: {
@@ -157,8 +177,10 @@ export const api = {
   deleteCategory: (id: string) =>
     request<{ ok: boolean }>(`/api/categories/${id}`, { method: 'DELETE' }),
 
-  getStudents: () =>
-    request<Array<{ id: string; name: string; email: string }>>('/api/admin/students'),
+  getStudents: (q?: string) =>
+    request<Array<{ id: string; name: string; email: string }>>(
+      q ? `/api/admin/students?q=${encodeURIComponent(q)}` : '/api/admin/students',
+    ),
 
   createCourse: (data: {
     slug: string;
@@ -219,7 +241,52 @@ export const api = {
       body: JSON.stringify({ userId, courseId }),
     }),
 
+  getUserLogs: (
+    userId: string,
+    params?: { q?: string; from?: string; to?: string; limit?: number; offset?: number },
+  ) => {
+    const loc = get(locale);
+    const sp = new URLSearchParams({ locale: loc });
+    if (params?.q) sp.set('q', params.q);
+    if (params?.from) sp.set('from', params.from);
+    if (params?.to) sp.set('to', params.to);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.offset) sp.set('offset', String(params.offset));
+    return request<{
+      userName: string;
+      items: Array<Record<string, unknown>>;
+      total: number;
+      retentionFrom: string;
+    }>(`/api/admin/users/${userId}/logs?${sp}`);
+  },
+
   getUsers: () => request<Array<Record<string, unknown>>>('/api/admin/users'),
+
+  getRegistrationHistory: (params: { q?: string; from?: string; to?: string; limit?: number; offset?: number }) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set('q', params.q);
+    if (params.from) sp.set('from', params.from);
+    if (params.to) sp.set('to', params.to);
+    if (params.limit) sp.set('limit', String(params.limit));
+    if (params.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return request<{ items: Array<Record<string, unknown>>; limit: number; offset: number }>(
+      `/api/admin/registrations/history${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  getLoginHistory: (params: { q?: string; from?: string; to?: string; limit?: number; offset?: number }) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set('q', params.q);
+    if (params.from) sp.set('from', params.from);
+    if (params.to) sp.set('to', params.to);
+    if (params.limit) sp.set('limit', String(params.limit));
+    if (params.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return request<{ items: Array<Record<string, unknown>>; limit: number; offset: number }>(
+      `/api/admin/logins/history${qs ? `?${qs}` : ''}`,
+    );
+  },
 
   createUser: (data: {
     email: string;

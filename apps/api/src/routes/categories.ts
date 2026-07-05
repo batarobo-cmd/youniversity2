@@ -3,9 +3,10 @@ import { eq, asc } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
 import { courseCategories, courses } from '../db/schema';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { broadcastToAdmin } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
+import { recordUserActivity } from '../services/activity-log';
 
 export const categoryRoutes = new Hono();
 
@@ -20,6 +21,7 @@ categoryRoutes.get('/', requireRole('admin', 'instructor'), async (c) => {
 });
 
 categoryRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const body = z
     .object({
       slug: z.string().min(2).max(255),
@@ -56,10 +58,15 @@ categoryRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     timestamp: new Date().toISOString(),
   });
 
+  void recordUserActivity(actor.id, 'category.created', {
+    payload: { categoryName: category.name, categorySlug: category.slug, categoryId: category.id },
+  });
+
   return c.json(category, 201);
 });
 
 categoryRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const id = c.req.param('id');
   const body = z
     .object({
@@ -99,10 +106,15 @@ categoryRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
     timestamp: new Date().toISOString(),
   });
 
+  void recordUserActivity(actor.id, 'category.updated', {
+    payload: { categoryName: updated.name, categorySlug: updated.slug, categoryId: id },
+  });
+
   return c.json(updated);
 });
 
 categoryRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const id = c.req.param('id');
 
   const childCats = await db
@@ -126,6 +138,10 @@ categoryRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
     type: WS_EVENTS.COURSE_UPDATED,
     payload: { categoryId: id, action: 'category_deleted' },
     timestamp: new Date().toISOString(),
+  });
+
+  void recordUserActivity(actor.id, 'category.deleted', {
+    payload: { categoryName: deleted.name, categorySlug: deleted.slug, categoryId: id },
   });
 
   return c.json({ ok: true });

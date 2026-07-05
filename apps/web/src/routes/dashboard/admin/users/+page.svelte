@@ -11,6 +11,7 @@
   import { t } from '$lib/i18n';
   import { USER_ROLES, SUPPORTED_LOCALES, type UserRole } from '@youniversity2/shared';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
+  import UserLogsModal from '$lib/components/UserLogsModal.svelte';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
   import '$lib/styles/admin-users.css';
@@ -42,6 +43,8 @@
   let formRole = $state<UserRole>('student');
   let formLocale = $state('sk');
   let saving = $state(false);
+  let logsUser = $state<ManagedUser | null>(null);
+  let logsOpen = $state(false);
 
   const filtered = $derived(
     users.filter((u) => {
@@ -151,6 +154,16 @@
     }
   }
 
+  function openLogs(u: ManagedUser) {
+    logsUser = u;
+    logsOpen = true;
+  }
+
+  function closeLogs() {
+    logsOpen = false;
+    logsUser = null;
+  }
+
   async function removeUser(u: ManagedUser) {
     if (!confirm(t('admin.usersDeleteConfirm', $locale))) return;
     error = '';
@@ -241,6 +254,21 @@
             <td>{formatDate(u.createdAt)}</td>
             <td>
               <div class="users-actions">
+                <button
+                  type="button"
+                  class="users-action-btn"
+                  title={t('admin.usersLogs', $locale)}
+                  onclick={() => openLogs(u)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 3.5L18.5 8H14V3.5zM8 13h8M8 17h5"
+                      stroke="currentColor"
+                      stroke-width="1.75"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </button>
                 <button
                   type="button"
                   class="users-action-btn"
@@ -351,4 +379,8 @@
       </form>
     </div>
   </div>
+{/if}
+
+{#if logsOpen && logsUser}
+  <UserLogsModal user={logsUser} open={logsOpen} onClose={closeLogs} />
 {/if}

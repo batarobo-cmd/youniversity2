@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, or, ilike, and, gte, lte } from 'drizzle-orm';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { db } from '../db';
-import { users } from '../db/schema';
+import { users, loginEvents } from '../db/schema';
+import { getUserLogs } from '../services/user-logs';
+import { recordUserActivity } from '../services/activity-log';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { USER_ROLES, SUPPORTED_LOCALES } from '@youniversity2/shared';
 
@@ -27,13 +29,169 @@ function serializeAdminUser(user: typeof users.$inferSelect) {
 }
 
 adminRoutes.get('/students', requireRole('admin', 'instructor'), async (c) => {
+  const q = c.req.query('q')?.trim();
+
+  if (q !== undefined && q.length < 2) {
+    return c.json([]);
+  }
+
+  const conditions = [eq(users.role, 'student')];
+  if (q) {
+    const pattern = `%${q}%`;
+    conditions.push(or(ilike(users.name, pattern), ilike(users.email, pattern))!);
+  }
+
   const students = await db
     .select({ id: users.id, name: users.name, email: users.email })
     .from(users)
-    .where(eq(users.role, 'student'))
-    .orderBy(users.name);
+    .where(and(...conditions))
+    .orderBy(users.name)
+    .limit(q ? 20 : 100);
 
   return c.json(students);
+});
+
+const historyQuerySchema = z.object({
+  q: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+function parseDateStart(value?: string) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function parseDateEnd(value?: string) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+adminRoutes.get('/registrations/history', requireRole('admin', 'instructor'), async (c) => {
+  const parsed = historyQuerySchema.safeParse({
+    q: c.req.query('q'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    limit: c.req.query('limit'),
+    offset: c.req.query('offset'),
+  });
+  if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
+
+  const { q, from, to, limit, offset } = parsed.data;
+  const conditions = [];
+  const fromDate = parseDateStart(from);
+  const toDate = parseDateEnd(to);
+  if (q?.trim()) {
+    const pattern = `%${q.trim()}%`;
+    conditions.push(or(ilike(users.name, pattern), ilike(users.email, pattern))!);
+  }
+  if (fromDate) conditions.push(gte(users.createdAt, fromDate));
+  if (toDate) conditions.push(lte(users.createdAt, toDate));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(whereClause)
+    .orderBy(desc(users.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      userName: r.name,
+      userEmail: r.email,
+      role: r.role,
+      registeredAt: r.createdAt.toISOString(),
+    })),
+    limit,
+    offset,
+  });
+});
+
+adminRoutes.get('/logins/history', requireRole('admin', 'instructor'), async (c) => {
+  const parsed = historyQuerySchema.safeParse({
+    q: c.req.query('q'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    limit: c.req.query('limit'),
+    offset: c.req.query('offset'),
+  });
+  if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
+
+  const { q, from, to, limit, offset } = parsed.data;
+  const conditions = [];
+  const fromDate = parseDateStart(from);
+  const toDate = parseDateEnd(to);
+  if (q?.trim()) {
+    const pattern = `%${q.trim()}%`;
+    conditions.push(or(ilike(users.name, pattern), ilike(users.email, pattern))!);
+  }
+  if (fromDate) conditions.push(gte(loginEvents.createdAt, fromDate));
+  if (toDate) conditions.push(lte(loginEvents.createdAt, toDate));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const rows = await db
+    .select({
+      id: loginEvents.id,
+      method: loginEvents.method,
+      createdAt: loginEvents.createdAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(loginEvents)
+    .innerJoin(users, eq(loginEvents.userId, users.id))
+    .where(whereClause)
+    .orderBy(desc(loginEvents.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      userName: r.userName,
+      userEmail: r.userEmail,
+      method: r.method,
+      loggedInAt: r.createdAt.toISOString(),
+    })),
+    limit,
+    offset,
+  });
+});
+
+adminRoutes.get('/users/:id/logs', requireRole('admin'), async (c) => {
+  const userId = c.req.param('id');
+  const locale = c.req.query('locale') ?? 'sk';
+
+  const [user] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) return c.json({ error: 'User not found' }, 404);
+
+  const parsed = historyQuerySchema.safeParse({
+    q: c.req.query('q'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    limit: c.req.query('limit'),
+    offset: c.req.query('offset'),
+  });
+  if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
+
+  const data = await getUserLogs(userId, locale, parsed.data);
+  return c.json({ userName: user.name, ...data });
 });
 
 adminRoutes.get('/users', requireRole('admin'), async (c) => {
@@ -70,6 +228,16 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
       preferredLocale: body.data.preferredLocale,
     })
     .returning();
+
+  const authUser = c.get('user') as AuthUser;
+  void recordUserActivity(authUser.id, 'user.created', {
+    payload: {
+      targetId: created.id,
+      targetName: created.name,
+      targetEmail: created.email,
+      role: created.role,
+    },
+  });
 
   return c.json(serializeAdminUser(created), 201);
 });
@@ -112,6 +280,16 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
   if (body.data.password) updates.passwordHash = await bcrypt.hash(body.data.password, 12);
 
   const [updated] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+
+  void recordUserActivity(authUser.id, 'user.updated', {
+    payload: {
+      targetId: updated.id,
+      targetName: updated.name,
+      targetEmail: updated.email,
+      fields: Object.keys(body.data),
+    },
+  });
+
   return c.json(serializeAdminUser(updated));
 });
 
@@ -125,6 +303,14 @@ adminRoutes.delete('/users/:id', requireRole('admin'), async (c) => {
 
   const [deleted] = await db.delete(users).where(eq(users.id, id)).returning();
   if (!deleted) return c.json({ error: 'User not found' }, 404);
+
+  void recordUserActivity(authUser.id, 'user.deleted', {
+    payload: {
+      targetId: deleted.id,
+      targetName: deleted.name,
+      targetEmail: deleted.email,
+    },
+  });
 
   return c.json({ ok: true });
 });

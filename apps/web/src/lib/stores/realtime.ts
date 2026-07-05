@@ -107,9 +107,22 @@ export function trackActivity(
   lessonId?: string,
   data?: Record<string, unknown>,
 ) {
-  sendWsMessage({
-    type: WS_EVENTS.ACTIVITY,
-    payload: { eventType, courseId, lessonId, data },
-    timestamp: new Date().toISOString(),
-  });
+  if (get(token)) {
+    void api
+      .trackActivity({
+        eventType,
+        courseId,
+        lessonId,
+        payload: data,
+      })
+      .catch(() => {});
+  }
+
+  if (courseId) {
+    sendWsMessage({
+      type: WS_EVENTS.ACTIVITY,
+      payload: { eventType, courseId, lessonId, data },
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, ilike, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
 import { enrollments, courses, users } from '../db/schema';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { broadcastToCourse, broadcastToUser, broadcastToAdmin } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
+import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 
 export const enrollmentRoutes = new Hono();
 
@@ -22,12 +23,14 @@ enrollmentRoutes.get('/', requireRole('admin', 'instructor'), async (c) => {
     })
     .from(enrollments)
     .innerJoin(users, eq(enrollments.userId, users.id))
-    .where(eq(enrollments.courseId, courseId));
+    .where(eq(enrollments.courseId, courseId))
+    .orderBy(desc(enrollments.enrolledAt));
 
   return c.json(result);
 });
 
 enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const body = z
     .object({
       userId: z.string().uuid(),
@@ -48,7 +51,56 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     .limit(1);
 
   if (existing.length > 0) {
-    return c.json({ error: 'Already enrolled', enrollment: existing[0] }, 409);
+    const prev = existing[0];
+    if (prev.status === 'active') {
+      return c.json({ error: 'Already enrolled', enrollment: prev }, 409);
+    }
+
+    const [enrollment] = await db
+      .update(enrollments)
+      .set({
+        status: 'active',
+        enrolledAt: new Date(),
+        completedAt: null,
+      })
+      .where(eq(enrollments.id, prev.id))
+      .returning();
+
+    broadcastToUser(body.data.userId, {
+      type: WS_EVENTS.ENROLLMENT_CHANGED,
+      payload: { enrollment, action: 'reactivated' },
+      timestamp: new Date().toISOString(),
+    });
+
+    broadcastToCourse(body.data.courseId, {
+      type: WS_EVENTS.ENROLLMENT_CHANGED,
+      payload: { enrollment, action: 'reactivated' },
+      timestamp: new Date().toISOString(),
+    });
+
+    broadcastToAdmin({
+      type: WS_EVENTS.ENROLLMENT_CHANGED,
+      payload: { enrollment, action: 'reactivated' },
+      timestamp: new Date().toISOString(),
+    });
+
+    const [student] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, body.data.userId))
+      .limit(1);
+    const courseTitle = await getCourseTitle(body.data.courseId);
+    void recordUserActivity(actor.id, 'enrollment.reactivated', {
+      courseId: body.data.courseId,
+      payload: {
+        studentName: student?.name,
+        studentId: body.data.userId,
+        courseTitle,
+        courseId: body.data.courseId,
+      },
+    });
+
+    return c.json(enrollment, 200);
   }
 
   const [enrollment] = await db
@@ -78,10 +130,27 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
     timestamp: new Date().toISOString(),
   });
 
+  const [student] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, body.data.userId))
+    .limit(1);
+  const courseTitle = await getCourseTitle(body.data.courseId);
+  void recordUserActivity(actor.id, 'enrollment.created', {
+    courseId: body.data.courseId,
+    payload: {
+      studentName: student?.name,
+      studentId: body.data.userId,
+      courseTitle,
+      courseId: body.data.courseId,
+    },
+  });
+
   return c.json(enrollment, 201);
 });
 
 enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
   const enrollmentId = c.req.param('id');
 
   const [enrollment] = await db
@@ -102,6 +171,22 @@ enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) =>
     type: WS_EVENTS.ENROLLMENT_CHANGED,
     payload: { enrollment, action: 'revoked' },
     timestamp: new Date().toISOString(),
+  });
+
+  const [student] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, enrollment.userId))
+    .limit(1);
+  const courseTitle = await getCourseTitle(enrollment.courseId);
+  void recordUserActivity(actor.id, 'enrollment.revoked', {
+    courseId: enrollment.courseId,
+    payload: {
+      studentName: student?.name,
+      studentId: enrollment.userId,
+      courseTitle,
+      courseId: enrollment.courseId,
+    },
   });
 
   return c.json(enrollment);

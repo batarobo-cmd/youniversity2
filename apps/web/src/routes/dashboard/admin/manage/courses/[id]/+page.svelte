@@ -5,6 +5,7 @@
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
   import { api } from '$lib/api';
   import { t } from '$lib/i18n';
+  import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
   import '$lib/styles/admin-users.css';
@@ -49,8 +50,8 @@
   let videoWatchPercent = $state(80);
 
   let enrollments = $state<EnrollmentRow[]>([]);
-  let students = $state<Array<{ id: string; name: string; email: string }>>([]);
   let enrollUserId = $state('');
+  let studentSearch = $state<{ reset: () => void } | null>(null);
 
   let certEnabled = $state(false);
   let certTitle = $state('');
@@ -93,10 +94,9 @@
     loading = true;
     error = '';
     try {
-      const [c, enr, sts, certs] = await Promise.all([
+      const [c, enr, certs] = await Promise.all([
         api.getCourse(courseId),
         api.getEnrollments(courseId) as Promise<EnrollmentRow[]>,
-        api.getStudents(),
         api.getCourseCertificates(courseId),
       ]);
       course = c;
@@ -105,7 +105,6 @@
       description = String(c.description ?? '');
       parseRules((c.completionRules as CompletionRule[]) ?? []);
       enrollments = enr;
-      students = sts;
       issuedCerts = certs;
     } catch (e) {
       error = (e as Error).message;
@@ -189,8 +188,23 @@
     try {
       await api.createEnrollment(enrollUserId, courseId);
       enrollUserId = '';
+      studentSearch?.reset();
       message = t('admin.enrolled', $locale);
       enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function restoreEnrollment(userId: string) {
+    saving = true;
+    error = '';
+    try {
+      await api.createEnrollment(userId, courseId);
+      enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+      message = t('admin.enrolled', $locale);
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -213,6 +227,26 @@
   }
 
   const modules = $derived((course?.modules as Array<Record<string, unknown>>) ?? []);
+
+  const activeEnrolledIds = $derived(
+    enrollments.filter((r) => r.enrollment.status === 'active').map((r) => r.user.id),
+  );
+
+  function formatEnrolledAt(iso: string) {
+    return new Date(iso).toLocaleString($locale, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  function enrollmentStatusLabel(status: string) {
+    const keys: Record<string, 'admin.enrollmentActive' | 'admin.enrollmentRevoked' | 'admin.enrollmentCompleted' | 'admin.enrollmentFailed' | 'admin.enrollmentExpired'> = {
+      active: 'admin.enrollmentActive',
+      revoked: 'admin.enrollmentRevoked',
+      completed: 'admin.enrollmentCompleted',
+      failed: 'admin.enrollmentFailed',
+      expired: 'admin.enrollmentExpired',
+    };
+    const key = keys[status];
+    return key ? t(key, $locale) : status;
+  }
 </script>
 
 <div class="course-edit">
@@ -306,12 +340,14 @@
         <div class="panel-header"><h2>{t('admin.tabStudents', $locale)}</h2></div>
         <div class="panel-body">
           <div class="course-edit-enroll-row">
-            <select class="admin-inline-select" bind:value={enrollUserId}>
-              <option value="">{t('admin.selectStudent', $locale)}</option>
-              {#each students as s}
-                <option value={s.id}>{s.name} ({s.email})</option>
-              {/each}
-            </select>
+            <StudentSearchPicker
+              bind:this={studentSearch}
+              excludeIds={activeEnrolledIds}
+              disabled={saving}
+              onSelect={(user) => {
+                enrollUserId = user?.id ?? '';
+              }}
+            />
             <button type="button" class="btn btn-sm" disabled={saving || !enrollUserId} onclick={addEnrollment}>{t('admin.assign', $locale)}</button>
           </div>
 
@@ -324,6 +360,7 @@
                   <tr>
                     <th>{t('admin.studentName', $locale)}</th>
                     <th>E-mail</th>
+                    <th>{t('admin.enrolledAt', $locale)}</th>
                     <th>{t('admin.enrollmentStatus', $locale)}</th>
                     <th></th>
                   </tr>
@@ -333,10 +370,17 @@
                     <tr>
                       <td>{row.user.name}</td>
                       <td>{row.user.email}</td>
-                      <td><span class="users-role-badge">{row.enrollment.status}</span></td>
+                      <td>{formatEnrolledAt(row.enrollment.enrolledAt)}</td>
+                      <td>
+                        <span class="users-role-badge enrollment-status--{row.enrollment.status}">
+                          {enrollmentStatusLabel(row.enrollment.status)}
+                        </span>
+                      </td>
                       <td>
                         {#if row.enrollment.status === 'active'}
-                          <button type="button" class="btn btn-ghost btn-sm" onclick={() => revokeEnrollment(row.enrollment.id)}>{t('admin.revokeEnrollment', $locale)}</button>
+                          <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => revokeEnrollment(row.enrollment.id)}>{t('admin.revokeEnrollment', $locale)}</button>
+                        {:else if row.enrollment.status === 'revoked'}
+                          <button type="button" class="btn btn-sm" disabled={saving} onclick={() => restoreEnrollment(row.user.id)}>{t('admin.restoreEnrollment', $locale)}</button>
                         {/if}
                       </td>
                     </tr>

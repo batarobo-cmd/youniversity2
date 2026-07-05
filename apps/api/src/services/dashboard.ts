@@ -1,4 +1,4 @@
-import { eq, and, inArray, desc, count } from 'drizzle-orm';
+import { eq, and, inArray, desc, count, gte, lte, or, ilike, isNotNull, sql } from 'drizzle-orm';
 import { db } from '../db';
 import {
   users,
@@ -10,6 +10,7 @@ import {
   lessonProgress,
   certificates,
   activityEvents,
+  loginEvents,
 } from '../db/schema';
 import type { AuthUser } from '../middleware/auth';
 
@@ -32,43 +33,157 @@ async function getCourseProgressPercent(userId: string, courseId: string): Promi
   return Math.round((completed / courseLessons.length) * 100);
 }
 
-export async function getStudentDashboard(userId: string, locale: string) {
+export type StudentCourseView = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  progressPercent: number;
+  enrolledAt: string;
+  expiresAt?: string;
+  startsAt?: string;
+  endsAt?: string;
+  completedAt?: string;
+  enrollmentStatus: string;
+  certificate: {
+    id: string;
+    certificateNumber: string;
+    issuedAt: string;
+  } | null;
+};
+
+type CourseBucket = 'future' | 'active' | 'past';
+
+function classifyCourseBucket(
+  enrollment: { status: string; enrolledAt: Date; expiresAt: Date | null },
+  course: { startsAt: Date | null; endsAt: Date | null },
+  now: Date,
+): CourseBucket {
+  if (['completed', 'failed', 'expired', 'revoked'].includes(enrollment.status)) {
+    return 'past';
+  }
+
+  const start = course.startsAt ?? enrollment.enrolledAt;
+  const end = course.endsAt ?? enrollment.expiresAt ?? null;
+  if (start > now) return 'future';
+  if (end && end < now) return 'past';
+  return 'active';
+}
+
+export async function getStudentCourseOverview(userId: string, locale: string) {
+  const now = new Date();
+
   const userEnrollments = await db
     .select()
     .from(enrollments)
     .where(eq(enrollments.userId, userId))
     .orderBy(desc(enrollments.enrolledAt));
 
-  const courseIds = userEnrollments.map((e) => e.courseId);
-  if (courseIds.length === 0) {
+  if (userEnrollments.length === 0) {
     return {
+      futureCourses: [] as StudentCourseView[],
+      activeCourses: [] as StudentCourseView[],
+      pastCourses: [] as StudentCourseView[],
       stats: { active: 0, completed: 0, certificates: 0, avgProgress: 0 },
-      activeCourses: [],
-      completedCourses: [],
-      calendarEvents: [],
-      upcomingDeadlines: [],
-      recentActivity: [],
     };
   }
 
+  const courseIds = userEnrollments.map((e) => e.courseId);
   const courseRows = await db.select().from(courses).where(inArray(courses.id, courseIds));
   const translations = await db
     .select()
     .from(courseTranslations)
     .where(and(inArray(courseTranslations.courseId, courseIds), eq(courseTranslations.locale, locale)));
 
-  const userCerts = await db
-    .select()
-    .from(certificates)
-    .where(eq(certificates.userId, userId));
-
+  const userCerts = await db.select().from(certificates).where(eq(certificates.userId, userId));
   const certMap = new Map(userCerts.map((c) => [c.courseId, c]));
-
   const translationMap = new Map(translations.map((t) => [t.courseId, t]));
   const courseMap = new Map(courseRows.map((c) => [c.id, c]));
 
-  const activeCourses = [];
-  const completedCourses = [];
+  const futureCourses: StudentCourseView[] = [];
+  const activeCourses: StudentCourseView[] = [];
+  const pastCourses: StudentCourseView[] = [];
+
+  let totalProgress = 0;
+  let activeCount = 0;
+  let completedCount = 0;
+
+  for (const enrollment of userEnrollments) {
+    const course = courseMap.get(enrollment.courseId);
+    if (!course || !course.isPublished) continue;
+
+    const translation = translationMap.get(enrollment.courseId);
+    const title = translation?.title ?? course.slug;
+    const progressPercent =
+      enrollment.status === 'completed'
+        ? 100
+        : await getCourseProgressPercent(userId, enrollment.courseId);
+    const startDate = course.startsAt ?? enrollment.enrolledAt;
+    const endDate = course.endsAt ?? enrollment.expiresAt;
+    const cert = certMap.get(enrollment.courseId);
+
+    const item: StudentCourseView = {
+      id: course.id,
+      slug: course.slug,
+      title,
+      description: translation?.description ?? '',
+      progressPercent,
+      enrolledAt: enrollment.enrolledAt.toISOString(),
+      expiresAt: enrollment.expiresAt?.toISOString(),
+      startsAt: startDate?.toISOString(),
+      endsAt: endDate?.toISOString(),
+      completedAt: enrollment.completedAt?.toISOString(),
+      enrollmentStatus: enrollment.status,
+      certificate: cert
+        ? {
+            id: cert.id,
+            certificateNumber: cert.certificateNumber,
+            issuedAt: cert.issuedAt.toISOString(),
+          }
+        : null,
+    };
+
+    const bucket = classifyCourseBucket(enrollment, course, now);
+    if (bucket === 'future') futureCourses.push(item);
+    else if (bucket === 'active') {
+      activeCourses.push(item);
+      activeCount++;
+      totalProgress += progressPercent;
+    } else pastCourses.push(item);
+
+    if (enrollment.status === 'completed') completedCount++;
+  }
+
+  return {
+    futureCourses,
+    activeCourses,
+    pastCourses,
+    stats: {
+      active: activeCount,
+      completed: completedCount,
+      certificates: userCerts.length,
+      avgProgress: activeCount > 0 ? Math.round(totalProgress / activeCount) : 0,
+    },
+  };
+}
+
+export async function getStudentDashboard(userId: string, locale: string) {
+  const overview = await getStudentCourseOverview(userId, locale);
+  const currentYear = new Date().getFullYear();
+
+  const completedThisYear = overview.pastCourses.filter((course) => {
+    if (course.enrollmentStatus !== 'completed') return false;
+    const doneAt = course.completedAt ?? course.certificate?.issuedAt;
+    if (!doneAt) return false;
+    return new Date(doneAt).getFullYear() === currentYear;
+  });
+
+  const courseIds = [
+    ...overview.activeCourses,
+    ...overview.futureCourses,
+    ...overview.pastCourses,
+  ].map((c) => c.id);
+
   const calendarEvents: Array<{
     id: string;
     courseId: string;
@@ -83,104 +198,57 @@ export async function getStudentDashboard(userId: string, locale: string) {
     daysLeft: number;
   }> = [];
 
-  let totalProgress = 0;
-  let activeCount = 0;
-
-  for (const enrollment of userEnrollments) {
-    const course = courseMap.get(enrollment.courseId);
-    if (!course) continue;
-
-    const translation = translationMap.get(enrollment.courseId);
-    const title = translation?.title ?? course.slug;
-    const progressPercent = await getCourseProgressPercent(userId, enrollment.courseId);
-
-    const startDate = course.startsAt ?? enrollment.enrolledAt;
-    const endDate = course.endsAt ?? enrollment.expiresAt;
-
-    if (startDate) {
+  for (const course of [...overview.futureCourses, ...overview.activeCourses]) {
+    if (course.startsAt) {
       calendarEvents.push({
-        id: `${enrollment.id}-start`,
+        id: `${course.id}-start`,
         courseId: course.id,
-        title,
-        date: startDate.toISOString(),
+        title: course.title,
+        date: course.startsAt,
         type: 'start',
       });
     }
-    if (endDate) {
+    if (course.endsAt) {
       calendarEvents.push({
-        id: `${enrollment.id}-end`,
+        id: `${course.id}-end`,
         courseId: course.id,
-        title,
-        date: endDate.toISOString(),
+        title: course.title,
+        date: course.endsAt,
         type: 'end',
       });
     }
-    if (enrollment.expiresAt && enrollment.status === 'active') {
+    if (course.expiresAt) {
       const daysLeft = Math.ceil(
-        (enrollment.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        (new Date(course.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
       );
       if (daysLeft >= 0 && daysLeft <= 30) {
         upcomingDeadlines.push({
           courseId: course.id,
-          title,
-          expiresAt: enrollment.expiresAt.toISOString(),
+          title: course.title,
+          expiresAt: course.expiresAt,
           daysLeft,
         });
       }
-    }
-
-    if (enrollment.status === 'completed') {
-      const cert = certMap.get(enrollment.courseId);
-      completedCourses.push({
-        id: course.id,
-        slug: course.slug,
-        title,
-        description: translation?.description ?? '',
-        completedAt: enrollment.completedAt?.toISOString(),
-        progressPercent: 100,
-        certificate: cert
-          ? {
-              id: cert.id,
-              certificateNumber: cert.certificateNumber,
-              issuedAt: cert.issuedAt.toISOString(),
-            }
-          : null,
-      });
-    } else if (enrollment.status === 'active') {
-      activeCount++;
-      totalProgress += progressPercent;
-      activeCourses.push({
-        id: course.id,
-        slug: course.slug,
-        title,
-        description: translation?.description ?? '',
-        progressPercent,
-        enrolledAt: enrollment.enrolledAt.toISOString(),
-        expiresAt: enrollment.expiresAt?.toISOString(),
-        startsAt: startDate?.toISOString(),
-        endsAt: endDate?.toISOString(),
-      });
     }
   }
 
   upcomingDeadlines.sort((a, b) => a.daysLeft - b.daysLeft);
 
-  const recentActivity = await db
-    .select()
-    .from(activityEvents)
-    .where(eq(activityEvents.userId, userId))
-    .orderBy(desc(activityEvents.createdAt))
-    .limit(8);
+  const recentActivity =
+    courseIds.length > 0
+      ? await db
+          .select()
+          .from(activityEvents)
+          .where(eq(activityEvents.userId, userId))
+          .orderBy(desc(activityEvents.createdAt))
+          .limit(8)
+      : [];
 
   return {
-    stats: {
-      active: activeCount,
-      completed: completedCourses.length,
-      certificates: userCerts.length,
-      avgProgress: activeCount > 0 ? Math.round(totalProgress / activeCount) : 0,
-    },
-    activeCourses,
-    completedCourses,
+    stats: overview.stats,
+    activeCourses: overview.activeCourses,
+    completedThisYear,
+    currentYear,
     calendarEvents,
     upcomingDeadlines,
     recentActivity: recentActivity.map((a) => ({
@@ -211,56 +279,100 @@ export async function getAdminDashboard(locale: string) {
     .from(enrollments)
     .where(eq(enrollments.status, 'completed'));
 
-  const allCourses = await db.select().from(courses).orderBy(desc(courses.updatedAt)).limit(10);
-  const courseIds = allCourses.map((c) => c.id);
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-  const translations =
-    courseIds.length > 0
+  const topActiveRaw = await db
+    .select({
+      courseId: activityEvents.courseId,
+      activityCount: count(),
+      activeUsers: sql<number>`count(distinct ${activityEvents.userId})`.mapWith(Number),
+    })
+    .from(activityEvents)
+    .where(and(isNotNull(activityEvents.courseId), gte(activityEvents.createdAt, oneHourAgo)))
+    .groupBy(activityEvents.courseId)
+    .orderBy(desc(count()))
+    .limit(10);
+
+  const activeCourseIds = topActiveRaw
+    .map((r) => r.courseId)
+    .filter((id): id is string => id !== null);
+
+  const activeCourseRows =
+    activeCourseIds.length > 0
+      ? await db.select().from(courses).where(inArray(courses.id, activeCourseIds))
+      : [];
+
+  const activeCourseMap = new Map(activeCourseRows.map((c) => [c.id, c]));
+
+  const activeTranslations =
+    activeCourseIds.length > 0
       ? await db
           .select()
           .from(courseTranslations)
           .where(
-            and(inArray(courseTranslations.courseId, courseIds), eq(courseTranslations.locale, locale)),
+            and(inArray(courseTranslations.courseId, activeCourseIds), eq(courseTranslations.locale, locale)),
           )
       : [];
 
-  const translationMap = new Map(translations.map((t) => [t.courseId, t]));
+  const activeTranslationMap = new Map(activeTranslations.map((t) => [t.courseId, t]));
 
   const enrollmentCounts =
-    courseIds.length > 0
+    activeCourseIds.length > 0
       ? await db
           .select({
             courseId: enrollments.courseId,
             total: count(),
           })
           .from(enrollments)
-          .where(inArray(enrollments.courseId, courseIds))
+          .where(inArray(enrollments.courseId, activeCourseIds))
           .groupBy(enrollments.courseId)
       : [];
 
   const enrollmentMap = new Map(enrollmentCounts.map((e) => [e.courseId, Number(e.total)]));
 
-  const recentEnrollments = await db
-    .select({
-      enrollment: enrollments,
-      user: { id: users.id, name: users.name, email: users.email },
-      course: { id: courses.id, slug: courses.slug },
+  const topCourses = topActiveRaw
+    .map((row) => {
+      const c = row.courseId ? activeCourseMap.get(row.courseId) : undefined;
+      if (!c || !row.courseId) return null;
+      return {
+        id: c.id,
+        slug: c.slug,
+        title: activeTranslationMap.get(c.id)?.title ?? c.slug,
+        isPublished: c.isPublished,
+        enrollmentCount: enrollmentMap.get(c.id) ?? 0,
+        activityCount: Number(row.activityCount),
+        activeUsers: row.activeUsers,
+        startsAt: c.startsAt?.toISOString(),
+        endsAt: c.endsAt?.toISOString(),
+        updatedAt: c.updatedAt.toISOString(),
+      };
     })
-    .from(enrollments)
-    .innerJoin(users, eq(enrollments.userId, users.id))
-    .innerJoin(courses, eq(enrollments.courseId, courses.id))
-    .orderBy(desc(enrollments.enrolledAt))
+    .filter((c): c is NonNullable<typeof c> => c !== null);
+
+  const recentRegistrations = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .orderBy(desc(users.createdAt))
     .limit(10);
 
-  const recentActivity = await db
+  const recentLogins = await db
     .select({
-      event: activityEvents,
-      user: { name: users.name },
+      id: loginEvents.id,
+      method: loginEvents.method,
+      createdAt: loginEvents.createdAt,
+      userName: users.name,
+      userEmail: users.email,
     })
-    .from(activityEvents)
-    .innerJoin(users, eq(activityEvents.userId, users.id))
-    .orderBy(desc(activityEvents.createdAt))
-    .limit(15);
+    .from(loginEvents)
+    .innerJoin(users, eq(loginEvents.userId, users.id))
+    .orderBy(desc(loginEvents.createdAt))
+    .limit(10);
 
   return {
     stats: {
@@ -270,31 +382,20 @@ export async function getAdminDashboard(locale: string) {
       activeEnrollments: Number(activeEnrollmentCount.value),
       completedEnrollments: Number(completedCount.value),
     },
-    courses: allCourses.map((c) => ({
-      id: c.id,
-      slug: c.slug,
-      title: translationMap.get(c.id)?.title ?? c.slug,
-      isPublished: c.isPublished,
-      enrollmentCount: enrollmentMap.get(c.id) ?? 0,
-      startsAt: c.startsAt?.toISOString(),
-      endsAt: c.endsAt?.toISOString(),
-      updatedAt: c.updatedAt.toISOString(),
+    courses: topCourses,
+    recentRegistrations: recentRegistrations.map((r) => ({
+      id: r.id,
+      userName: r.name,
+      userEmail: r.email,
+      role: r.role,
+      registeredAt: r.createdAt.toISOString(),
     })),
-    recentEnrollments: recentEnrollments.map((r) => ({
-      id: r.enrollment.id,
-      status: r.enrollment.status,
-      enrolledAt: r.enrollment.enrolledAt.toISOString(),
-      userName: r.user.name,
-      userEmail: r.user.email,
-      courseId: r.course.id,
-      courseSlug: r.course.slug,
-    })),
-    recentActivity: recentActivity.map((r) => ({
-      id: r.event.id,
-      eventType: r.event.eventType,
-      userName: r.user.name,
-      courseId: r.event.courseId,
-      createdAt: r.event.createdAt.toISOString(),
+    recentLogins: recentLogins.map((r) => ({
+      id: r.id,
+      userName: r.userName,
+      userEmail: r.userEmail,
+      method: r.method,
+      loggedInAt: r.createdAt.toISOString(),
     })),
   };
 }

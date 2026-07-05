@@ -71,6 +71,25 @@
 
   const catCourses = $derived(courses.filter((c) => c.categoryId === category.id));
 
+  const descendantCategoryIds = $derived.by(() => {
+    const ids = new Set<string>([category.id]);
+    const queue = [category.id];
+    while (queue.length > 0) {
+      const parentId = queue.pop()!;
+      for (const c of categories) {
+        if (c.parentId === parentId && !ids.has(c.id)) {
+          ids.add(c.id);
+          queue.push(c.id);
+        }
+      }
+    }
+    return ids;
+  });
+
+  const totalCourseCount = $derived(
+    courses.filter((c) => c.categoryId && descendantCategoryIds.has(c.categoryId)).length,
+  );
+
   function isExpanded(nodeKey: string) {
     return expanded[nodeKey] === true;
   }
@@ -200,7 +219,7 @@
     </div>
     <div class="cat-tree-node-info">
       <span class="cat-tree-node-name">{category.name}</span>
-      <span class="cat-tree-node-meta">{metaLabel(childCategories.length, catCourses.length)}</span>
+      <span class="cat-tree-node-meta">{metaLabel(childCategories.length, totalCourseCount)}</span>
     </div>
     <div class="cat-tree-node-actions">
       <button type="button" class="btn btn-sm cat-tree-add-sub" onclick={() => openSubcategoryFormFor(category.id)}>

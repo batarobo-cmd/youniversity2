@@ -135,7 +135,88 @@
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: flex-start;
   margin-bottom: 1rem;
+}
+
+.student-search {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.student-search-input {
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.student-search-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.student-search-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.student-search-results button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.student-search-results button:hover {
+  background: var(--color-primary-muted);
+}
+
+.student-search-loading {
+  padding: 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.student-search-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.student-search-email {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.enrollment-status--active {
+  background: var(--color-success-muted);
+  color: var(--color-success);
+}
+
+.enrollment-status--revoked {
+  background: var(--color-surface-hover);
+  color: var(--color-muted);
 }
 
 .course-edit-enroll-row .admin-inline-select {
