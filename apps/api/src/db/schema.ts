@@ -1,0 +1,225 @@
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+
+export const userRoleEnum = pgEnum('user_role', ['admin', 'instructor', 'student']);
+export const lessonTypeEnum = pgEnum('lesson_type', ['video', 'presentation', 'quiz', 'text', 'embed']);
+export const videoSourceEnum = pgEnum('video_source', ['upload', 'youtube', 'vimeo', 'external']);
+export const enrollmentStatusEnum = pgEnum('enrollment_status', [
+  'active',
+  'completed',
+  'failed',
+  'expired',
+  'revoked',
+]);
+export const completionRuleTypeEnum = pgEnum('completion_rule_type', [
+  'all_lessons_complete',
+  'video_watch_percent',
+  'quiz_min_score',
+  'lessons_in_order',
+]);
+export const translationSourceEnum = pgEnum('translation_source', ['manual', 'ai']);
+
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  role: userRoleEnum('role').notNull().default('student'),
+  preferredLocale: varchar('preferred_locale', { length: 10 }).notNull().default('sk'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courses = pgTable('courses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  defaultLocale: varchar('default_locale', { length: 10 }).notNull().default('sk'),
+  isPublished: boolean('is_published').notNull().default(false),
+  createdById: uuid('created_by_id')
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courseTranslations = pgTable(
+  'course_translations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    courseId: uuid('course_id')
+      .notNull()
+      .references(() => courses.id, { onDelete: 'cascade' }),
+    locale: varchar('locale', { length: 10 }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
+    description: text('description').notNull().default(''),
+    source: translationSourceEnum('source').notNull().default('manual'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('course_locale_idx').on(t.courseId, t.locale)],
+);
+
+export const courseModules = pgTable('course_modules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  courseId: uuid('course_id')
+    .notNull()
+    .references(() => courses.id, { onDelete: 'cascade' }),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isRequired: boolean('is_required').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const moduleTranslations = pgTable(
+  'module_translations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    moduleId: uuid('module_id')
+      .notNull()
+      .references(() => courseModules.id, { onDelete: 'cascade' }),
+    locale: varchar('locale', { length: 10 }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
+    source: translationSourceEnum('source').notNull().default('manual'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('module_locale_idx').on(t.moduleId, t.locale)],
+);
+
+export const lessons = pgTable('lessons', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  moduleId: uuid('module_id')
+    .notNull()
+    .references(() => courseModules.id, { onDelete: 'cascade' }),
+  type: lessonTypeEnum('type').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isRequired: boolean('is_required').notNull().default(true),
+  config: jsonb('config').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const lessonTranslations = pgTable(
+  'lesson_translations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    lessonId: uuid('lesson_id')
+      .notNull()
+      .references(() => lessons.id, { onDelete: 'cascade' }),
+    locale: varchar('locale', { length: 10 }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
+    content: text('content'),
+    source: translationSourceEnum('source').notNull().default('manual'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('lesson_locale_idx').on(t.lessonId, t.locale)],
+);
+
+export const quizQuestions = pgTable('quiz_questions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  lessonId: uuid('lesson_id')
+    .notNull()
+    .references(() => lessons.id, { onDelete: 'cascade' }),
+  sortOrder: integer('sort_order').notNull().default(0),
+  points: integer('points').notNull().default(1),
+  config: jsonb('config').notNull().default({}),
+});
+
+export const quizQuestionTranslations = pgTable(
+  'quiz_question_translations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => quizQuestions.id, { onDelete: 'cascade' }),
+    locale: varchar('locale', { length: 10 }).notNull(),
+    questionText: text('question_text').notNull(),
+    options: jsonb('options').notNull().default([]),
+    source: translationSourceEnum('source').notNull().default('manual'),
+  },
+  (t) => [uniqueIndex('question_locale_idx').on(t.questionId, t.locale)],
+);
+
+export const enrollments = pgTable(
+  'enrollments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id')
+      .notNull()
+      .references(() => courses.id, { onDelete: 'cascade' }),
+    status: enrollmentStatusEnum('status').notNull().default('active'),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('user_course_idx').on(t.userId, t.courseId)],
+);
+
+export const lessonProgress = pgTable(
+  'lesson_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lessonId: uuid('lesson_id')
+      .notNull()
+      .references(() => lessons.id, { onDelete: 'cascade' }),
+    percentComplete: integer('percent_complete').notNull().default(0),
+    isComplete: boolean('is_complete').notNull().default(false),
+    score: integer('score'),
+    attempts: integer('attempts').notNull().default(0),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('user_lesson_idx').on(t.userId, t.lessonId)],
+);
+
+export const completionRules = pgTable('completion_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  courseId: uuid('course_id')
+    .notNull()
+    .references(() => courses.id, { onDelete: 'cascade' }),
+  type: completionRuleTypeEnum('type').notNull(),
+  config: jsonb('config').notNull().default({}),
+  isRequired: boolean('is_required').notNull().default(true),
+});
+
+export const certificates = pgTable('certificates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id),
+  courseId: uuid('course_id')
+    .notNull()
+    .references(() => courses.id),
+  certificateNumber: varchar('certificate_number', { length: 50 }).notNull().unique(),
+  pdfKey: varchar('pdf_key', { length: 500 }),
+  issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const activityEvents = pgTable('activity_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  courseId: uuid('course_id').references(() => courses.id, { onDelete: 'set null' }),
+  lessonId: uuid('lesson_id').references(() => lessons.id, { onDelete: 'set null' }),
+  eventType: varchar('event_type', { length: 100 }).notNull(),
+  payload: jsonb('payload').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type User = typeof users.$inferSelect;
+export type Course = typeof courses.$inferSelect;
+export type Enrollment = typeof enrollments.$inferSelect;

@@ -1,0 +1,17 @@
+{
+  "name": "youniversity2",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:api": "bun run --filter @youniversity2/api dev",
+    "dev:web": "bun run --filter @youniversity2/web dev",
+    "build": "bun run --filter '*' build",
+    "db:generate": "bun run --filter @youniversity2/api db:generate",
+    "db:migrate": "bun run --filter @youniversity2/api db:migrate",
+    "db:push": "bun run --filter @youniversity2/api db:push",
+    "db:seed": "bun run --filter @youniversity2/api db:seed",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  }
+}
