@@ -1,39 +1,41 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
-  import { api } from '$lib/api';
+  import { isAuthenticated, isAdmin } from '$lib/stores/auth';
   import AdminDashboard from '$lib/components/AdminDashboard.svelte';
+  import type { PageData } from './$types';
 
-  let data = $state<Record<string, unknown> | null>(null);
-  let loading = $state(true);
+  let { data }: { data: PageData } = $props();
 
-  onMount(async () => {
+  let dashboard = $state(data.dashboard);
+  let loading = $state(false);
+  let error = $state(data.loadError ?? '');
+
+  $effect(() => {
+    dashboard = data.dashboard;
+    error = data.loadError ?? '';
+  });
+
+  onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
       if (!auth) goto('/');
     });
-    const unsubAdmin = isAdmin.subscribe(async (admin) => {
+    const unsubAdmin = isAdmin.subscribe((admin) => {
       if (!admin) goto('/dashboard');
-      else await loadDashboard();
     });
     return () => {
       unsubAuth();
       unsubAdmin();
     };
   });
-
-  async function loadDashboard() {
-    loading = true;
-    try {
-      data = await api.getDashboard();
-    } finally {
-      loading = false;
-    }
-  }
 </script>
+
+{#if error}
+  <div class="form-error">{error}</div>
+{/if}
 
 {#if loading}
   <p style="color: var(--color-muted);">Načítavam...</p>
-{:else if data}
-  <AdminDashboard {data} />
+{:else if dashboard}
+  <AdminDashboard data={dashboard} />
 {/if}

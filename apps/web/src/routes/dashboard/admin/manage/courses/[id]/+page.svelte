@@ -7,6 +7,7 @@
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
+  import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
   import '$lib/styles/admin-users.css';
@@ -34,14 +35,16 @@
     userEmail: string;
   };
 
+  let { data }: { data: PageData } = $props();
+
   const courseId = $derived($page.params.id);
   let activeTab = $state<Tab>('content');
-  let loading = $state(true);
+  let loading = $state(false);
   let saving = $state(false);
   let message = $state('');
-  let error = $state('');
+  let error = $state(data.loadError ?? '');
 
-  let course = $state<Record<string, unknown> | null>(null);
+  let course = $state<Record<string, unknown> | null>(data.course);
   let title = $state('');
   let slug = $state('');
   let description = $state('');
@@ -54,13 +57,13 @@
   let minQuizScore = $state(70);
   let videoWatchPercent = $state(80);
 
-  let enrollments = $state<EnrollmentRow[]>([]);
+  let enrollments = $state<EnrollmentRow[]>(data.enrollments as EnrollmentRow[]);
   let enrollUserId = $state('');
   let studentSearch = $state<{ reset: () => void } | null>(null);
 
   let certEnabled = $state(false);
   let certTitle = $state('');
-  let issuedCerts = $state<CertRow[]>([]);
+  let issuedCerts = $state<CertRow[]>(data.certificates as CertRow[]);
 
   function toLocalDateTimeInput(value: unknown): string {
     if (!value) return '';
@@ -83,12 +86,39 @@
     });
     const unsubAdmin = isAdmin.subscribe((admin) => {
       if (!admin) goto('/dashboard');
-      else void loadAll();
     });
     return () => {
       unsubAuth();
       unsubAdmin();
     };
+  });
+
+  function applyCourseData(
+    c: Record<string, unknown> | null,
+    enr: EnrollmentRow[],
+    certs: CertRow[],
+  ) {
+    if (!c) return;
+    course = c;
+    title = String(c.title ?? '');
+    slug = String(c.slug ?? '');
+    description = String(c.description ?? '');
+    publishManual = Boolean(c.isPublished);
+    publishStartsAt = toLocalDateTimeInput(c.startsAt);
+    publishEndsAt = toLocalDateTimeInput(c.endsAt);
+    publicationMode = publishStartsAt || publishEndsAt ? 'schedule' : 'manual';
+    parseRules((c.completionRules as CompletionRule[]) ?? []);
+    enrollments = enr;
+    issuedCerts = certs;
+  }
+
+  $effect(() => {
+    error = data.loadError ?? '';
+    applyCourseData(
+      data.course,
+      data.enrollments as EnrollmentRow[],
+      data.certificates as CertRow[],
+    );
   });
 
   function parseRules(rules: CompletionRule[]) {
@@ -119,17 +149,7 @@
         api.getEnrollments(courseId) as Promise<EnrollmentRow[]>,
         api.getCourseCertificates(courseId),
       ]);
-      course = c;
-      title = String(c.title ?? '');
-      slug = String(c.slug ?? '');
-      description = String(c.description ?? '');
-      publishManual = Boolean(c.isPublished);
-      publishStartsAt = toLocalDateTimeInput(c.startsAt);
-      publishEndsAt = toLocalDateTimeInput(c.endsAt);
-      publicationMode = publishStartsAt || publishEndsAt ? 'schedule' : 'manual';
-      parseRules((c.completionRules as CompletionRule[]) ?? []);
-      enrollments = enr;
-      issuedCerts = certs;
+      applyCourseData(c, enr, certs as CertRow[]);
     } catch (e) {
       error = (e as Error).message;
     } finally {

@@ -4,6 +4,7 @@
   import { isAuthenticated, isPlatformAdmin, locale } from '$lib/stores/auth';
   import { api } from '$lib/api';
   import { t } from '$lib/i18n';
+  import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
 
@@ -16,10 +17,12 @@
     tenantId?: string;
   };
 
-  let loading = $state(true);
+  let { data }: { data: PageData } = $props();
+
+  let loading = $state(false);
   let saving = $state(false);
   let message = $state('');
-  let error = $state('');
+  let error = $state(data.loadError ?? '');
 
   let manualRegistrationEnabled = $state(true);
   let loginDomainsText = $state('');
@@ -55,7 +58,6 @@
     });
     const unsubAdmin = isPlatformAdmin.subscribe((admin) => {
       if (!admin) goto('/dashboard');
-      else void loadSettings();
     });
     return () => {
       unsubAuth();
@@ -74,33 +76,42 @@
       .filter(Boolean);
   }
 
+  function applySettings(settings: Record<string, unknown> | null) {
+    if (!settings) return;
+    manualRegistrationEnabled = Boolean(settings.manualRegistrationEnabled);
+    loginDomainsText = domainsToText((settings.allowedLoginDomains as string[]) ?? []);
+    registerDomainsText = domainsToText((settings.allowedRegistrationDomains as string[]) ?? []);
+
+    const g = settings.google as Record<string, unknown>;
+    google = {
+      enabled: Boolean(g?.enabled),
+      clientId: String(g?.clientId ?? ''),
+      clientSecret: '',
+      hasClientSecret: Boolean(g?.hasClientSecret),
+      configured: Boolean(g?.configured),
+    };
+
+    const m = settings.microsoft as Record<string, unknown>;
+    microsoft = {
+      enabled: Boolean(m?.enabled),
+      clientId: String(m?.clientId ?? ''),
+      clientSecret: '',
+      hasClientSecret: Boolean(m?.hasClientSecret),
+      configured: Boolean(m?.configured),
+      tenantId: String(m?.tenantId ?? 'common'),
+    };
+  }
+
+  $effect(() => {
+    error = data.loadError ?? '';
+    applySettings(data.authSettings as Record<string, unknown> | null);
+  });
+
   async function loadSettings() {
     loading = true;
     error = '';
     try {
-      const data = (await api.getAdminAuthSettings()) as Record<string, unknown>;
-      manualRegistrationEnabled = Boolean(data.manualRegistrationEnabled);
-      loginDomainsText = domainsToText((data.allowedLoginDomains as string[]) ?? []);
-      registerDomainsText = domainsToText((data.allowedRegistrationDomains as string[]) ?? []);
-
-      const g = data.google as Record<string, unknown>;
-      google = {
-        enabled: Boolean(g?.enabled),
-        clientId: String(g?.clientId ?? ''),
-        clientSecret: '',
-        hasClientSecret: Boolean(g?.hasClientSecret),
-        configured: Boolean(g?.configured),
-      };
-
-      const m = data.microsoft as Record<string, unknown>;
-      microsoft = {
-        enabled: Boolean(m?.enabled),
-        clientId: String(m?.clientId ?? ''),
-        clientSecret: '',
-        hasClientSecret: Boolean(m?.hasClientSecret),
-        configured: Boolean(m?.configured),
-        tenantId: String(m?.tenantId ?? 'common'),
-      };
+      applySettings((await api.getAdminAuthSettings()) as Record<string, unknown>);
     } catch (e) {
       error = (e as Error).message;
     } finally {

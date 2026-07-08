@@ -12,6 +12,7 @@
   import { USER_ROLES, SUPPORTED_LOCALES, type UserRole } from '@youniversity2/shared';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
   import UserLogsModal from '$lib/components/UserLogsModal.svelte';
+  import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
   import '$lib/styles/admin-users.css';
@@ -42,11 +43,13 @@
     createdAt: string;
   };
 
-  let users = $state<ManagedUser[]>([]);
-  let loading = $state(true);
+  let { data }: { data: PageData } = $props();
+
+  let users = $state<ManagedUser[]>(data.users as ManagedUser[]);
+  let loading = $state(false);
   let search = $state('');
   let message = $state('');
-  let error = $state('');
+  let error = $state(data.loadError ?? '');
 
   let modalOpen = $state(false);
   let editing = $state<ManagedUser | null>(null);
@@ -85,13 +88,17 @@
     }),
   );
 
+  $effect(() => {
+    users = data.users as ManagedUser[];
+    error = data.loadError ?? '';
+  });
+
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
       if (!auth) goto('/');
     });
     const unsubAdmin = isPlatformAdmin.subscribe((admin) => {
       if (!admin) goto('/dashboard');
-      else void loadUsers();
     });
     return () => {
       unsubAuth();
