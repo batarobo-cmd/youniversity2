@@ -39,7 +39,10 @@ export const isPlatformAdmin = derived(user, ($user) => isPlatformAdminUser($use
 
 if (typeof window !== 'undefined') {
   const stored = loadSessionId();
-  if (stored) token.set(stored);
+  if (stored) {
+    token.set(stored);
+    authReady.set(true);
+  }
 }
 
 export function setAuth(sessionId: string, authUser: User) {
@@ -76,4 +79,25 @@ export function syncSessionFromServer(sessionId: string) {
   }
   token.set(sessionId);
   authReady.set(true);
+}
+
+/** Spustí callback až keď je session token pripravený (po SSR sync). */
+export function whenAuthReady(run: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  let cancelled = false;
+
+  const attempt = () => {
+    if (cancelled || !get(authReady) || !get(token)) return;
+    run();
+  };
+
+  const unsub = authReady.subscribe(() => attempt());
+  const unsubToken = token.subscribe(() => attempt());
+  attempt();
+
+  return () => {
+    cancelled = true;
+    unsub();
+    unsubToken();
+  };
 }

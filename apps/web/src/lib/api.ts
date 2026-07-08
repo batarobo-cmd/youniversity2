@@ -21,6 +21,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...options,
+      credentials: 'include',
       headers: authHeaders(options.headers as Record<string, string>),
     });
   } catch {

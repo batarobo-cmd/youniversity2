@@ -16,7 +16,9 @@ docker compose -f docker-compose.prod.yml ps
 
 echo "==> DB schéma..."
 sleep 8
-docker compose -f docker-compose.prod.yml exec -T api bun run db:push
+docker compose -f docker-compose.prod.yml exec -T api bun run db:push || {
+  echo "WARN: db:push zlyhal — skontrolujte API logy"
+}
 
 echo ""
 echo "Hotovo — $(git describe --tags --always)"
