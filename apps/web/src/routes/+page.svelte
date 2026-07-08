@@ -196,7 +196,7 @@
 
       {#if registrationEnabled}
         <div class="login-footer">
-          <button type="button" onclick={() => (isRegister = !isRegister)}>
+          <button type="button" class="login-footer-link" onclick={() => (isRegister = !isRegister)}>
             {isRegister ? t('auth.hasAccount', $locale) : t('auth.noAccount', $locale)}
           </button>
         </div>

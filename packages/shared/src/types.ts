@@ -1,4 +1,5 @@
 import type {
+  ActivityType,
   CompletionRuleType,
   EnrollmentStatus,
   LessonType,
@@ -66,6 +67,7 @@ export interface ModuleTranslation {
   moduleId: string;
   locale: Locale;
   title: string;
+  description?: string;
   source: TranslationSource;
 }
 
@@ -75,18 +77,26 @@ export interface Lesson {
   type: LessonType;
   sortOrder: number;
   isRequired: boolean;
-  config: LessonConfig;
+  config: ActivityConfig;
 }
 
-export interface LessonConfig {
+/** Course content node (stored as `lessons` in DB). */
+export type Activity = Lesson & { type: ActivityType | LessonType };
+
+export interface ActivityConfig {
   videoSource?: VideoSource;
   videoUrl?: string;
   embedUrl?: string;
+  audioUrl?: string;
   minWatchPercent?: number;
   passingScore?: number;
   maxAttempts?: number;
   fileKey?: string;
+  presentationUrl?: string;
 }
+
+/** @deprecated Use ActivityConfig */
+export type LessonConfig = ActivityConfig;
 
 export interface LessonTranslation {
   id: string;

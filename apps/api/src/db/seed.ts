@@ -102,7 +102,7 @@ async function seed() {
     .insert(lessons)
     .values({
       moduleId: mod1.id,
-      type: 'embed',
+      type: 'video',
       sortOrder: 0,
       isRequired: true,
       config: {
@@ -125,7 +125,7 @@ async function seed() {
     .insert(lessons)
     .values({
       moduleId: mod1.id,
-      type: 'quiz',
+      type: 'test',
       sortOrder: 1,
       isRequired: true,
       config: { passingScore: 70, maxAttempts: 3 },

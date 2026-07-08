@@ -20,6 +20,7 @@ import { translateContent } from '../services/translation';
 import { broadcastToCourse, broadcastToAdmin, broadcastToCourseEnrollees } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
+import { isCourseVisibleToStudents } from '../services/course-visibility';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
@@ -38,6 +39,7 @@ courseRoutes.get('/', async (c) => {
   const locale = c.req.query('locale') ?? 'sk';
 
   if (user.role === 'student') {
+    const now = new Date();
     const result = await db
       .select({
         course: courses,
@@ -50,15 +52,17 @@ courseRoutes.get('/', async (c) => {
         courseTranslations,
         and(eq(courseTranslations.courseId, courses.id), eq(courseTranslations.locale, locale)),
       )
-      .where(and(eq(enrollments.userId, user.id), eq(courses.isPublished, true)));
+      .where(eq(enrollments.userId, user.id));
 
     return c.json(
-      result.map((r) => ({
-        ...r.course,
-        title: r.translation?.title ?? r.course.slug,
-        description: r.translation?.description ?? '',
-        enrollment: r.enrollment,
-      })),
+      result
+        .filter((r) => isCourseVisibleToStudents(r.course, now))
+        .map((r) => ({
+          ...r.course,
+          title: r.translation?.title ?? r.course.slug,
+          description: r.translation?.description ?? '',
+          enrollment: r.enrollment,
+        })),
     );
   }
 
@@ -127,7 +131,7 @@ courseRoutes.get('/:id', async (c) => {
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return c.json({ error: 'Course not found' }, 404);
 
-  if (user.role === 'student' && !course.isPublished) {
+  if (user.role === 'student' && !isCourseVisibleToStudents(course)) {
     return c.json({ error: 'Course not found' }, 404);
   }
 
@@ -179,6 +183,13 @@ courseRoutes.get('/:id', async (c) => {
         .map((lesson) => ({
           ...lesson,
           title: lessonTrans.find((t) => t.lessonId === lesson.id)?.title ?? 'Lesson',
+          content: lessonTrans.find((t) => t.lessonId === lesson.id)?.content,
+        })),
+      activities: courseLessons
+        .filter((l) => l.moduleId === mod.id)
+        .map((lesson) => ({
+          ...lesson,
+          title: lessonTrans.find((t) => t.lessonId === lesson.id)?.title ?? 'Activity',
           content: lessonTrans.find((t) => t.lessonId === lesson.id)?.content,
         })),
     })),
@@ -324,6 +335,9 @@ courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c)
       title: z.string().min(2).optional(),
       description: z.string().optional(),
       slug: z.string().min(2).max(255).optional(),
+      isPublished: z.boolean().optional(),
+      startsAt: z.string().datetime().nullable().optional(),
+      endsAt: z.string().datetime().nullable().optional(),
       locale: z.enum(SUPPORTED_LOCALES).optional(),
     })
     .safeParse(await c.req.json());
@@ -335,8 +349,40 @@ courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c)
 
   const loc = body.data.locale ?? course.defaultLocale;
 
+  if (
+    body.data.startsAt !== undefined &&
+    body.data.endsAt !== undefined &&
+    body.data.startsAt &&
+    body.data.endsAt &&
+    new Date(body.data.startsAt) > new Date(body.data.endsAt)
+  ) {
+    return c.json({ error: 'startsAt must be before endsAt' }, 400);
+  }
+
   if (body.data.slug) {
     await db.update(courses).set({ slug: body.data.slug, updatedAt: new Date() }).where(eq(courses.id, courseId));
+  }
+
+  if (
+    body.data.isPublished !== undefined ||
+    body.data.startsAt !== undefined ||
+    body.data.endsAt !== undefined
+  ) {
+    await db
+      .update(courses)
+      .set({
+        isPublished: body.data.isPublished ?? course.isPublished,
+        startsAt:
+          body.data.startsAt === undefined
+            ? course.startsAt
+            : body.data.startsAt
+              ? new Date(body.data.startsAt)
+              : null,
+        endsAt:
+          body.data.endsAt === undefined ? course.endsAt : body.data.endsAt ? new Date(body.data.endsAt) : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(courses.id, courseId));
   }
 
   if (body.data.title !== undefined || body.data.description !== undefined) {
@@ -366,11 +412,14 @@ courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c)
     }
   }
 
-  broadcastToCourse(courseId, {
+  const updateMessage = {
     type: WS_EVENTS.COURSE_UPDATED,
     payload: { courseId },
     timestamp: new Date().toISOString(),
-  });
+  };
+  broadcastToCourse(courseId, updateMessage);
+  broadcastToAdmin(updateMessage);
+  await broadcastToCourseEnrollees(courseId, updateMessage);
 
   return c.json({ ok: true });
 });

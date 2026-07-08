@@ -213,12 +213,74 @@ export const api = {
 
   updateCourseContent: (
     id: string,
-    data: { title?: string; description?: string; slug?: string; locale?: string },
+    data: {
+      title?: string;
+      description?: string;
+      slug?: string;
+      isPublished?: boolean;
+      startsAt?: string | null;
+      endsAt?: string | null;
+      locale?: string;
+    },
   ) =>
     request<{ ok: boolean }>(`/api/courses/${id}/content`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+
+  createCourseModule: (courseId: string, data: { title: string; sortOrder?: number }) =>
+    request<Record<string, unknown>>(`/api/courses/${courseId}/modules`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCourseModule: (
+    moduleId: string,
+    data: { title?: string; sortOrder?: number; isRequired?: boolean },
+  ) =>
+    request<Record<string, unknown>>(`/api/modules/${moduleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCourseModule: (moduleId: string) =>
+    request<{ ok: boolean }>(`/api/modules/${moduleId}`, { method: 'DELETE' }),
+
+  createActivity: (
+    moduleId: string,
+    data: {
+      type: string;
+      title: string;
+      content?: string;
+      sortOrder?: number;
+      isRequired?: boolean;
+      config?: Record<string, unknown>;
+    },
+  ) =>
+    request<Record<string, unknown>>(`/api/modules/${moduleId}/activities`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateActivity: (
+    activityId: string,
+    data: {
+      type?: string;
+      title?: string;
+      content?: string | null;
+      moduleId?: string;
+      sortOrder?: number;
+      isRequired?: boolean;
+      config?: Record<string, unknown>;
+    },
+  ) =>
+    request<Record<string, unknown>>(`/api/activities/${activityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteActivity: (activityId: string) =>
+    request<{ ok: boolean }>(`/api/activities/${activityId}`, { method: 'DELETE' }),
 
   getCourseCertificates: (courseId: string) =>
     request<
@@ -245,6 +307,9 @@ export const api = {
 
   revokeEnrollment: (enrollmentId: string) =>
     request<Record<string, unknown>>(`/api/enrollments/${enrollmentId}`, { method: 'DELETE' }),
+
+  deleteEnrollmentPermanently: (enrollmentId: string) =>
+    request<{ ok: boolean }>(`/api/enrollments/${enrollmentId}/permanent`, { method: 'DELETE' }),
 
   createEnrollment: (userId: string, courseId: string) =>
     request<Record<string, unknown>>('/api/enrollments', {

@@ -6,6 +6,7 @@
   import { api } from '$lib/api';
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
+  import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
   import '$lib/styles/admin-users.css';
@@ -44,6 +45,10 @@
   let title = $state('');
   let slug = $state('');
   let description = $state('');
+  let publicationMode = $state<'manual' | 'schedule'>('manual');
+  let publishManual = $state(false);
+  let publishStartsAt = $state('');
+  let publishEndsAt = $state('');
 
   let evalRules = $state<CompletionRule[]>([]);
   let minQuizScore = $state(70);
@@ -56,6 +61,21 @@
   let certEnabled = $state(false);
   let certTitle = $state('');
   let issuedCerts = $state<CertRow[]>([]);
+
+  function toLocalDateTimeInput(value: unknown): string {
+    if (!value) return '';
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function toIsoOrNull(localValue: string): string | null {
+    if (!localValue) return null;
+    const d = new Date(localValue);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
@@ -103,6 +123,10 @@
       title = String(c.title ?? '');
       slug = String(c.slug ?? '');
       description = String(c.description ?? '');
+      publishManual = Boolean(c.isPublished);
+      publishStartsAt = toLocalDateTimeInput(c.startsAt);
+      publishEndsAt = toLocalDateTimeInput(c.endsAt);
+      publicationMode = publishStartsAt || publishEndsAt ? 'schedule' : 'manual';
       parseRules((c.completionRules as CompletionRule[]) ?? []);
       enrollments = enr;
       issuedCerts = certs;
@@ -119,10 +143,22 @@
     message = '';
     error = '';
     try {
+      const startsAt = publicationMode === 'schedule' ? toIsoOrNull(publishStartsAt) : null;
+      const endsAt = publicationMode === 'schedule' ? toIsoOrNull(publishEndsAt) : null;
+      if (publicationMode === 'schedule' && !startsAt) {
+        throw new Error(t('admin.publishStartRequired', $locale));
+      }
+      if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
+        throw new Error(t('admin.publishDateRangeInvalid', $locale));
+      }
+
       await api.updateCourseContent(courseId, {
         title: title.trim(),
         description,
         slug: slug.trim(),
+        isPublished: publicationMode === 'schedule' ? true : publishManual,
+        startsAt,
+        endsAt,
         locale: $locale,
       });
       message = t('admin.saved', $locale);
@@ -226,6 +262,24 @@
     }
   }
 
+  async function deleteEnrollmentPermanently(id: string) {
+    if (!confirm(t('admin.deleteEnrollmentConfirm', $locale))) return;
+    saving = true;
+    try {
+      await api.deleteEnrollmentPermanently(id);
+      enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+      message = t('admin.saved', $locale);
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function reloadCourse() {
+    course = await api.getCourse(courseId);
+  }
+
   const modules = $derived((course?.modules as Array<Record<string, unknown>>) ?? []);
 
   const activeEnrolledIds = $derived(
@@ -311,6 +365,31 @@
               <label for="course-desc">{t('admin.courseDescription', $locale)}</label>
               <textarea id="course-desc" bind:value={description} rows="4"></textarea>
             </div>
+            <div class="cat-tree-field">
+              <label for="publish-mode">{t('admin.publishMode', $locale)}</label>
+              <select id="publish-mode" bind:value={publicationMode}>
+                <option value="manual">{t('admin.publishModeManual', $locale)}</option>
+                <option value="schedule">{t('admin.publishModeSchedule', $locale)}</option>
+              </select>
+            </div>
+
+            {#if publicationMode === 'manual'}
+              <label class="course-edit-check">
+                <input type="checkbox" bind:checked={publishManual} />
+                {t('admin.publishManualToggle', $locale)}
+              </label>
+              <p class="course-edit-hint">{t('admin.publishManualHint', $locale)}</p>
+            {:else}
+              <div class="cat-tree-field">
+                <label for="publish-start">{t('admin.publishStartsAt', $locale)}</label>
+                <input id="publish-start" type="datetime-local" bind:value={publishStartsAt} required />
+              </div>
+              <div class="cat-tree-field">
+                <label for="publish-end">{t('admin.publishEndsAt', $locale)}</label>
+                <input id="publish-end" type="datetime-local" bind:value={publishEndsAt} />
+              </div>
+              <p class="course-edit-hint">{t('admin.publishScheduleHint', $locale)}</p>
+            {/if}
             <button type="submit" class="btn btn-sm" disabled={saving}>{t('admin.saveChanges', $locale)}</button>
           </form>
         </div>
@@ -319,18 +398,12 @@
       <section class="panel course-edit-panel">
         <div class="panel-header"><h2>{t('admin.courseStructure', $locale)}</h2></div>
         <div class="panel-body">
-          {#if modules.length === 0}
-            <p class="cat-tree-empty">{t('admin.noModules', $locale)}</p>
-          {:else}
-            <ul class="course-edit-modules">
-              {#each modules as mod}
-                <li>
-                  <strong>{mod.title}</strong>
-                  <span>{((mod.lessons as unknown[]) ?? []).length} {t('course.lessons', $locale).toLowerCase()}</span>
-                </li>
-              {/each}
-            </ul>
-          {/if}
+          <CourseActivityEditor
+            courseId={courseId}
+            modules={modules as never}
+            locale={$locale}
+            onChange={reloadCourse}
+          />
         </div>
       </section>
     {:else if activeTab === 'evaluation'}
@@ -397,6 +470,14 @@
                           <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => revokeEnrollment(row.enrollment.id)}>{t('admin.revokeEnrollment', $locale)}</button>
                         {:else if row.enrollment.status === 'revoked'}
                           <button type="button" class="btn btn-sm" disabled={saving} onclick={() => restoreEnrollment(row.user.id)}>{t('admin.restoreEnrollment', $locale)}</button>
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-sm"
+                            disabled={saving}
+                            onclick={() => deleteEnrollmentPermanently(row.enrollment.id)}
+                          >
+                            {t('admin.deleteEnrollment', $locale)}
+                          </button>
                         {/if}
                       </td>
                     </tr>

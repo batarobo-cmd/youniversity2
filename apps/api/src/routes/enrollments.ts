@@ -192,6 +192,47 @@ enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) =>
   return c.json(enrollment);
 });
 
+enrollmentRoutes.delete('/:id/permanent', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
+  const enrollmentId = c.req.param('id');
+
+  const [existing] = await db.select().from(enrollments).where(eq(enrollments.id, enrollmentId)).limit(1);
+  if (!existing) return c.json({ error: 'Enrollment not found' }, 404);
+
+  const [deleted] = await db.delete(enrollments).where(eq(enrollments.id, enrollmentId)).returning();
+  if (!deleted) return c.json({ error: 'Enrollment not found' }, 404);
+
+  broadcastToUser(existing.userId, {
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment: deleted, action: 'deleted' },
+    timestamp: new Date().toISOString(),
+  });
+
+  broadcastToAdmin({
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment: deleted, action: 'deleted' },
+    timestamp: new Date().toISOString(),
+  });
+
+  const [student] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, existing.userId))
+    .limit(1);
+  const courseTitle = await getCourseTitle(existing.courseId);
+  void recordUserActivity(actor.id, 'enrollment.deleted', {
+    courseId: existing.courseId,
+    payload: {
+      studentName: student?.name,
+      studentId: existing.userId,
+      courseTitle,
+      courseId: existing.courseId,
+    },
+  });
+
+  return c.json({ ok: true });
+});
+
 enrollmentRoutes.get('/my', async (c) => {
   const user = c.get('user') as AuthUser;
 

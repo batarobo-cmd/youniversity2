@@ -13,6 +13,7 @@ import {
   loginEvents,
 } from '../db/schema';
 import type { AuthUser } from '../middleware/auth';
+import { isCourseVisibleToStudents } from './course-visibility';
 
 async function getCourseProgressPercent(userId: string, courseId: string): Promise<number> {
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
@@ -110,7 +111,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
 
   for (const enrollment of userEnrollments) {
     const course = courseMap.get(enrollment.courseId);
-    if (!course || !course.isPublished) continue;
+    if (!course || !isCourseVisibleToStudents(course, now)) continue;
 
     const translation = translationMap.get(enrollment.courseId);
     const title = translation?.title ?? course.slug;

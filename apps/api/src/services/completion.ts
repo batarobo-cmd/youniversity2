@@ -54,11 +54,11 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
       }
       case 'quiz_min_score': {
         const minScore = (rule.config as { minScore?: number }).minScore ?? 70;
-        const quizLessons = requiredLessons.filter((l) => l.type === 'quiz');
-        const quizzesOk = quizLessons.every((l) =>
+        const testLessons = requiredLessons.filter((l) => l.type === 'test' || l.type === 'quiz');
+        const testsOk = testLessons.every((l) =>
           progress.some((p) => p.lessonId === l.id && (p.score ?? 0) >= minScore),
         );
-        if (!quizzesOk) passed = false;
+        if (!testsOk) passed = false;
         break;
       }
       case 'lessons_in_order': {

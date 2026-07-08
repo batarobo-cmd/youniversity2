@@ -12,7 +12,16 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('user_role', ['admin', 'instructor', 'student']);
-export const lessonTypeEnum = pgEnum('lesson_type', ['video', 'presentation', 'quiz', 'text', 'embed']);
+export const lessonTypeEnum = pgEnum('lesson_type', [
+  'presentation',
+  'video',
+  'audio',
+  'text',
+  'test',
+  'certificate',
+  'quiz',
+  'embed',
+]);
 export const videoSourceEnum = pgEnum('video_source', ['upload', 'youtube', 'vimeo', 'external']);
 export const enrollmentStatusEnum = pgEnum('enrollment_status', [
   'active',
@@ -125,6 +134,7 @@ export const moduleTranslations = pgTable(
       .references(() => courseModules.id, { onDelete: 'cascade' }),
     locale: varchar('locale', { length: 10 }).notNull(),
     title: varchar('title', { length: 500 }).notNull(),
+    description: text('description'),
     source: translationSourceEnum('source').notNull().default('manual'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

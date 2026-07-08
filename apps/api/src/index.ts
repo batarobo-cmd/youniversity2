@@ -8,6 +8,7 @@ import { categoryRoutes } from './routes/categories';
 import { adminRoutes } from './routes/admin';
 import { enrollmentRoutes } from './routes/enrollments';
 import { progressRoutes } from './routes/progress';
+import { courseContentRoutes } from './routes/course-content';
 import { config } from './config';
 import {
   initRealtimeHub,
@@ -32,6 +33,7 @@ app.get('/health', (c) => c.json({ status: 'ok', service: 'youniversity2-api' })
 app.route('/api/auth', authRoutes);
 app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/courses', courseRoutes);
+app.route('/api', courseContentRoutes);
 app.route('/api/categories', categoryRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/enrollments', enrollmentRoutes);
