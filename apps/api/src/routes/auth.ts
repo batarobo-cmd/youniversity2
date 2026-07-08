@@ -130,7 +130,11 @@ authRoutes.post('/register', async (c) => {
     name: user.name,
   };
   const sessionId = await createSession(authUser);
-  await recordLogin(user.id, 'password');
+  try {
+    await recordLogin(user.id, 'password');
+  } catch (err) {
+    console.warn('[auth] login event not recorded:', (err as Error).message);
+  }
 
   return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) }, 201);
 });
@@ -164,7 +168,11 @@ authRoutes.post('/login', async (c) => {
     name: user.name,
   };
   const sessionId = await createSession(authUser);
-  await recordLogin(user.id, 'password');
+  try {
+    await recordLogin(user.id, 'password');
+  } catch (err) {
+    console.warn('[auth] login event not recorded:', (err as Error).message);
+  }
 
   return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) });
 });

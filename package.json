@@ -17,6 +17,6 @@
     "docker:prod:up": "docker compose -f docker-compose.prod.yml up -d --build",
     "docker:prod:down": "docker compose -f docker-compose.prod.yml down",
     "docker:prod:logs": "docker compose -f docker-compose.prod.yml logs -f",
-    "docker:prod:init-db": "docker compose -f docker-compose.prod.yml exec api bun run db:push && docker compose -f docker-compose.prod.yml exec api bun run db:seed"
+    "docker:prod:init-db": "docker compose -f docker-compose.prod.yml exec api bun run db:push && docker compose -f docker-compose.prod.yml exec api bun run db:ensure-demo"
   }
 }

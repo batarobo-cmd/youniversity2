@@ -25,7 +25,7 @@ sleep 12
 
 echo "==> DB schéma + seed..."
 docker compose -f docker-compose.prod.yml exec -T api bun run db:push
-docker compose -f docker-compose.prod.yml exec -T api bun run db:seed
+docker compose -f docker-compose.prod.yml exec -T api bun run db:ensure-demo
 
 echo ""
 echo "Hotovo. Otvor v prehliadači:"
