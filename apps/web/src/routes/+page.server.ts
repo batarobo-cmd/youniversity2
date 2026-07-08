@@ -1,10 +1,31 @@
 import { fail, redirect } from '@sveltejs/kit';
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 import { SESSION_COOKIE } from '$lib/session';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 const SESSION_MAX_AGE = 60 * 60;
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+
+const defaultAuthConfig = {
+  manualLoginEnabled: true,
+  manualRegistrationEnabled: true,
+  oauth: {
+    google: { enabled: false },
+    microsoft: { enabled: false },
+  },
+};
+
+export const load: PageServerLoad = async () => {
+  try {
+    const res = await fetch(`${API_URL}/api/auth/config`);
+    if (res.ok) {
+      return { authConfig: await res.json() };
+    }
+  } catch {
+    // API unavailable during load — fall back to safe defaults
+  }
+  return { authConfig: defaultAuthConfig };
+};
 
 function setSessionCookie(cookies: import('@sveltejs/kit').Cookies, sessionId: string) {
   cookies.set(SESSION_COOKIE, sessionId, {
