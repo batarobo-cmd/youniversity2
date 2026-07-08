@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { isAuthenticated, isAdmin, locale, whenAuthReady, token } from '$lib/stores/auth';
+  import { isAuthenticated, isAdmin, locale, token } from '$lib/stores/auth';
   import { get } from 'svelte/store';
   import { api } from '$lib/api';
   import { t } from '$lib/i18n';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
   import CategoryCourseTree from '$lib/components/CategoryCourseTree.svelte';
+  import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
 
@@ -20,15 +21,23 @@
     categoryId?: string | null;
   };
 
-  let categories = $state<Category[]>([]);
-  let courses = $state<Course[]>([]);
-  let loading = $state(true);
+  let { data }: { data: PageData } = $props();
+
+  let categories = $state<Category[]>(data.categories as Category[]);
+  let courses = $state<Course[]>(data.courses as Course[]);
+  let loading = $state(false);
   let message = $state('');
-  let error = $state('');
+  let error = $state(data.loadError ?? '');
 
   let expanded = $state<Record<string, boolean>>({});
   let openCourseForm = $state<string | null>(null);
   let courseDraft = $state({ title: '', slug: '', desc: '' });
+
+  $effect(() => {
+    categories = data.categories as Category[];
+    courses = data.courses as Course[];
+    error = data.loadError ?? '';
+  });
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
@@ -37,16 +46,12 @@
     const unsubAdmin = isAdmin.subscribe((admin) => {
       if (!admin) goto('/dashboard');
     });
-    const unsubReady = whenAuthReady(() => {
-      void loadAll();
-    });
     const unsubWs = subscribeDashboardRefresh(() => {
       if (get(token)) void loadAll();
     });
     return () => {
       unsubAuth();
       unsubAdmin();
-      unsubReady();
       unsubWs();
     };
   });
