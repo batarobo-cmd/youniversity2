@@ -8,10 +8,15 @@ import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { createSession, destroySession, touchSession } from '../services/session';
 import { recordLogin } from '../services/login-events';
 import { recordUserActivity } from '../services/activity-log';
+import { SUSPENDED_ACCOUNT_CODE } from '../services/user-suspension';
+import {
+  getPublicAuthConfig,
+  getAuthSettings,
+  isEmailDomainAllowed,
+} from '../services/auth-settings';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
 import {
   getAuthorizationUrl,
-  getEnabledProviders,
   handleOAuthCallback,
   serializeUser,
   type OAuthProvider,
@@ -31,8 +36,16 @@ const loginSchema = z.object({
 
 export const authRoutes = new Hono();
 
-authRoutes.get('/oauth/providers', (c) => {
-  return c.json(getEnabledProviders());
+authRoutes.get('/config', async (c) => {
+  return c.json(await getPublicAuthConfig());
+});
+
+authRoutes.get('/oauth/providers', async (c) => {
+  const publicConfig = await getPublicAuthConfig();
+  return c.json({
+    google: publicConfig.oauth.google.enabled,
+    microsoft: publicConfig.oauth.microsoft.enabled,
+  });
 });
 
 authRoutes.get('/oauth/:provider', async (c) => {
@@ -85,6 +98,15 @@ authRoutes.post('/heartbeat', async (c) => {
   if (!user) {
     return c.json({ error: 'Session expired' }, 401);
   }
+  const [row] = await db
+    .select({ isSuspended: users.isSuspended })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+  if (row?.isSuspended) {
+    await destroySession(sessionId);
+    return c.json({ error: SUSPENDED_ACCOUNT_CODE, code: SUSPENDED_ACCOUNT_CODE }, 403);
+  }
   return c.json({ ok: true });
 });
 
@@ -99,12 +121,21 @@ authRoutes.post('/logout', authMiddleware, async (c) => {
 });
 
 authRoutes.post('/register', async (c) => {
+  const settings = await getAuthSettings();
+  if (!settings.manualRegistrationEnabled) {
+    return c.json({ error: 'Registration is disabled', code: 'registration_disabled' }, 403);
+  }
+
   const body = registerSchema.safeParse(await c.req.json());
   if (!body.success) {
     return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
   }
 
   const { email, password, name, preferredLocale } = body.data;
+
+  if (!isEmailDomainAllowed(email, settings.allowedRegistrationDomains)) {
+    return c.json({ error: 'Email domain is not allowed', code: 'domain_not_allowed' }, 403);
+  }
 
   const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (existing.length > 0) {
@@ -140,12 +171,17 @@ authRoutes.post('/register', async (c) => {
 });
 
 authRoutes.post('/login', async (c) => {
+  const settings = await getAuthSettings();
   const body = loginSchema.safeParse(await c.req.json());
   if (!body.success) {
     return c.json({ error: 'Invalid input' }, 400);
   }
 
   const { email, password } = body.data;
+
+  if (!isEmailDomainAllowed(email, settings.allowedLoginDomains)) {
+    return c.json({ error: 'Email domain is not allowed', code: 'domain_not_allowed' }, 403);
+  }
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
   if (!user) {
@@ -159,6 +195,10 @@ authRoutes.post('/login', async (c) => {
 
   if (!(await bcrypt.compare(password, user.passwordHash))) {
     return c.json({ error: 'Invalid credentials' }, 401);
+  }
+
+  if (user.isSuspended) {
+    return c.json({ error: SUSPENDED_ACCOUNT_CODE, code: SUSPENDED_ACCOUNT_CODE }, 403);
   }
 
   const authUser = {

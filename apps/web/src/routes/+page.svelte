@@ -1,17 +1,28 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import { locale } from '$lib/stores/auth';
-  import { t } from '$lib/i18n';
-  import type { ActionData } from './$types';
+  import { authErrorMessage, t } from '$lib/i18n';
+  import type { ActionData, PageData } from './$types';
   import LocaleMenu from '$lib/components/LocaleMenu.svelte';
   import '$lib/styles/login.css';
 
-  const OAUTH_ENABLED = false;
-
-  let { form = null }: { form?: ActionData | null } = $props();
+  let { data, form = null }: { data: PageData; form?: ActionData | null } = $props();
 
   let isRegister = $state(false);
 
-  const error = $derived(form?.error ?? '');
+  const authConfig = $derived(data.authConfig);
+  const oauthGoogle = $derived(authConfig.oauth.google.enabled);
+  const oauthMicrosoft = $derived(authConfig.oauth.microsoft.enabled);
+  const hasOAuth = $derived(oauthGoogle || oauthMicrosoft);
+  const registrationEnabled = $derived(authConfig.manualRegistrationEnabled);
+
+  const error = $derived(
+    authErrorMessage(
+      form?.errorCode ?? page.url.searchParams.get('error'),
+      form?.error,
+      $locale,
+    ),
+  );
 </script>
 
 <div class="login-page">
@@ -51,71 +62,145 @@
         <div class="login-error" role="alert">{error}</div>
       {/if}
 
-      <div class="oauth-buttons oauth-buttons--preview">
-        <button type="button" class="oauth-btn oauth-btn-google" disabled={!OAUTH_ENABLED}>
-          {t('auth.google', $locale)}
-          <span class="oauth-badge">{t('auth.oauthComingSoon', $locale)}</span>
-        </button>
-        <button type="button" class="oauth-btn oauth-btn-microsoft" disabled={!OAUTH_ENABLED}>
-          {t('auth.microsoft', $locale)}
-          <span class="oauth-badge">{t('auth.oauthComingSoon', $locale)}</span>
-        </button>
-      </div>
-
-      <div class="login-divider">{t('auth.or', $locale)}</div>
-
-      {#if isRegister}
-        <form class="manual-form" method="POST" action="?/register">
-          <div class="form-field">
-            <label for="name">{t('auth.name', $locale)}</label>
-            <input id="name" name="name" autocomplete="name" required />
-          </div>
-          <div class="form-field">
-            <label for="email">{t('auth.email', $locale)}</label>
-            <input id="email" name="email" type="email" autocomplete="email" required />
-          </div>
-          <div class="form-field">
-            <label for="password">{t('auth.password', $locale)}</label>
-            <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
-          </div>
-          <button type="submit" class="login-submit">
-            {t('auth.register', $locale)}
-          </button>
-        </form>
-      {:else}
-        <form class="manual-form" method="POST" action="?/login">
-          <div class="form-field">
-            <label for="email">{t('auth.email', $locale)}</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              value={form?.email ?? ''}
-              autocomplete="email"
-              required
-            />
-          </div>
-          <div class="form-field">
-            <label for="password">{t('auth.password', $locale)}</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-            />
-          </div>
-          <button type="submit" class="login-submit">
-            {t('auth.submit', $locale)}
-          </button>
-        </form>
+      {#if hasOAuth}
+        <div class="oauth-buttons">
+          {#if oauthGoogle}
+            <a href="/api/auth/oauth/google" class="oauth-btn oauth-btn-google">
+              <span class="oauth-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+              </span>
+              <span class="oauth-btn-label">{t('auth.google', $locale)}</span>
+            </a>
+          {/if}
+          {#if oauthMicrosoft}
+            <a href="/api/auth/oauth/microsoft" class="oauth-btn oauth-btn-microsoft">
+              <span class="oauth-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 23 23" width="20" height="20">
+                  <path fill="#f35325" d="M1 1h10v10H1z"/>
+                  <path fill="#81bc06" d="M12 1h10v10H12z"/>
+                  <path fill="#05a6f0" d="M1 12h10v10H1z"/>
+                  <path fill="#ffba08" d="M12 12h10v10H12z"/>
+                </svg>
+              </span>
+              <span class="oauth-btn-label">{t('auth.microsoft', $locale)}</span>
+            </a>
+          {/if}
+        </div>
       {/if}
 
-      <div class="login-footer">
-        <button type="button" onclick={() => (isRegister = !isRegister)}>
-          {isRegister ? t('auth.hasAccount', $locale) : t('auth.noAccount', $locale)}
-        </button>
-      </div>
+      {#if hasOAuth}
+        <details class="manual-login-details">
+          <summary>{t('auth.manualLogin', $locale)}</summary>
+          <div class="manual-login-body">
+            {#if isRegister && registrationEnabled}
+              <form class="manual-form" method="POST" action="?/register">
+                <div class="form-field">
+                  <label for="name">{t('auth.name', $locale)}</label>
+                  <input id="name" name="name" autocomplete="name" required />
+                </div>
+                <div class="form-field">
+                  <label for="email">{t('auth.email', $locale)}</label>
+                  <input id="email" name="email" type="email" autocomplete="email" required />
+                </div>
+                <div class="form-field">
+                  <label for="password">{t('auth.password', $locale)}</label>
+                  <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
+                </div>
+                <button type="submit" class="login-submit">
+                  {t('auth.register', $locale)}
+                </button>
+              </form>
+            {:else}
+              <form class="manual-form" method="POST" action="?/login">
+                <div class="form-field">
+                  <label for="email">{t('auth.email', $locale)}</label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={form?.email ?? ''}
+                    autocomplete="email"
+                    required
+                  />
+                </div>
+                <div class="form-field">
+                  <label for="password">{t('auth.password', $locale)}</label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                  />
+                </div>
+                <button type="submit" class="login-submit">
+                  {t('auth.submit', $locale)}
+                </button>
+              </form>
+            {/if}
+          </div>
+        </details>
+      {:else}
+        {#if isRegister && registrationEnabled}
+          <form class="manual-form" method="POST" action="?/register">
+            <div class="form-field">
+              <label for="name">{t('auth.name', $locale)}</label>
+              <input id="name" name="name" autocomplete="name" required />
+            </div>
+            <div class="form-field">
+              <label for="email">{t('auth.email', $locale)}</label>
+              <input id="email" name="email" type="email" autocomplete="email" required />
+            </div>
+            <div class="form-field">
+              <label for="password">{t('auth.password', $locale)}</label>
+              <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
+            </div>
+            <button type="submit" class="login-submit">
+              {t('auth.register', $locale)}
+            </button>
+          </form>
+        {:else}
+          <form class="manual-form" method="POST" action="?/login">
+            <div class="form-field">
+              <label for="email">{t('auth.email', $locale)}</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={form?.email ?? ''}
+                autocomplete="email"
+                required
+              />
+            </div>
+            <div class="form-field">
+              <label for="password">{t('auth.password', $locale)}</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+            <button type="submit" class="login-submit">
+              {t('auth.submit', $locale)}
+            </button>
+          </form>
+        {/if}
+      {/if}
+
+      {#if registrationEnabled}
+        <div class="login-footer">
+          <button type="button" onclick={() => (isRegister = !isRegister)}>
+            {isRegister ? t('auth.hasAccount', $locale) : t('auth.noAccount', $locale)}
+          </button>
+        </div>
+      {/if}
     </div>
   </main>
 </div>

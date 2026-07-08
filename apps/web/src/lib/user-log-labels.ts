@@ -68,6 +68,10 @@ export function describeUserLog(entry: LogEntry, locale: Locale): string {
     case 'user.deleted':
       return `${eventBaseLabel('user.deleted', locale)}: ${p.targetName ?? '—'} (${p.targetEmail ?? '—'})`;
 
+    case 'user.suspended':
+    case 'user.unsuspended':
+      return `${eventBaseLabel(entry.eventType, locale)}: ${p.targetName ?? '—'} (${p.targetEmail ?? '—'})`;
+
     case 'enrollment.created':
     case 'enrollment.reactivated':
     case 'enrollment.revoked':

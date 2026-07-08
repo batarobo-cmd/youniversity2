@@ -8,6 +8,7 @@ import { getUserLogs } from '../services/user-logs';
 import { recordUserActivity } from '../services/activity-log';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { USER_ROLES, SUPPORTED_LOCALES } from '@youniversity2/shared';
+import { getAdminAuthSettings, updateAuthSettings } from '../services/auth-settings';
 
 export const adminRoutes = new Hono();
 
@@ -23,6 +24,20 @@ function serializeAdminUser(user: typeof users.$inferSelect) {
     avatarUrl: user.avatarUrl ?? undefined,
     oauthProvider: user.oauthProvider ?? undefined,
     hasPassword: Boolean(user.passwordHash),
+    isSuspended: user.isSuspended,
+    givenName: user.givenName ?? undefined,
+    familyName: user.familyName ?? undefined,
+    jobTitle: user.jobTitle ?? undefined,
+    department: user.department ?? undefined,
+    employeeId: user.employeeId ?? undefined,
+    companyName: user.companyName ?? undefined,
+    companyDomain: user.companyDomain ?? undefined,
+    officeLocation: user.officeLocation ?? undefined,
+    mobilePhone: user.mobilePhone ?? undefined,
+    businessPhone: user.businessPhone ?? undefined,
+    city: user.city ?? undefined,
+    country: user.country ?? undefined,
+    profileSyncedAt: user.profileSyncedAt?.toISOString(),
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -35,7 +50,7 @@ adminRoutes.get('/students', requireRole('admin', 'instructor'), async (c) => {
     return c.json([]);
   }
 
-  const conditions = [eq(users.role, 'student')];
+  const conditions = [eq(users.role, 'student'), eq(users.isSuspended, false)];
   if (q) {
     const pattern = `%${q}%`;
     conditions.push(or(ilike(users.name, pattern), ilike(users.email, pattern))!);
@@ -253,6 +268,18 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
       role: z.enum(USER_ROLES).optional(),
       preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
       password: z.string().min(8).optional(),
+      isSuspended: z.boolean().optional(),
+      givenName: z.string().max(255).optional().nullable(),
+      familyName: z.string().max(255).optional().nullable(),
+      jobTitle: z.string().max(255).optional().nullable(),
+      department: z.string().max(255).optional().nullable(),
+      employeeId: z.string().max(64).optional().nullable(),
+      companyName: z.string().max(255).optional().nullable(),
+      officeLocation: z.string().max(255).optional().nullable(),
+      mobilePhone: z.string().max(64).optional().nullable(),
+      businessPhone: z.string().max(64).optional().nullable(),
+      city: z.string().max(128).optional().nullable(),
+      country: z.string().max(128).optional().nullable(),
     })
     .safeParse(await c.req.json());
 
@@ -270,6 +297,10 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
     return c.json({ error: 'Cannot change your own administrator role' }, 400);
   }
 
+  if (id === authUser.id && body.data.isSuspended === true) {
+    return c.json({ error: 'Cannot suspend your own account' }, 400);
+  }
+
   const updates: Partial<typeof users.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -278,17 +309,54 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
   if (body.data.role) updates.role = body.data.role;
   if (body.data.preferredLocale) updates.preferredLocale = body.data.preferredLocale;
   if (body.data.password) updates.passwordHash = await bcrypt.hash(body.data.password, 12);
+  if (body.data.isSuspended !== undefined) updates.isSuspended = body.data.isSuspended;
+
+  const profileFields = [
+    'givenName',
+    'familyName',
+    'jobTitle',
+    'department',
+    'employeeId',
+    'companyName',
+    'officeLocation',
+    'mobilePhone',
+    'businessPhone',
+    'city',
+    'country',
+  ] as const;
+  for (const field of profileFields) {
+    if (body.data[field] !== undefined) {
+      updates[field] = body.data[field] || null;
+    }
+  }
 
   const [updated] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
 
-  void recordUserActivity(authUser.id, 'user.updated', {
-    payload: {
-      targetId: updated.id,
-      targetName: updated.name,
-      targetEmail: updated.email,
-      fields: Object.keys(body.data),
-    },
-  });
+  const suspensionChanged =
+    body.data.isSuspended !== undefined && body.data.isSuspended !== existing.isSuspended;
+
+  if (suspensionChanged) {
+    void recordUserActivity(
+      authUser.id,
+      body.data.isSuspended ? 'user.suspended' : 'user.unsuspended',
+      {
+        payload: {
+          targetId: updated.id,
+          targetName: updated.name,
+          targetEmail: updated.email,
+        },
+      },
+    );
+  } else {
+    void recordUserActivity(authUser.id, 'user.updated', {
+      payload: {
+        targetId: updated.id,
+        targetName: updated.name,
+        targetEmail: updated.email,
+        fields: Object.keys(body.data),
+      },
+    });
+  }
 
   return c.json(serializeAdminUser(updated));
 });
@@ -313,4 +381,43 @@ adminRoutes.delete('/users/:id', requireRole('admin'), async (c) => {
   });
 
   return c.json({ ok: true });
+});
+
+adminRoutes.get('/auth-settings', requireRole('admin'), async (c) => {
+  return c.json(await getAdminAuthSettings());
+});
+
+adminRoutes.patch('/auth-settings', requireRole('admin'), async (c) => {
+  const body = z
+    .object({
+      manualLoginEnabled: z.boolean().optional(),
+      manualRegistrationEnabled: z.boolean().optional(),
+      allowedLoginDomains: z.array(z.string()).optional(),
+      allowedRegistrationDomains: z.array(z.string()).optional(),
+      google: z
+        .object({
+          enabled: z.boolean().optional(),
+          clientId: z.string().optional(),
+          clientSecret: z.string().optional(),
+        })
+        .optional(),
+      microsoft: z
+        .object({
+          enabled: z.boolean().optional(),
+          clientId: z.string().optional(),
+          clientSecret: z.string().optional(),
+          tenantId: z.string().optional(),
+        })
+        .optional(),
+    })
+    .safeParse(await c.req.json());
+
+  if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
+
+  const authUser = c.get('user') as AuthUser;
+  const updated = await updateAuthSettings(body.data);
+  void recordUserActivity(authUser.id, 'auth.settings.updated', {
+    payload: { fields: Object.keys(body.data) },
+  });
+  return c.json(updated);
 });

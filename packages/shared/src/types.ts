@@ -15,6 +15,21 @@ export interface User {
   role: UserRole;
   preferredLocale: Locale;
   avatarUrl?: string;
+  oauthProvider?: 'google' | 'microsoft';
+  hasPassword?: boolean;
+  givenName?: string;
+  familyName?: string;
+  jobTitle?: string;
+  department?: string;
+  employeeId?: string;
+  companyName?: string;
+  companyDomain?: string;
+  officeLocation?: string;
+  mobilePhone?: string;
+  businessPhone?: string;
+  city?: string;
+  country?: string;
+  profileSyncedAt?: string;
   createdAt: string;
 }
 

@@ -25,6 +25,20 @@
     avatarUrl?: string;
     oauthProvider?: string;
     hasPassword: boolean;
+    isSuspended: boolean;
+    givenName?: string;
+    familyName?: string;
+    jobTitle?: string;
+    department?: string;
+    employeeId?: string;
+    companyName?: string;
+    companyDomain?: string;
+    officeLocation?: string;
+    mobilePhone?: string;
+    businessPhone?: string;
+    city?: string;
+    country?: string;
+    profileSyncedAt?: string;
     createdAt: string;
   };
 
@@ -42,6 +56,17 @@
   let formPassword = $state('');
   let formRole = $state<UserRole>('student');
   let formLocale = $state('sk');
+  let formGivenName = $state('');
+  let formFamilyName = $state('');
+  let formJobTitle = $state('');
+  let formDepartment = $state('');
+  let formEmployeeId = $state('');
+  let formCompanyName = $state('');
+  let formOfficeLocation = $state('');
+  let formMobilePhone = $state('');
+  let formBusinessPhone = $state('');
+  let formCity = $state('');
+  let formCountry = $state('');
   let saving = $state(false);
   let logsUser = $state<ManagedUser | null>(null);
   let logsOpen = $state(false);
@@ -50,7 +75,13 @@
     users.filter((u) => {
       const q = search.trim().toLowerCase();
       if (!q) return true;
-      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      return (
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.employeeId?.toLowerCase().includes(q) ?? false) ||
+        (u.department?.toLowerCase().includes(q) ?? false) ||
+        (u.companyName?.toLowerCase().includes(q) ?? false)
+      );
     }),
   );
 
@@ -93,6 +124,17 @@
     formPassword = '';
     formRole = 'student';
     formLocale = $locale;
+    formGivenName = '';
+    formFamilyName = '';
+    formJobTitle = '';
+    formDepartment = '';
+    formEmployeeId = '';
+    formCompanyName = '';
+    formOfficeLocation = '';
+    formMobilePhone = '';
+    formBusinessPhone = '';
+    formCity = '';
+    formCountry = '';
     modalOpen = true;
     error = '';
     message = '';
@@ -105,6 +147,17 @@
     formPassword = '';
     formRole = u.role;
     formLocale = u.preferredLocale;
+    formGivenName = u.givenName ?? '';
+    formFamilyName = u.familyName ?? '';
+    formJobTitle = u.jobTitle ?? '';
+    formDepartment = u.department ?? '';
+    formEmployeeId = u.employeeId ?? '';
+    formCompanyName = u.companyName ?? '';
+    formOfficeLocation = u.officeLocation ?? '';
+    formMobilePhone = u.mobilePhone ?? '';
+    formBusinessPhone = u.businessPhone ?? '';
+    formCity = u.city ?? '';
+    formCountry = u.country ?? '';
     modalOpen = true;
     error = '';
     message = '';
@@ -122,11 +175,22 @@
     message = '';
     try {
       if (editing) {
-        const payload: Record<string, string> = {
+        const payload: Record<string, string | null> = {
           name: formName.trim(),
           email: formEmail.trim(),
           role: formRole,
           preferredLocale: formLocale,
+          givenName: formGivenName.trim() || null,
+          familyName: formFamilyName.trim() || null,
+          jobTitle: formJobTitle.trim() || null,
+          department: formDepartment.trim() || null,
+          employeeId: formEmployeeId.trim() || null,
+          companyName: formCompanyName.trim() || null,
+          officeLocation: formOfficeLocation.trim() || null,
+          mobilePhone: formMobilePhone.trim() || null,
+          businessPhone: formBusinessPhone.trim() || null,
+          city: formCity.trim() || null,
+          country: formCountry.trim() || null,
         };
         if (formPassword.trim()) payload.password = formPassword;
         await api.updateUser(editing.id, payload);
@@ -170,6 +234,21 @@
     message = '';
     try {
       await api.deleteUser(u.id);
+      message = t('admin.saved', $locale);
+      await loadUsers();
+    } catch (e) {
+      error = (e as Error).message;
+    }
+  }
+
+  async function toggleSuspend(u: ManagedUser) {
+    const willSuspend = !u.isSuspended;
+    const confirmKey = willSuspend ? 'admin.usersSuspendConfirm' : 'admin.usersUnsuspendConfirm';
+    if (!confirm(t(confirmKey, $locale))) return;
+    error = '';
+    message = '';
+    try {
+      await api.updateUser(u.id, { isSuspended: willSuspend });
       message = t('admin.saved', $locale);
       await loadUsers();
     } catch (e) {
@@ -227,7 +306,7 @@
       </thead>
       <tbody>
         {#each filtered as u}
-          <tr>
+          <tr class:users-row--suspended={u.isSuspended}>
             <td>
               <div class="users-cell-user">
                 <UserAvatar name={u.name} avatarUrl={u.avatarUrl} size="sm" />
@@ -237,8 +316,24 @@
                     {#if $currentUser?.id === u.id}
                       <span class="users-you-tag">{t('admin.usersYou', $locale)}</span>
                     {/if}
+                    {#if u.isSuspended}
+                      <span class="users-status-badge">{t('admin.usersSuspended', $locale)}</span>
+                    {/if}
                   </div>
                   <div class="users-cell-email">{u.email}</div>
+                  {#if u.employeeId || u.department || u.companyName}
+                    <div class="users-cell-meta">
+                      {#if u.employeeId}
+                        {t('profile.employeeId', $locale)}: {u.employeeId}
+                      {/if}
+                      {#if u.department}
+                        {#if u.employeeId} · {/if}{u.department}
+                      {/if}
+                      {#if u.companyName}
+                        {#if u.employeeId || u.department} · {/if}{u.companyName}
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
               </div>
             </td>
@@ -286,6 +381,38 @@
                   </svg>
                 </button>
                 {#if $currentUser?.id !== u.id}
+                  <button
+                    type="button"
+                    class="users-action-btn"
+                    class:users-action-btn--warn={!u.isSuspended}
+                    class:users-action-btn--success={u.isSuspended}
+                    title={u.isSuspended
+                      ? t('admin.usersUnsuspend', $locale)
+                      : t('admin.usersSuspend', $locale)}
+                    onclick={() => toggleSuspend(u)}
+                  >
+                    {#if u.isSuspended}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                          d="M9 12l2 2 4-4M12 22a10 10 0 100-20 10 10 0 000 20z"
+                          stroke="currentColor"
+                          stroke-width="1.75"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                      </svg>
+                    {:else}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75" />
+                        <path
+                          d="M8 8l8 8M16 8l-8 8"
+                          stroke="currentColor"
+                          stroke-width="1.75"
+                          stroke-linecap="round"
+                        />
+                      </svg>
+                    {/if}
+                  </button>
                   <button
                     type="button"
                     class="users-action-btn users-action-btn--danger"
@@ -368,6 +495,57 @@
             autocomplete="new-password"
           />
         </div>
+
+        {#if editing}
+          <div class="users-modal-divider">{t('profile.work', $locale)}</div>
+          <div class="users-modal-grid">
+            <div>
+              <label for="u-given">{t('profile.givenName', $locale)}</label>
+              <input id="u-given" bind:value={formGivenName} />
+            </div>
+            <div>
+              <label for="u-family">{t('profile.familyName', $locale)}</label>
+              <input id="u-family" bind:value={formFamilyName} />
+            </div>
+            <div>
+              <label for="u-job">{t('profile.jobTitle', $locale)}</label>
+              <input id="u-job" bind:value={formJobTitle} />
+            </div>
+            <div>
+              <label for="u-dept">{t('profile.department', $locale)}</label>
+              <input id="u-dept" bind:value={formDepartment} />
+            </div>
+            <div>
+              <label for="u-empid">{t('profile.employeeId', $locale)}</label>
+              <input id="u-empid" bind:value={formEmployeeId} />
+            </div>
+            <div>
+              <label for="u-company">{t('profile.companyName', $locale)}</label>
+              <input id="u-company" bind:value={formCompanyName} />
+            </div>
+            <div>
+              <label for="u-office">{t('profile.officeLocation', $locale)}</label>
+              <input id="u-office" bind:value={formOfficeLocation} />
+            </div>
+            <div>
+              <label for="u-mobile">{t('profile.mobilePhone', $locale)}</label>
+              <input id="u-mobile" type="tel" bind:value={formMobilePhone} />
+            </div>
+            <div>
+              <label for="u-business">{t('profile.businessPhone', $locale)}</label>
+              <input id="u-business" type="tel" bind:value={formBusinessPhone} />
+            </div>
+            <div>
+              <label for="u-city">{t('profile.city', $locale)}</label>
+              <input id="u-city" bind:value={formCity} />
+            </div>
+            <div>
+              <label for="u-country">{t('profile.country', $locale)}</label>
+              <input id="u-country" bind:value={formCountry} />
+            </div>
+          </div>
+        {/if}
+
         <div class="users-modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" onclick={closeModal}>
             {t('admin.cancel', $locale)}

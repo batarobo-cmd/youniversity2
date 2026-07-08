@@ -44,7 +44,9 @@ export const actions = {
     const body = await res.json().catch(() => ({ error: 'Prihlásenie zlyhalo' }));
 
     if (!res.ok) {
+      const bodyCode = (body as { code?: string }).code;
       return fail(res.status, {
+        errorCode: bodyCode,
         error: (body as { error?: string }).error ?? 'Prihlásenie zlyhalo',
         email,
       });
@@ -78,7 +80,11 @@ export const actions = {
 
     const body = await res.json().catch(() => ({ error: 'Registrácia zlyhala' }));
     if (!res.ok) {
-      return fail(res.status, { error: (body as { error?: string }).error ?? 'Registrácia zlyhala' });
+      const bodyCode = (body as { code?: string }).code;
+      return fail(res.status, {
+        errorCode: bodyCode,
+        error: (body as { error?: string }).error ?? 'Registrácia zlyhala',
+      });
     }
 
     const { sessionId } = body as { sessionId: string };

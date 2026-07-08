@@ -61,6 +61,17 @@ export const api = {
   updateProfile: (data: {
     name?: string;
     preferredLocale?: string;
+    givenName?: string | null;
+    familyName?: string | null;
+    jobTitle?: string | null;
+    department?: string | null;
+    employeeId?: string | null;
+    companyName?: string | null;
+    officeLocation?: string | null;
+    mobilePhone?: string | null;
+    businessPhone?: string | null;
+    city?: string | null;
+    country?: string | null;
     currentPassword?: string;
     newPassword?: string;
   }) =>
@@ -260,6 +271,22 @@ export const api = {
     }>(`/api/admin/users/${userId}/logs?${sp}`);
   },
 
+  getAuthConfig: () =>
+    request<{
+      manualLoginEnabled: boolean;
+      manualRegistrationEnabled: boolean;
+      oauth: { google: { enabled: boolean }; microsoft: { enabled: boolean } };
+    }>('/api/auth/config'),
+
+  getAdminAuthSettings: () =>
+    request<Record<string, unknown>>('/api/admin/auth-settings'),
+
+  updateAdminAuthSettings: (data: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/api/admin/auth-settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
   getUsers: () => request<Array<Record<string, unknown>>>('/api/admin/users'),
 
   getRegistrationHistory: (params: { q?: string; from?: string; to?: string; limit?: number; offset?: number }) => {
@@ -308,6 +335,18 @@ export const api = {
       role?: string;
       preferredLocale?: string;
       password?: string;
+      isSuspended?: boolean;
+      givenName?: string | null;
+      familyName?: string | null;
+      jobTitle?: string | null;
+      department?: string | null;
+      employeeId?: string | null;
+      companyName?: string | null;
+      officeLocation?: string | null;
+      mobilePhone?: string | null;
+      businessPhone?: string | null;
+      city?: string | null;
+      country?: string | null;
     },
   ) =>
     request<Record<string, unknown>>(`/api/admin/users/${id}`, {

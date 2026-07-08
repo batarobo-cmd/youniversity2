@@ -6,8 +6,28 @@ import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { getStudentDashboard, getAdminDashboard, getStudentCourseOverview } from '../services/dashboard';
 import { db } from '../db';
 import { users } from '../db/schema';
-import { serializeUser } from '../services/oauth';
+import { serializeUser } from '../services/user-serializer';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
+
+const optionalProfileString = (max: number) => z.string().max(max).optional().nullable();
+
+const profilePatchSchema = z.object({
+  name: z.string().min(2).optional(),
+  preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
+  givenName: optionalProfileString(255),
+  familyName: optionalProfileString(255),
+  jobTitle: optionalProfileString(255),
+  department: optionalProfileString(255),
+  employeeId: optionalProfileString(64),
+  companyName: optionalProfileString(255),
+  officeLocation: optionalProfileString(255),
+  mobilePhone: optionalProfileString(64),
+  businessPhone: optionalProfileString(64),
+  city: optionalProfileString(128),
+  country: optionalProfileString(128),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8).optional(),
+});
 
 export const dashboardRoutes = new Hono();
 
@@ -40,24 +60,39 @@ dashboardRoutes.get('/courses-overview', async (c) => {
 
 dashboardRoutes.patch('/profile', async (c) => {
   const authUser = c.get('user') as AuthUser;
-  const body = z
-    .object({
-      name: z.string().min(2).optional(),
-      preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
-      currentPassword: z.string().optional(),
-      newPassword: z.string().min(8).optional(),
-    })
-    .safeParse(await c.req.json());
+  const body = profilePatchSchema.safeParse(await c.req.json());
 
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 
   const [user] = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
   if (!user) return c.json({ error: 'User not found' }, 404);
 
+  const oauthLocked = Boolean(user.oauthProvider && user.profileSyncedAt);
   const updates: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
 
-  if (body.data.name) updates.name = body.data.name;
   if (body.data.preferredLocale) updates.preferredLocale = body.data.preferredLocale;
+
+  if (!oauthLocked) {
+    if (body.data.name) updates.name = body.data.name;
+    const profileFields = [
+      'givenName',
+      'familyName',
+      'jobTitle',
+      'department',
+      'employeeId',
+      'companyName',
+      'officeLocation',
+      'mobilePhone',
+      'businessPhone',
+      'city',
+      'country',
+    ] as const;
+    for (const field of profileFields) {
+      if (body.data[field] !== undefined) {
+        updates[field] = body.data[field] || null;
+      }
+    }
+  }
 
   if (body.data.newPassword) {
     if (!user.passwordHash) {

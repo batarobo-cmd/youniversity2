@@ -54,6 +54,20 @@ export const users = pgTable(
     oauthProvider: oauthProviderEnum('oauth_provider'),
     oauthId: varchar('oauth_id', { length: 255 }),
     avatarUrl: varchar('avatar_url', { length: 500 }),
+    givenName: varchar('given_name', { length: 255 }),
+    familyName: varchar('family_name', { length: 255 }),
+    jobTitle: varchar('job_title', { length: 255 }),
+    department: varchar('department', { length: 255 }),
+    employeeId: varchar('employee_id', { length: 64 }),
+    companyName: varchar('company_name', { length: 255 }),
+    companyDomain: varchar('company_domain', { length: 255 }),
+    officeLocation: varchar('office_location', { length: 255 }),
+    mobilePhone: varchar('mobile_phone', { length: 64 }),
+    businessPhone: varchar('business_phone', { length: 64 }),
+    city: varchar('city', { length: 128 }),
+    country: varchar('country', { length: 128 }),
+    profileSyncedAt: timestamp('profile_synced_at', { withTimezone: true }),
+    isSuspended: boolean('is_suspended').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -250,6 +264,12 @@ export const loginEvents = pgTable('login_events', {
     .references(() => users.id, { onDelete: 'cascade' }),
   method: varchar('method', { length: 32 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const authSettings = pgTable('auth_settings', {
+  id: integer('id').primaryKey().default(1),
+  settings: jsonb('settings').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type User = typeof users.$inferSelect;
