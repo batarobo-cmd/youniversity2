@@ -101,6 +101,17 @@ Pre AWS Bedrock použite kompatibilný proxy endpoint v `AI_TRANSLATION_API_URL`
 
 Bez API kľúča sa preklady označia prefixom `[EN]` (dev fallback).
 
+## AWS trial (1 týždeň)
+
+Produkčný Docker setup pre skúšobné nasadenie na **AWS Lightsail** (~$10–20/mes.):
+
+```bash
+cp .env.production.example .env   # uprav IP a heslá
+./deploy/aws-trial-bootstrap.sh   # na Ubuntu serveri
+```
+
+Podrobný návod: [docs/AWS-TRIAL.md](docs/AWS-TRIAL.md)
+
 ## AWS deployment (plán)
 
 | Služba | AWS ekvivalent |

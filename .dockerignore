@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.env
+.env.*
+!.env.production.example
+cookies.txt
+tmp-home.html
+**/.svelte-kit
+**/dist
+**/.cursor
+terminals
