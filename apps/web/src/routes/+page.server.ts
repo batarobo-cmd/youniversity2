@@ -4,15 +4,17 @@ import { SESSION_COOKIE } from '$lib/session';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 const SESSION_MAX_AGE = 60 * 60;
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 function setSessionCookie(cookies: import('@sveltejs/kit').Cookies, sessionId: string) {
   cookies.set(SESSION_COOKIE, sessionId, {
     path: '/',
     maxAge: SESSION_MAX_AGE,
     httpOnly: true,
+    secure: COOKIE_SECURE,
     sameSite: 'lax',
   });
-  cookies.delete('yo2_token', { path: '/' });
+  cookies.delete('yo2_token', { path: '/', secure: COOKIE_SECURE, sameSite: 'lax' });
 }
 
 export const actions = {

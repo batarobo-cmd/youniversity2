@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { SESSION_COOKIE } from '$lib/session';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 export async function POST({ cookies, fetch }) {
   const sessionId = cookies.get(SESSION_COOKIE);
@@ -15,8 +16,8 @@ export async function POST({ cookies, fetch }) {
       /* API nedostupné */
     }
   }
-  cookies.delete(SESSION_COOKIE, { path: '/' });
-  cookies.delete('yo2_token', { path: '/' });
+  cookies.delete(SESSION_COOKIE, { path: '/', secure: COOKIE_SECURE, sameSite: 'lax' });
+  cookies.delete('yo2_token', { path: '/', secure: COOKIE_SECURE, sameSite: 'lax' });
   redirect(303, '/');
 }
 
@@ -33,7 +34,7 @@ export async function GET({ cookies, fetch }) {
       /* API nedostupné */
     }
   }
-  cookies.delete(SESSION_COOKIE, { path: '/' });
-  cookies.delete('yo2_token', { path: '/' });
+  cookies.delete(SESSION_COOKIE, { path: '/', secure: COOKIE_SECURE, sameSite: 'lax' });
+  cookies.delete('yo2_token', { path: '/', secure: COOKIE_SECURE, sameSite: 'lax' });
   redirect(303, '/');
 }
