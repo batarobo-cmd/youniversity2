@@ -19,9 +19,8 @@ FROM oven/bun:1.2-alpine AS runner
 
 WORKDIR /app
 
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/build ./
-
-RUN bun install --production
 
 ENV PORT=3000
 ENV HOST=0.0.0.0
