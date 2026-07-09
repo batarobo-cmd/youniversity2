@@ -11,25 +11,16 @@ export const load: PageServerLoad = async ({ parent, fetch, params, depends }) =
   const locale = user?.preferredLocale ?? 'sk';
   const courseId = params.id;
 
-  const [course, enrollments, certificates, reporting] = await Promise.all([
-    serverApiJson<Record<string, unknown>>(fetch, token, `/api/courses/${courseId}?locale=${locale}`),
-    serverApiJson<unknown[]>(fetch, token, `/api/enrollments?courseId=${courseId}`),
-    serverApiJson<unknown[]>(fetch, token, `/api/courses/${courseId}/certificates`),
-    serverApiJson<unknown[]>(fetch, token, `/api/courses/${courseId}/reporting`),
-  ]);
+  const course = await serverApiJson<Record<string, unknown>>(
+    fetch,
+    token,
+    `/api/courses/${courseId}?locale=${locale}`,
+  );
 
-  const loadError =
-    course.error ??
-    enrollments.error ??
-    certificates.error ??
-    reporting.error ??
-    (course.data ? null : 'Nepodarilo sa načítať kurz.');
+  const loadError = course.error ?? (course.data ? null : 'Nepodarilo sa načítať kurz.');
 
   return {
     course: course.data,
-    enrollments: enrollments.data ?? [],
-    certificates: certificates.data ?? [],
-    reporting: reporting.data ?? [],
     loadError,
   };
 };

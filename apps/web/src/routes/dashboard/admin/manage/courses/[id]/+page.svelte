@@ -3,10 +3,11 @@
   import { page } from '$app/stores';
   import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
-  import { mutateApi, serverMutate } from '$lib/client/form-action';
+  import { mutateApi, serverMutate, queryApi } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
+  import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
   import { moduleActivities, normalizeActivityType, isEvaluableActivity } from '$lib/activity-types';
   import { splitCertificatesByAttempt } from '$lib/certificate-attempts';
   import type { PageData } from './$types';
@@ -75,14 +76,20 @@
   let evalRules = $state<CompletionRule[]>([]);
   let mandatoryByActivityId = $state<Record<string, boolean>>({});
 
-  let enrollments = $state<EnrollmentRow[]>(data.enrollments as EnrollmentRow[]);
+  let enrollments = $state<EnrollmentRow[]>([]);
   let enrollUserId = $state('');
   let studentSearch = $state<{ reset: () => void } | null>(null);
+  let enrollmentsLoaded = $state(false);
+  let enrollmentsLoading = $state(false);
 
   let certEnabled = $state(false);
   let certTitle = $state('');
-  let issuedCerts = $state<CertRow[]>(data.certificates as CertRow[]);
-  let reportingRows = $state<ReportingRow[]>(data.reporting as ReportingRow[]);
+  let issuedCerts = $state<CertRow[]>([]);
+  let certsLoaded = $state(false);
+  let certsLoading = $state(false);
+  let reportingRows = $state<ReportingRow[]>([]);
+  let reportingLoaded = $state(false);
+  let reportingLoading = $state(false);
   let reportingFilterQuery = $state('');
   let reportingFilterAssignment = $state('');
   let reportingFilterState = $state('');
@@ -92,6 +99,8 @@
     completions: ReportingRow['completions'];
   } | null>(null);
   let completionRulesSynced = $state(false);
+  let hydratedCourseId = $state<string | null>(null);
+  let previousCourseId = $state<string | null>(null);
 
   const sortedIssuedCerts = $derived(
     [...issuedCerts].sort(
@@ -160,37 +169,117 @@
     };
   });
 
-  function applyCourseData(
-    c: Record<string, unknown> | null,
-    enr: EnrollmentRow[],
-    certs: CertRow[],
-    reporting: ReportingRow[],
-  ) {
-    if (!c) return;
-    course = c;
-    title = String(c.title ?? '');
-    slug = String(c.slug ?? '');
-    description = String(c.description ?? '');
+  function applyPublicationFormFromCourse(c: Record<string, unknown>) {
     publishManual = Boolean(c.isPublished);
     publishStartsAt = toLocalDateTimeInput(c.startsAt);
     publishEndsAt = toLocalDateTimeInput(c.endsAt);
-    publicationMode = publishStartsAt || publishEndsAt ? 'schedule' : 'manual';
-    parseRules((c.completionRules as CompletionRule[]) ?? [], certs.length > 0);
-    syncMandatoryFromCourse(c);
-    enrollments = enr;
-    issuedCerts = certs;
-    reportingRows = reporting;
+    publicationMode = c.startsAt || c.endsAt ? 'schedule' : 'manual';
+  }
+
+  function resetCourseEditorState() {
+    hydratedCourseId = null;
+    completionRulesSynced = false;
+    enrollmentsLoaded = false;
+    certsLoaded = false;
+    reportingLoaded = false;
+    enrollments = [];
+    issuedCerts = [];
+    reportingRows = [];
+    activeTab = 'content';
+    message = '';
+    error = '';
+    saving = false;
+    loading = false;
+  }
+
+  async function loadEnrollments(force = false) {
+    if ((enrollmentsLoaded && !force) || enrollmentsLoading) return;
+    enrollmentsLoading = true;
+    try {
+      const result = await queryApi<EnrollmentRow[]>(
+        'apiQuery',
+        `/api/enrollments?courseId=${courseId}`,
+      );
+      if (result.error) throw new Error(result.error);
+      enrollments = result.data ?? [];
+      enrollmentsLoaded = true;
+    } finally {
+      enrollmentsLoading = false;
+    }
+  }
+
+  async function loadCertificates(force = false) {
+    if ((certsLoaded && !force) || certsLoading) return;
+    certsLoading = true;
+    try {
+      const result = await queryApi<CertRow[]>('apiQuery', `/api/courses/${courseId}/certificates`);
+      if (result.error) throw new Error(result.error);
+      issuedCerts = result.data ?? [];
+      certsLoaded = true;
+      if (course) {
+        parseRules((course.completionRules as CompletionRule[]) ?? [], issuedCerts.length > 0);
+      }
+      void ensureCompletionRulesPersisted(course);
+    } finally {
+      certsLoading = false;
+    }
+  }
+
+  async function loadReporting(force = false) {
+    if ((reportingLoaded && !force) || reportingLoading) return;
+    reportingLoading = true;
+    try {
+      const result = await queryApi<ReportingRow[]>('apiQuery', `/api/courses/${courseId}/reporting`);
+      if (result.error) throw new Error(result.error);
+      reportingRows = result.data ?? [];
+      reportingLoaded = true;
+    } finally {
+      reportingLoading = false;
+    }
+  }
+
+  function applyCourseData(c: Record<string, unknown> | null) {
+    if (!c) return;
+    const id = String(c.id ?? courseId);
+    const isNewCourse = hydratedCourseId !== id;
+
+    course = c;
+
+    if (isNewCourse) {
+      title = String(c.title ?? '');
+      slug = String(c.slug ?? '');
+      description = String(c.description ?? '');
+      applyPublicationFormFromCourse(c);
+      parseRules((c.completionRules as CompletionRule[]) ?? [], issuedCerts.length > 0);
+      syncMandatoryFromCourse(c);
+      hydratedCourseId = id;
+    }
   }
 
   $effect(() => {
+    if (previousCourseId === courseId) return;
+    previousCourseId = courseId;
+    resetCourseEditorState();
+  });
+
+  $effect(() => {
     error = data.loadError ?? '';
-    applyCourseData(
-      data.course,
-      data.enrollments as EnrollmentRow[],
-      data.certificates as CertRow[],
-      data.reporting as ReportingRow[],
-    );
-    void ensureCompletionRulesPersisted(data.course as Record<string, unknown> | null);
+    applyCourseData(data.course);
+    if (data.course) {
+      void ensureCompletionRulesPersisted(data.course as Record<string, unknown>);
+    }
+  });
+
+  $effect(() => {
+    if (activeTab === 'students' || activeTab === 'evaluation') {
+      void loadEnrollments();
+    }
+    if (activeTab === 'certificate') {
+      void loadCertificates();
+    }
+    if (activeTab === 'reporting') {
+      void loadReporting();
+    }
   });
 
   function hasPersistedCertificateRule(rules: CompletionRule[]) {
@@ -296,6 +385,11 @@
     error = '';
     try {
       await invalidate('course:edit');
+      const reloads: Promise<void>[] = [];
+      if (enrollmentsLoaded) reloads.push(loadEnrollments(true));
+      if (certsLoaded) reloads.push(loadCertificates(true));
+      if (reportingLoaded) reloads.push(loadReporting(true));
+      await Promise.all(reloads);
     } finally {
       loading = false;
     }
@@ -307,6 +401,10 @@
     message = '';
     error = '';
     try {
+      const savedPublicationMode = publicationMode;
+      const savedPublishManual = publishManual;
+      const savedPublishStartsAt = publishStartsAt;
+      const savedPublishEndsAt = publishEndsAt;
       const startsAt = publicationMode === 'schedule' ? toIsoOrNull(publishStartsAt) : null;
       const endsAt = publicationMode === 'schedule' ? toIsoOrNull(publishEndsAt) : null;
       if (publicationMode === 'schedule' && !startsAt) {
@@ -325,6 +423,12 @@
         endsAt,
         locale: $locale,
       });
+
+      publicationMode = savedPublicationMode;
+      publishManual = savedPublishManual;
+      publishStartsAt = savedPublishStartsAt;
+      publishEndsAt = savedPublishEndsAt;
+
       message = t('admin.saved', $locale);
       await refreshCourse();
     } catch (e) {
@@ -655,9 +759,7 @@
     {#if course}
       <div class="course-edit-heading">
         <h1>{title || slug}</h1>
-        <span class="cat-tree-badge" class:cat-tree-badge--live={Boolean(course.isPublished)}>
-          {course.isPublished ? t('admin.published', $locale) : t('admin.draft', $locale)}
-        </span>
+        <CoursePublicationBadge course={{ isPublished: Boolean(course.isPublished), startsAt: course.startsAt, endsAt: course.endsAt }} />
       </div>
       <p class="course-edit-sub">ID: {slug}</p>
     {/if}
@@ -822,6 +924,9 @@
       <section class="panel course-edit-panel">
         <div class="panel-header"><h2>{t('admin.tabStudents', $locale)}</h2></div>
         <div class="panel-body">
+          {#if enrollmentsLoading}
+            <p class="loading-text">...</p>
+          {:else}
           <div class="course-edit-enroll-row">
             <StudentSearchPicker
               bind:this={studentSearch}
@@ -900,12 +1005,16 @@
               </table>
             </div>
           {/if}
+          {/if}
         </div>
       </section>
     {:else if activeTab === 'certificate'}
       <section class="panel course-edit-panel">
         <div class="panel-header"><h2>{t('admin.tabCertificate', $locale)}</h2></div>
         <div class="panel-body">
+          {#if certsLoading}
+            <p class="loading-text">...</p>
+          {:else}
           <form class="course-edit-form" onsubmit={saveCertificate}>
             <label class="course-edit-check">
               <input type="checkbox" bind:checked={certEnabled} />
@@ -943,6 +1052,7 @@
               </table>
             </div>
           {/if}
+          {/if}
         </div>
       </section>
     {:else}
@@ -950,7 +1060,9 @@
         <div class="panel-header"><h2>{t('admin.tabReporting', $locale)}</h2></div>
         <div class="panel-body">
           <p class="course-edit-hint">{t('admin.reportingHint', $locale)}</p>
-          {#if reportingRows.length === 0}
+          {#if reportingLoading}
+            <p class="loading-text">...</p>
+          {:else if reportingRows.length === 0}
             <p class="cat-tree-empty">{t('admin.reportingEmpty', $locale)}</p>
           {:else}
             <div class="reporting-filters">

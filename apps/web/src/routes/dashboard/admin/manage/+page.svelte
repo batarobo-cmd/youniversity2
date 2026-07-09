@@ -17,6 +17,8 @@
     title: string;
     description?: string;
     isPublished: boolean;
+    startsAt?: string | null;
+    endsAt?: string | null;
     categoryId?: string | null;
   };
 

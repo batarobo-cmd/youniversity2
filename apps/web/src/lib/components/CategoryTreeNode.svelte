@@ -1,5 +1,7 @@
 <script lang="ts">
   import CategoryTreeNode from './CategoryTreeNode.svelte';
+  import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
+  import { getCoursePublicationDisplayStatus } from '$lib/course-publish-status';
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
 
@@ -16,6 +18,8 @@
     title: string;
     description?: string;
     isPublished: boolean;
+    startsAt?: string | null;
+    endsAt?: string | null;
     categoryId?: string | null;
   };
 
@@ -325,6 +329,7 @@
         <p class="cat-tree-empty">{t('admin.emptyCategory', $locale)}</p>
       {:else}
         {#each catCourses as course (course.id)}
+          {@const publicationStatus = getCoursePublicationDisplayStatus(course)}
           <article class="cat-tree-course cat-tree-course--compact">
             <div class="cat-tree-course-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
@@ -334,9 +339,7 @@
             <div class="cat-tree-course-main">
               <div class="cat-tree-course-head">
                 <span class="cat-tree-course-title">{course.title}</span>
-                <span class="cat-tree-badge" class:cat-tree-badge--live={course.isPublished}>
-                  {course.isPublished ? t('admin.published', $locale) : t('admin.draft', $locale)}
-                </span>
+                <CoursePublicationBadge {course} />
               </div>
               <span class="cat-tree-course-slug">ID: {course.slug}</span>
             </div>
@@ -365,7 +368,8 @@
               <button
                 type="button"
                 class="cat-tree-icon-btn"
-                class:cat-tree-icon-btn--published={course.isPublished}
+                class:cat-tree-icon-btn--published={publicationStatus === 'published'}
+                class:cat-tree-icon-btn--scheduled={publicationStatus === 'scheduled'}
                 title={course.isPublished ? t('admin.unpublish', $locale) : t('admin.publish', $locale)}
                 aria-label={course.isPublished ? t('admin.unpublish', $locale) : t('admin.publish', $locale)}
                 onclick={() => onTogglePublish(course)}

@@ -23,6 +23,7 @@
   const completedThisYear = $derived((data.completedThisYear as Array<Record<string, unknown>>) ?? []);
   const currentYear = $derived((data.currentYear as number) ?? new Date().getFullYear());
   const calendarEvents = $derived((data.calendarEvents as Array<Record<string, unknown>>) ?? []);
+  const calendarPeriods = $derived((data.calendarPeriods as Array<Record<string, unknown>>) ?? []);
   const upcomingDeadlines = $derived((data.upcomingDeadlines as Array<Record<string, unknown>>) ?? []);
 
   let certHistoryModal = $state<{ courseTitle: string; certificates: CertificateItem[] } | null>(null);
@@ -99,7 +100,10 @@
         <h2>{t('dash.calendar', $locale)}</h2>
       </div>
       <div class="panel-body">
-        <CalendarWidget events={calendarEvents as Parameters<typeof CalendarWidget>[0]['events']} />
+        <CalendarWidget
+          events={calendarEvents as Parameters<typeof CalendarWidget>[0]['events']}
+          periods={calendarPeriods as Parameters<typeof CalendarWidget>[0]['periods']}
+        />
       </div>
     </section>
 

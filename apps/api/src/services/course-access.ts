@@ -3,6 +3,8 @@ import { db } from '../db';
 import { courses, enrollments } from '../db/schema';
 import type { AuthUser } from '../middleware/auth';
 
+import { isCourseVisibleToStudents } from './course-visibility';
+
 export function isStaff(user: AuthUser) {
   return user.role === 'admin' || user.role === 'instructor';
 }
@@ -26,11 +28,17 @@ export async function getStudentEnrollment(userId: string, courseId: string) {
 
 export async function isCourseVisibleToStudent(courseId: string): Promise<boolean> {
   const [row] = await db
-    .select({ isPublished: courses.isPublished })
+    .select({
+      isPublished: courses.isPublished,
+      startsAt: courses.startsAt,
+      endsAt: courses.endsAt,
+    })
     .from(courses)
     .where(eq(courses.id, courseId))
     .limit(1);
-  return row?.isPublished === true;
+
+  if (!row) return false;
+  return isCourseVisibleToStudents(row);
 }
 
 export async function canStudentViewCourse(user: AuthUser, courseId: string): Promise<boolean> {

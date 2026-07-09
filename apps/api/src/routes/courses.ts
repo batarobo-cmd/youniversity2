@@ -165,20 +165,31 @@ courseRoutes.get('/:id', async (c) => {
       ? await db
           .select()
           .from(moduleTranslations)
-          .where(and(eq(moduleTranslations.locale, locale)))
+          .where(
+            and(inArray(moduleTranslations.moduleId, moduleIds), eq(moduleTranslations.locale, locale)),
+          )
       : [];
 
   const allLessons =
     moduleIds.length > 0
-      ? await db.select().from(lessons).orderBy(lessons.sortOrder)
+      ? await db
+          .select()
+          .from(lessons)
+          .where(inArray(lessons.moduleId, moduleIds))
+          .orderBy(lessons.sortOrder)
       : [];
 
-  const courseLessons = allLessons.filter((l) => moduleIds.includes(l.moduleId));
+  const courseLessons = allLessons;
   const lessonIds = courseLessons.map((l) => l.id);
 
   const lessonTrans =
     lessonIds.length > 0
-      ? await db.select().from(lessonTranslations).where(eq(lessonTranslations.locale, locale))
+      ? await db
+          .select()
+          .from(lessonTranslations)
+          .where(
+            and(inArray(lessonTranslations.lessonId, lessonIds), eq(lessonTranslations.locale, locale)),
+          )
       : [];
 
   const rules = await db.select().from(completionRules).where(eq(completionRules.courseId, courseId));
@@ -433,7 +444,19 @@ courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c)
   broadcastToAdmin(updateMessage);
   await broadcastToCourseEnrollees(courseId, updateMessage);
 
-  return c.json({ ok: true });
+  const [updated] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+  if (!updated) return c.json({ error: 'Course not found' }, 404);
+
+  return c.json({
+    ok: true,
+    course: {
+      id: updated.id,
+      slug: updated.slug,
+      isPublished: updated.isPublished,
+      startsAt: updated.startsAt?.toISOString() ?? null,
+      endsAt: updated.endsAt?.toISOString() ?? null,
+    },
+  });
 });
 
 courseRoutes.get('/:id/certificates', requireRole('admin', 'instructor'), async (c) => {

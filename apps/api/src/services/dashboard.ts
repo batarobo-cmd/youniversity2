@@ -13,7 +13,7 @@ import {
   loginEvents,
 } from '../db/schema';
 import type { AuthUser } from '../middleware/auth';
-import { isCourseVisibleToStudents } from './course-visibility';
+import { isCourseVisibleToStudents, isCoursePublishedForStudents, getCoursePublicationDisplayStatus } from './course-visibility';
 import { countsForCourseCompletion, isProgressFullyComplete } from './course-completion';
 import { canStudentOpenCourse } from './course-access';
 import { evaluateCourseCompletion } from './completion';
@@ -198,7 +198,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     enrollment: (typeof userEnrollments)[number] | null,
   ): Promise<StudentCourseView | null> => {
     const course = courseMap.get(courseId);
-    if (!course || !isCourseVisibleToStudents(course, now)) return null;
+    if (!course || !isCoursePublishedForStudents(course)) return null;
 
     const translation = translationMap.get(courseId);
     const title = translation?.title ?? course.slug;
@@ -223,9 +223,18 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     };
     const hasAchievement = hasCourseAchievement(enrollmentLike, certItems.length, progressPercent);
 
-    if (enrollment && !shouldListEnrollmentForStudent(enrollment.status, hasAchievement)) {
+    if (enrollment) {
+      if (!shouldListEnrollmentForStudent(enrollment.status, hasAchievement)) {
+        return null;
+      }
+    } else if (!isCourseVisibleToStudents(course, now)) {
       return null;
     }
+
+    const isCurrentlyOpen =
+      Boolean(enrollment) &&
+      canStudentOpenCourse(enrollment!.status) &&
+      isCourseVisibleToStudents(course, now);
 
     const displayProgressPercent = isOngoingEnrollment
       ? progressPercent
@@ -262,7 +271,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
         : 'completed',
       certificates: visibleCerts,
       certificate: visibleCerts[0] ?? null,
-      canOpenCourse: enrollment ? canStudentOpenCourse(enrollment.status) : false,
+      canOpenCourse: isCurrentlyOpen,
     };
   };
 
@@ -348,6 +357,13 @@ export async function getStudentDashboard(userId: string, locale: string) {
     expiresAt: string;
     daysLeft: number;
   }> = [];
+  const calendarPeriods: Array<{
+    id: string;
+    courseId: string;
+    title: string;
+    startsAt: string;
+    endsAt: string | null;
+  }> = [];
 
   for (const course of [...overview.futureCourses, ...overview.activeCourses]) {
     if (course.startsAt) {
@@ -357,6 +373,13 @@ export async function getStudentDashboard(userId: string, locale: string) {
         title: course.title,
         date: course.startsAt,
         type: 'start',
+      });
+      calendarPeriods.push({
+        id: course.id,
+        courseId: course.id,
+        title: course.title,
+        startsAt: course.startsAt,
+        endsAt: course.endsAt ?? null,
       });
     }
     if (course.endsAt) {
@@ -391,16 +414,23 @@ export async function getStudentDashboard(userId: string, locale: string) {
     completedThisYear,
     currentYear,
     calendarEvents,
+    calendarPeriods,
     upcomingDeadlines,
   };
 }
 
 export async function getAdminDashboard(locale: string) {
-  const [courseCount] = await db.select({ value: count() }).from(courses);
-  const [publishedCount] = await db
-    .select({ value: count() })
-    .from(courses)
-    .where(eq(courses.isPublished, true));
+  const allCourses = await db.select().from(courses);
+  const now = new Date();
+  let publishedCourses = 0;
+  let scheduledCourses = 0;
+
+  for (const course of allCourses) {
+    const status = getCoursePublicationDisplayStatus(course, now);
+    if (status === 'published') publishedCourses++;
+    else if (status === 'scheduled') scheduledCourses++;
+  }
+
   const [studentCount] = await db
     .select({ value: count() })
     .from(users)
@@ -511,8 +541,9 @@ export async function getAdminDashboard(locale: string) {
 
   return {
     stats: {
-      totalCourses: Number(courseCount.value),
-      publishedCourses: Number(publishedCount.value),
+      totalCourses: allCourses.length,
+      publishedCourses,
+      scheduledCourses,
       totalStudents: Number(studentCount.value),
       activeEnrollments: Number(activeEnrollmentCount.value),
       completedEnrollments: Number(completedCount.value),

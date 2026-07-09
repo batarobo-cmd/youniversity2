@@ -2,6 +2,7 @@
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import AdminHistoryModal from '$lib/components/AdminHistoryModal.svelte';
+  import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
   import '$lib/styles/dashboard.css';
 
   interface Props {
@@ -47,6 +48,10 @@
     <div class="stat-card-label">{t('dash.published', $locale)}</div>
   </div>
   <div class="stat-card">
+    <div class="stat-card-value">{stats.scheduledCourses ?? 0}</div>
+    <div class="stat-card-label">{t('dash.scheduled', $locale)}</div>
+  </div>
+  <div class="stat-card">
     <div class="stat-card-value">{stats.totalStudents}</div>
     <div class="stat-card-label">{t('dash.students', $locale)}</div>
   </div>
@@ -88,11 +93,14 @@
                 <td>{course.activityCount as number}</td>
                 <td>{course.activeUsers as number}</td>
                 <td>
-                  {#if course.isPublished}
-                    <span class="badge badge-success">{t('dash.published', $locale)}</span>
-                  {:else}
-                    <span class="badge badge-warning">Draft</span>
-                  {/if}
+                  <CoursePublicationBadge
+                    variant="badge"
+                    course={{
+                      isPublished: Boolean(course.isPublished),
+                      startsAt: course.startsAt as string | null | undefined,
+                      endsAt: course.endsAt as string | null | undefined,
+                    }}
+                  />
                 </td>
               </tr>
             {/each}

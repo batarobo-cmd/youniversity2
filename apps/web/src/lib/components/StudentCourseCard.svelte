@@ -30,6 +30,18 @@
     if (!iso) return '';
     return new Date(iso).toLocaleDateString($locale, { dateStyle: 'medium' });
   }
+
+  function formatDateTime(iso?: string) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString($locale, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  function futureAvailabilityLabel() {
+    if (!course.startsAt) return '';
+    const from = formatDateTime(course.startsAt);
+    const to = course.endsAt ? formatDateTime(course.endsAt) : t('courses.noEndDate', $locale);
+    return t('courses.availablePeriod', $locale).replace('{from}', from).replace('{to}', to);
+  }
 </script>
 
 <article
@@ -46,7 +58,9 @@
         <span>{course.title}</span>
       {/if}
     </h3>
-    {#if course.enrollmentStatus === 'completed'}
+    {#if variant === 'future'}
+      <span class="status-chip status-chip--planned">{t('courses.statusPlanned', $locale)}</span>
+    {:else if course.enrollmentStatus === 'completed'}
       <span class="status-chip status-chip--done">{t('courses.statusCompleted', $locale)}</span>
     {:else if course.enrollmentStatus === 'active'}
       <span class="status-chip">{t('courses.statusActive', $locale)}</span>
@@ -57,8 +71,8 @@
       <p>{course.description}</p>
     {/if}
 
-    {#if variant === 'future' && course.startsAt}
-      <span class="course-card-meta">{t('courses.startsAt', $locale)}: {formatDate(course.startsAt)}</span>
+    {#if variant === 'future'}
+      <span class="course-card-meta course-card-availability">{futureAvailabilityLabel()}</span>
     {:else if variant === 'past' && course.completedAt}
       <span class="course-card-meta">{t('courses.completedAt', $locale)}: {formatDate(course.completedAt)}</span>
     {:else if variant === 'active' && course.progressPercent !== undefined}
@@ -78,8 +92,10 @@
       <span class="course-card-meta">{formatDate(course.certificate.issuedAt)}</span>
     {/if}
 
-    {#if !canOpen}
+    {#if !canOpen && variant !== 'future'}
       <span class="course-card-meta course-card-access-closed">{t('courses.accessClosed', $locale)}</span>
+    {:else if !canOpen && variant === 'future'}
+      <span class="course-card-meta course-card-access-closed">{t('courses.opensLater', $locale)}</span>
     {/if}
   </div>
   {#if canOpen}

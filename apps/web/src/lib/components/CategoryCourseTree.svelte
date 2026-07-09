@@ -1,6 +1,8 @@
 <script lang="ts">
   import CategoryTreeNode, { type Category, type Course } from '$lib/components/CategoryTreeNode.svelte';
   import CategoryEditModal from '$lib/components/CategoryEditModal.svelte';
+  import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
+  import { getCoursePublicationDisplayStatus } from '$lib/course-publish-status';
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
 
@@ -254,6 +256,7 @@
             <p class="cat-tree-empty">{t('admin.emptyUncategorized', $locale)}</p>
           {:else}
             {#each uncategorizedCourses as course (course.id)}
+              {@const publicationStatus = getCoursePublicationDisplayStatus(course)}
               <article class="cat-tree-course cat-tree-course--compact">
                 <div class="cat-tree-course-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5V6.5A2.5 2.5 0 016.5 4H20v13H6.5A2.5 2.5 0 004 19.5z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -261,7 +264,7 @@
                 <div class="cat-tree-course-main">
                   <div class="cat-tree-course-head">
                     <span class="cat-tree-course-title">{course.title}</span>
-                    <span class="cat-tree-badge" class:cat-tree-badge--live={course.isPublished}>{course.isPublished ? t('admin.published', $locale) : t('admin.draft', $locale)}</span>
+                    <CoursePublicationBadge {course} />
                   </div>
                   <span class="cat-tree-course-slug">ID: {course.slug}</span>
                 </div>
@@ -272,7 +275,7 @@
                   <button type="button" class="cat-tree-icon-btn cat-tree-icon-btn--danger" title={t('admin.deleteCourse', $locale)} aria-label={t('admin.deleteCourse', $locale)} onclick={() => onRemoveCourse(course.id)}>
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" /></svg>
                   </button>
-                  <button type="button" class="cat-tree-icon-btn" class:cat-tree-icon-btn--published={course.isPublished} title={course.isPublished ? t('admin.unpublish', $locale) : t('admin.publish', $locale)} aria-label={course.isPublished ? t('admin.unpublish', $locale) : t('admin.publish', $locale)} onclick={() => onTogglePublish(course)}>
+                  <button type="button" class="cat-tree-icon-btn" class:cat-tree-icon-btn--published={publicationStatus === 'published'} class:cat-tree-icon-btn--scheduled={publicationStatus === 'scheduled'} title={course.isPublished ? t('admin.unpublish', $locale) : t('admin.publish', $locale)} aria-label={course.isPublished ? t('admin.unpublish', $locale) : t('admin.publish', $locale)} onclick={() => onTogglePublish(course)}>
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75" /><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" stroke="currentColor" stroke-width="1.75" /></svg>
                   </button>
                 </div>
