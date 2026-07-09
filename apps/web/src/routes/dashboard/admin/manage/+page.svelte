@@ -4,7 +4,7 @@
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
-  import { submitAction } from '$lib/client/form-action';
+  import { submitAction, actionErrorMessage, isActionSuccess } from '$lib/client/form-action';
   import CategoryCourseTree from '$lib/components/CategoryCourseTree.svelte';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
@@ -67,8 +67,9 @@
     mutationError = '';
     message = '';
     const result = await submitAction(action, fields);
-    if (result.type === 'failure') {
-      mutationError = String(result.data?.error ?? 'Chyba');
+    const actionError = actionErrorMessage(result);
+    if (!isActionSuccess(result) || actionError) {
+      mutationError = actionError ?? 'Operácia zlyhala.';
       if (options.throwOnError) throw new Error(mutationError);
       return false;
     }

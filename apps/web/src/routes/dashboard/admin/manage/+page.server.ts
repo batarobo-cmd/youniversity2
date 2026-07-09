@@ -1,8 +1,28 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { SESSION_COOKIE } from '$lib/session';
+import { adminOrFail, isActionFailure, sessionTokenOrFail } from '$lib/server/actions';
 import { requireAdmin, requireAuthToken, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
+
+async function loadManageData(
+  fetch: typeof globalThis.fetch,
+  token: string,
+  locale: string,
+) {
+  const [cats, courses] = await Promise.all([
+    serverApiJson<unknown[]>(fetch, token, '/api/categories'),
+    serverApiJson<unknown[]>(fetch, token, `/api/courses?locale=${locale}`),
+  ]);
+
+  const loadError = cats.error ?? courses.error;
+  if (loadError) return fail(503, { error: loadError });
+
+  return {
+    success: true as const,
+    categories: cats.data ?? [],
+    courses: courses.data ?? [],
+  };
+}
 
 export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
   depends('admin:manage');
@@ -11,7 +31,6 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
   requireAdmin(user);
 
   const locale = user?.preferredLocale ?? 'sk';
-
   const [cats, courses] = await Promise.all([
     serverApiJson<unknown[]>(fetch, token, '/api/categories'),
     serverApiJson<unknown[]>(fetch, token, `/api/courses?locale=${locale}`),
@@ -27,11 +46,14 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
   };
 };
 
-export const actions = {  createCategory: async ({ request, cookies, fetch, parent }) => {
+export const actions = {
+  createCategory: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requireAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = adminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const fd = await request.formData();
     const name = fd.get('name')?.toString().trim() ?? '';
@@ -39,18 +61,23 @@ export const actions = {  createCategory: async ({ request, cookies, fetch, pare
     const parentId = fd.get('parentId')?.toString() || null;
     if (!name || !slug) return fail(400, { error: 'Neplatné údaje kategórie.' });
 
-    return runServerApiMutation(fetch, token, '/api/categories', {
+    const mutation = await runServerApiMutation(fetch, token, '/api/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, slug, parentId }),
     });
+    if (isActionFailure(mutation)) return mutation;
+
+    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
   },
 
   updateCategory: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requireAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = adminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const fd = await request.formData();
     const id = fd.get('id')?.toString();
@@ -58,30 +85,42 @@ export const actions = {  createCategory: async ({ request, cookies, fetch, pare
     const slug = fd.get('slug')?.toString().trim() ?? '';
     if (!id || !name || !slug) return fail(400, { error: 'Neplatné údaje kategórie.' });
 
-    return runServerApiMutation(fetch, token, `/api/categories/${id}`, {
+    const mutation = await runServerApiMutation(fetch, token, `/api/categories/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, slug }),
     });
+    if (isActionFailure(mutation)) return mutation;
+
+    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
   },
 
   deleteCategory: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requireAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = adminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const id = (await request.formData()).get('id')?.toString();
     if (!id) return fail(400, { error: 'Chýba ID kategórie.' });
 
-    return runServerApiMutation(fetch, token, `/api/categories/${id}`, { method: 'DELETE' });
+    const mutation = await runServerApiMutation(fetch, token, `/api/categories/${id}`, {
+      method: 'DELETE',
+    });
+    if (isActionFailure(mutation)) return mutation;
+
+    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
   },
 
   createCourse: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requireAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = adminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const fd = await request.formData();
     const slug = fd.get('slug')?.toString().trim() ?? '';
@@ -91,40 +130,55 @@ export const actions = {  createCategory: async ({ request, cookies, fetch, pare
     const defaultLocale = fd.get('defaultLocale')?.toString() ?? 'sk';
     if (!slug || !title) return fail(400, { error: 'Neplatné údaje kurzu.' });
 
-    return runServerApiMutation(fetch, token, '/api/courses', {
+    const mutation = await runServerApiMutation(fetch, token, '/api/courses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug, title, description, categoryId, defaultLocale }),
     });
+    if (isActionFailure(mutation)) return mutation;
+
+    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
   },
 
   publishCourse: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requireAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = adminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const fd = await request.formData();
     const id = fd.get('id')?.toString();
     const isPublished = fd.get('isPublished')?.toString() === 'true';
     if (!id) return fail(400, { error: 'Chýba ID kurzu.' });
 
-    return runServerApiMutation(fetch, token, `/api/courses/${id}/publish`, {
+    const mutation = await runServerApiMutation(fetch, token, `/api/courses/${id}/publish`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isPublished }),
     });
+    if (isActionFailure(mutation)) return mutation;
+
+    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
   },
 
   deleteCourse: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requireAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = adminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const id = (await request.formData()).get('id')?.toString();
     if (!id) return fail(400, { error: 'Chýba ID kurzu.' });
 
-    return runServerApiMutation(fetch, token, `/api/courses/${id}`, { method: 'DELETE' });
+    const mutation = await runServerApiMutation(fetch, token, `/api/courses/${id}`, {
+      method: 'DELETE',
+    });
+    if (isActionFailure(mutation)) return mutation;
+
+    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
   },
 };

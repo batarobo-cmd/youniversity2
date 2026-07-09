@@ -8,7 +8,7 @@
     locale,
   } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { submitAction } from '$lib/client/form-action';
+  import { submitAction, actionErrorMessage, isActionSuccess } from '$lib/client/form-action';
   import { USER_ROLES, SUPPORTED_LOCALES, type UserRole } from '@youniversity2/shared';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
   import UserLogsModal from '$lib/components/UserLogsModal.svelte';
@@ -114,8 +114,9 @@
   async function runMutation(action: string, fields: Record<string, string | null | undefined>) {
     mutationError = '';
     const result = await submitAction(action, fields);
-    if (result.type === 'failure') {
-      mutationError = String(result.data?.error ?? 'Chyba');
+    const actionError = actionErrorMessage(result);
+    if (!isActionSuccess(result) || actionError) {
+      mutationError = actionError ?? 'Operácia zlyhala.';
       return false;
     }
     message = t('admin.saved', $locale);

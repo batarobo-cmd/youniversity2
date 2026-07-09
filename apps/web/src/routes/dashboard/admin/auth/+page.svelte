@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isPlatformAdmin, locale } from '$lib/stores/auth';
-  import { submitAction } from '$lib/client/form-action';
+  import { submitAction, actionErrorMessage, isActionSuccess } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
@@ -131,8 +131,9 @@
           },
         }),
       });
-      if (result.type === 'failure') {
-        mutationError = String(result.data?.error ?? 'Chyba');
+      const actionError = actionErrorMessage(result);
+      if (!isActionSuccess(result) || actionError) {
+        mutationError = actionError ?? 'Operácia zlyhala.';
         return;
       }
       message = t('admin.saved', $locale);

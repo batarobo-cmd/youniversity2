@@ -1,6 +1,10 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { SESSION_COOKIE } from '$lib/session';
+import {
+  isActionFailure,
+  platformAdminOrFail,
+  sessionTokenOrFail,
+} from '$lib/server/actions';
 import { requireAuthToken, requirePlatformAdmin, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
 
@@ -21,9 +25,11 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
 export const actions = {
   saveUser: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requirePlatformAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = platformAdminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const fd = await request.formData();
     const mode = fd.get('mode')?.toString();
@@ -38,34 +44,50 @@ export const actions = {
       return fail(400, { error: 'Neplatné údaje.' });
     }
 
+    let mutation;
     if (mode === 'create') {
-      return runServerApiMutation(fetch, token, '/api/admin/users', {
+      mutation = await runServerApiMutation(fetch, token, '/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-    }
-
-    if (mode === 'update' && id) {
-      return runServerApiMutation(fetch, token, `/api/admin/users/${id}`, {
+    } else if (mode === 'update' && id) {
+      mutation = await runServerApiMutation(fetch, token, `/api/admin/users/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+    } else {
+      return fail(400, { error: 'Neplatná operácia.' });
     }
 
-    return fail(400, { error: 'Neplatná operácia.' });
+    if (isActionFailure(mutation)) return mutation;
+
+    const list = await serverApiJson<unknown[]>(fetch, token, '/api/admin/users');
+    if (list.error) return fail(503, { error: list.error });
+
+    return { success: true, users: list.data ?? [] };
   },
 
   deleteUser: async ({ request, cookies, fetch, parent }) => {
     const { user } = await parent();
-    requirePlatformAdmin(user);
-    const token = cookies.get(SESSION_COOKIE);
-    requireAuthToken(token);
+    const denied = platformAdminOrFail(user);
+    if (denied) return denied;
+
+    const token = sessionTokenOrFail(cookies);
+    if (isActionFailure(token)) return token;
 
     const id = (await request.formData()).get('id')?.toString();
     if (!id) return fail(400, { error: 'Chýba ID používateľa.' });
 
-    return runServerApiMutation(fetch, token, `/api/admin/users/${id}`, { method: 'DELETE' });
+    const mutation = await runServerApiMutation(fetch, token, `/api/admin/users/${id}`, {
+      method: 'DELETE',
+    });
+    if (isActionFailure(mutation)) return mutation;
+
+    const list = await serverApiJson<unknown[]>(fetch, token, '/api/admin/users');
+    if (list.error) return fail(503, { error: list.error });
+
+    return { success: true, users: list.data ?? [] };
   },
 };
