@@ -39,6 +39,11 @@
   type ReportingRow = {
     user: { id: string; name: string; email: string };
     enrollment: { id: string; status: string; enrolledAt: string; completedAt?: string | null } | null;
+    assignmentStatusAt: {
+      enrolledAt: string | null;
+      suspendedAt: string | null;
+      revokedAt: string | null;
+    };
     progress: {
       totalActivities: number;
       completedActivities: number;
@@ -77,7 +82,32 @@
   let certTitle = $state('');
   let issuedCerts = $state<CertRow[]>(data.certificates as CertRow[]);
   let reportingRows = $state<ReportingRow[]>(data.reporting as ReportingRow[]);
+  let reportingFilterQuery = $state('');
+  let reportingFilterAssignment = $state('');
+  let reportingFilterState = $state('');
   let certHistoryModal = $state<{ userName: string; completions: ReportingRow['completions'] } | null>(null);
+
+  const filteredReportingRows = $derived(
+    reportingRows.filter((row) => {
+      const query = reportingFilterQuery.trim().toLowerCase();
+      if (query) {
+        const matchesName = row.user.name.toLowerCase().includes(query);
+        const matchesEmail = row.user.email.toLowerCase().includes(query);
+        if (!matchesName && !matchesEmail) return false;
+      }
+
+      if (reportingFilterAssignment) {
+        const assignment = row.enrollment?.status ?? 'none';
+        if (assignment !== reportingFilterAssignment) return false;
+      }
+
+      if (reportingFilterState && reportingProgressStateClass(row) !== reportingFilterState) {
+        return false;
+      }
+
+      return true;
+    }),
+  );
 
   function toLocalDateTimeInput(value: unknown): string {
     if (!value) return '';
@@ -445,6 +475,29 @@
     return row.enrollment.status;
   }
 
+  function assignmentStatusTooltip(row: ReportingRow) {
+    if (!row.enrollment) return undefined;
+
+    const status = row.enrollment.status;
+    const at = row.assignmentStatusAt;
+
+    if (status === 'active') {
+      const date = at?.enrolledAt ?? row.enrollment.enrolledAt;
+      if (!date) return undefined;
+      return t('admin.reportingAssignedAt', $locale).replace('{date}', formatEnrolledAt(date));
+    }
+
+    if (status === 'suspended' && at?.suspendedAt) {
+      return t('admin.reportingSuspendedAt', $locale).replace('{date}', formatEnrolledAt(at.suspendedAt));
+    }
+
+    if (status === 'revoked' && at?.revokedAt) {
+      return t('admin.reportingRevokedAt', $locale).replace('{date}', formatEnrolledAt(at.revokedAt));
+    }
+
+    return undefined;
+  }
+
   function reportingProgressStateLabel(row: ReportingRow) {
     if (row.progress.progressPercent >= 100 || row.enrollment?.status === 'completed') {
       return t('admin.reportingProgressCompleted', $locale);
@@ -808,6 +861,37 @@
           {#if reportingRows.length === 0}
             <p class="cat-tree-empty">{t('admin.reportingEmpty', $locale)}</p>
           {:else}
+            <div class="reporting-filters">
+              <input
+                type="search"
+                class="reporting-filter-input"
+                placeholder={t('admin.reportingFilterName', $locale)}
+                bind:value={reportingFilterQuery}
+              />
+              <label class="reporting-filter-field">
+                <span>{t('admin.reportingFilterAssignment', $locale)}</span>
+                <select class="reporting-filter-select" bind:value={reportingFilterAssignment}>
+                  <option value="">{t('admin.reportingFilterAll', $locale)}</option>
+                  <option value="active">{t('admin.enrollmentActive', $locale)}</option>
+                  <option value="suspended">{t('admin.enrollmentSuspended', $locale)}</option>
+                  <option value="revoked">{t('admin.assignmentRemoved', $locale)}</option>
+                  <option value="none">{t('admin.reportingNoEnrollment', $locale)}</option>
+                  <option value="completed">{t('admin.enrollmentCompleted', $locale)}</option>
+                </select>
+              </label>
+              <label class="reporting-filter-field">
+                <span>{t('admin.reportingFilterState', $locale)}</span>
+                <select class="reporting-filter-select" bind:value={reportingFilterState}>
+                  <option value="">{t('admin.reportingFilterAll', $locale)}</option>
+                  <option value="idle">{t('admin.reportingProgressNotStarted', $locale)}</option>
+                  <option value="started">{t('admin.reportingProgressStarted', $locale)}</option>
+                  <option value="completed">{t('admin.reportingProgressCompleted', $locale)}</option>
+                </select>
+              </label>
+            </div>
+            {#if filteredReportingRows.length === 0}
+              <p class="cat-tree-empty">{t('admin.reportingFilterNoResults', $locale)}</p>
+            {:else}
             <div class="users-table-wrap course-edit-table reporting-table-wrap">
               <table class="users-table reporting-table">
                 <colgroup>
@@ -829,14 +913,17 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each reportingRows as row}
+                  {#each filteredReportingRows as row}
                     <tr>
                       <td class="reporting-col-name">
                         {row.user.name}<br />
                         <span class="course-edit-sub">{row.user.email}</span>
                       </td>
                       <td class="reporting-col-assignment">
-                        <span class="users-role-badge enrollment-status--{assignmentStatusClass(row)}">
+                        <span
+                          class="users-role-badge enrollment-status--{assignmentStatusClass(row)}"
+                          title={assignmentStatusTooltip(row)}
+                        >
                           {assignmentStatusLabel(row)}
                         </span>
                       </td>
@@ -907,6 +994,7 @@
                 </tbody>
               </table>
             </div>
+            {/if}
           {/if}
         </div>
       </section>

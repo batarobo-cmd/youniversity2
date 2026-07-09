@@ -14,6 +14,7 @@ import {
   completionRules,
   certificates,
   users,
+  activityEvents,
 } from '../db/schema';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
@@ -454,6 +455,55 @@ courseRoutes.get('/:id/certificates', requireRole('admin', 'instructor'), async 
   return c.json(rows);
 });
 
+const ENROLLMENT_REPORTING_EVENT_TYPES = [
+  'enrollment.created',
+  'enrollment.reactivated',
+  'enrollment.progress_reset',
+  'enrollment.suspended',
+  'enrollment.revoked',
+] as const;
+
+function buildAssignmentStatusTimestamps(
+  events: Array<{ eventType: string; createdAt: Date; payload: unknown }>,
+) {
+  const byUser = new Map<
+    string,
+    { enrolledAt: string | null; suspendedAt: string | null; revokedAt: string | null }
+  >();
+
+  for (const event of events) {
+    const studentId = (event.payload as { studentId?: string } | null)?.studentId;
+    if (!studentId) continue;
+
+    const current = byUser.get(studentId) ?? {
+      enrolledAt: null,
+      suspendedAt: null,
+      revokedAt: null,
+    };
+
+    if (
+      (event.eventType === 'enrollment.created' ||
+        event.eventType === 'enrollment.reactivated' ||
+        event.eventType === 'enrollment.progress_reset') &&
+      !current.enrolledAt
+    ) {
+      current.enrolledAt = event.createdAt.toISOString();
+    }
+
+    if (event.eventType === 'enrollment.suspended' && !current.suspendedAt) {
+      current.suspendedAt = event.createdAt.toISOString();
+    }
+
+    if (event.eventType === 'enrollment.revoked' && !current.revokedAt) {
+      current.revokedAt = event.createdAt.toISOString();
+    }
+
+    byUser.set(studentId, current);
+  }
+
+  return byUser;
+}
+
 courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c) => {
   const courseId = c.req.param('id');
 
@@ -495,6 +545,26 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
   for (const row of certRows) knownUserIds.add(row.userId);
   const userIds = [...knownUserIds];
 
+  const enrollmentActivityRows =
+    userIds.length > 0
+      ? await db
+          .select({
+            eventType: activityEvents.eventType,
+            createdAt: activityEvents.createdAt,
+            payload: activityEvents.payload,
+          })
+          .from(activityEvents)
+          .where(
+            and(
+              eq(activityEvents.courseId, courseId),
+              inArray(activityEvents.eventType, [...ENROLLMENT_REPORTING_EVENT_TYPES]),
+            ),
+          )
+          .orderBy(desc(activityEvents.createdAt))
+      : [];
+
+  const assignmentStatusAtByUser = buildAssignmentStatusTimestamps(enrollmentActivityRows);
+
   const progressRows =
     lessonIds.length > 0 && userIds.length > 0
       ? await db
@@ -527,10 +597,20 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
     const progressPercent = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
     const started = progressPercent > 0;
     const certs = certsByUser.get(userId) ?? [];
+    const assignmentStatusAt = assignmentStatusAtByUser.get(userId) ?? {
+      enrolledAt: null,
+      suspendedAt: null,
+      revokedAt: null,
+    };
+
+    if (!assignmentStatusAt.enrolledAt && enrollment?.enrolledAt) {
+      assignmentStatusAt.enrolledAt = enrollment.enrolledAt.toISOString();
+    }
 
     return {
       user,
       enrollment,
+      assignmentStatusAt,
       progress: {
         totalActivities,
         completedActivities,
