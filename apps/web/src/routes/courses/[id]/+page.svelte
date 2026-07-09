@@ -39,6 +39,10 @@
   let youtubePlayer: any = null;
   let vimeoPlayer: any = null;
 
+  const VIDEO_PROGRESS_SYNC_MS = 1000;
+  const WATCH_COMPLETE_TOLERANCE_S = 0.35;
+  const WATCH_TICK_MS = 250;
+
   const courseId = $derived($page.params.id);
 
   $effect(() => {
@@ -241,9 +245,29 @@
 
   function requiredWatchTarget(config: Record<string, unknown>, duration: number) {
     const explicit = requiredWatchSeconds(config);
-    if (videoCompletionMode(config) === 'min_watch_time') return explicit > 0 ? explicit : 0;
+    if (videoCompletionMode(config) === 'min_watch_time') {
+      if (explicit <= 0) return 0;
+      if (duration > 0) return Math.min(explicit, duration);
+      return explicit;
+    }
     if (isWatchToEndMode(config) && duration > 0) return Math.round(duration);
     return 0;
+  }
+
+  async function watchedSecondsForTarget(config: Record<string, unknown>) {
+    if (videoCompletionMode(config) === 'min_watch_time') {
+      return await getPlayerCurrentTime();
+    }
+    if (currentVideoProvider === 'native') return maxAllowedTime;
+    return trackedWatchSeconds;
+  }
+
+  async function completeWatchLesson(lessonId: string) {
+    if (isLessonComplete(lessonId) || syncingVideoProgress) return;
+    await syncVideoProgress(lessonId, { percentComplete: 100, isComplete: true });
+    clearWatchTicking();
+    trackActivity('lesson.completed', courseId, lessonId);
+    await invalidate('student:course');
   }
 
   function restoreWatchCounterFromProgress(config: Record<string, unknown>, prog?: Record<string, unknown>) {
@@ -261,42 +285,40 @@
     trackedWatchSeconds = 0;
   }
 
-  async function syncWatchState(lessonId: string, config: Record<string, unknown>) {
+  async function syncWatchState(lessonId: string, config: Record<string, unknown>, force = false) {
     const duration = await getPlayerDuration();
     const target = requiredWatchTarget(config, duration);
     if (!target) return;
-    const normalized = Math.max(0, Math.min(trackedWatchSeconds, target));
-    const percentComplete = Math.min(100, Math.round((normalized / target) * 100));
-    await syncVideoProgress(lessonId, {
-      percentComplete,
-      isComplete: percentComplete >= 100,
-    });
-    await invalidate('student:course');
+
+    const watched = await watchedSecondsForTarget(config);
+    if (watched + WATCH_COMPLETE_TOLERANCE_S >= target) {
+      await completeWatchLesson(lessonId);
+      return;
+    }
+
+    const normalized = Math.max(0, Math.min(watched, target));
+    const percentComplete = Math.min(99, Math.round((normalized / target) * 100));
+    const now = Date.now();
+    if (!force && now - lastVideoSyncAt < VIDEO_PROGRESS_SYNC_MS) return;
+    if (syncingVideoProgress) return;
+
+    lastVideoSyncAt = now;
+    await syncVideoProgress(lessonId, { percentComplete, isComplete: false });
   }
 
   function startWatchTicking(lessonId: string, config: Record<string, unknown>) {
     if (!shouldAutoCompleteByWatchTime(config) || watchTickTimer !== null) return;
     watchTickTimer = window.setInterval(async () => {
       const nowPos = await getPlayerCurrentTime();
-      if (!Number.isFinite(nowPos)) return;
-      if (lastObservedPlayerTime === null) {
+      if (Number.isFinite(nowPos)) {
+        if (lastObservedPlayerTime !== null) {
+          const delta = nowPos - lastObservedPlayerTime;
+          if (delta > 0 && delta <= 2.5) trackedWatchSeconds += delta;
+        }
         lastObservedPlayerTime = nowPos;
-        return;
       }
-      const delta = nowPos - lastObservedPlayerTime;
-      lastObservedPlayerTime = nowPos;
-      if (delta > 0 && delta <= 2.5) trackedWatchSeconds += delta;
-
-      const now = Date.now();
-      if (now - lastVideoSyncAt < 5000 || syncingVideoProgress) return;
-      lastVideoSyncAt = now;
       await syncWatchState(lessonId, config);
-      const target = requiredWatchTarget(config, await getPlayerDuration());
-      if (target > 0 && trackedWatchSeconds >= target) {
-        clearWatchTicking();
-        trackActivity('lesson.completed', courseId, lessonId);
-      }
-    }, 1000);
+    }, WATCH_TICK_MS);
   }
 
   async function bindEmbedPlayer(
@@ -318,7 +340,7 @@
           onStateChange: (event: { data: number }) => {
             if (event.data === 1) startWatchTicking(lessonId, config);
             if (event.data === 2 || event.data === 0) clearWatchTicking();
-            if (event.data === 0) void syncWatchState(lessonId, config);
+            if (event.data === 0) void syncWatchState(lessonId, config, true);
           },
         },
       });
@@ -333,7 +355,7 @@
       vimeoPlayer.on('pause', () => clearWatchTicking());
       vimeoPlayer.on('ended', async () => {
         clearWatchTicking();
-        await syncWatchState(lessonId, config);
+        await syncWatchState(lessonId, config, true);
       });
     }
   }
@@ -513,29 +535,9 @@
     const duration = Number(videoElement.duration || 0);
     if (!Number.isFinite(duration) || duration <= 0) return;
     maxAllowedTime = Math.max(maxAllowedTime, videoElement.currentTime);
-    const target = requiredWatchTarget(config, duration);
-    if (target > 0) {
-      const watchedForTarget = isWatchToEndMode(config) ? maxAllowedTime : trackedWatchSeconds;
-      const percentComplete = Math.min(100, Math.max(0, Math.round((watchedForTarget / target) * 100)));
-      const now = Date.now();
-      if (now - lastVideoSyncAt < 5000 || syncingVideoProgress) return;
-      lastVideoSyncAt = now;
-      await syncVideoProgress(lessonId, {
-        percentComplete,
-        isComplete: percentComplete >= 100,
-      });
-      await invalidate('student:course');
-      return;
-    }
-    const percentComplete = Math.min(100, Math.max(0, Math.round((maxAllowedTime / duration) * 100)));
-    const now = Date.now();
-    if (now - lastVideoSyncAt < 5000 || syncingVideoProgress) return;
-    lastVideoSyncAt = now;
-    await syncVideoProgress(lessonId, {
-      percentComplete,
-      isComplete: isWatchToEndMode(config) && percentComplete >= 100,
-    });
-    await invalidate('student:course');
+
+    if (!shouldAutoCompleteByWatchTime(config)) return;
+    await syncWatchState(lessonId, config);
   }
 
   function handleVideoSeeking(config: Record<string, unknown>) {
@@ -552,8 +554,13 @@
     maxAllowedTime = Math.max(maxAllowedTime, target);
   }
 
-  async function handleVideoEnded(lessonId: string) {
+  async function handleVideoEnded(lessonId: string, config: Record<string, unknown>) {
     maxAllowedTime = Number(videoElement?.duration ?? maxAllowedTime);
+    clearWatchTicking();
+    if (videoCompletionMode(config) === 'min_watch_time') {
+      await syncWatchState(lessonId, config, true);
+      return;
+    }
     await syncVideoProgress(lessonId, { percentComplete: 100, isComplete: true });
     trackActivity('lesson.completed', courseId, lessonId);
     await invalidate('student:course');
@@ -710,7 +717,7 @@
                     handleVideoTimeUpdate(activeLesson.id as string, config);
                   }}
                   onseeking={() => handleVideoSeeking(config)}
-                  onended={() => handleVideoEnded(activeLesson.id as string)}
+                  onended={() => handleVideoEnded(activeLesson.id as string, config)}
                 >
                   <track kind="captions" />
                 </video>

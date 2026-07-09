@@ -316,6 +316,36 @@ input:disabled {
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
+/* Progress bars (shared across dashboard, courses, admin) */
+.progress-bar-wrap {
+  margin-top: 0.75rem;
+}
+
+.progress-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  color: var(--color-muted);
+  margin-bottom: 0.375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.progress-bar {
+  height: 4px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  min-width: 0;
+  background: var(--gradient-brand);
+  border-radius: var(--radius-full);
+  transition: width 0.6s var(--ease-out);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
