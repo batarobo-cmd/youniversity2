@@ -2,6 +2,7 @@
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import StudentCourseCard from './StudentCourseCard.svelte';
+  import StudentCompletedCourseTile from './StudentCompletedCourseTile.svelte';
   import CalendarWidget from './CalendarWidget.svelte';
   import '$lib/styles/dashboard.css';
 
@@ -11,13 +12,24 @@
 
   let { data }: Props = $props();
 
+  type CertificateItem = {
+    id: string;
+    certificateNumber: string;
+    issuedAt: string;
+  };
+
   const stats = $derived(data.stats as Record<string, number>);
   const activeCourses = $derived((data.activeCourses as Array<Record<string, unknown>>) ?? []);
   const completedThisYear = $derived((data.completedThisYear as Array<Record<string, unknown>>) ?? []);
   const currentYear = $derived((data.currentYear as number) ?? new Date().getFullYear());
   const calendarEvents = $derived((data.calendarEvents as Array<Record<string, unknown>>) ?? []);
   const upcomingDeadlines = $derived((data.upcomingDeadlines as Array<Record<string, unknown>>) ?? []);
-  const recentActivity = $derived((data.recentActivity as Array<Record<string, unknown>>) ?? []);
+
+  let certHistoryModal = $state<{ courseTitle: string; certificates: CertificateItem[] } | null>(null);
+
+  function openCertHistory(courseTitle: string, certificates: CertificateItem[]) {
+    certHistoryModal = { courseTitle, certificates };
+  }
 </script>
 
 <div class="dashboard-welcome">
@@ -71,9 +83,9 @@
         {#if completedThisYear.length === 0}
           <div class="empty-state">{t('dash.noCompletedThisYear', $locale).replace('{year}', String(currentYear))}</div>
         {:else}
-          <div class="student-courses-list">
+          <div class="completed-courses-grid">
             {#each completedThisYear as course (course.id)}
-              <StudentCourseCard {course} variant="past" />
+              <StudentCompletedCourseTile {course} onOpenHistory={openCertHistory} />
             {/each}
           </div>
         {/if}
@@ -109,23 +121,32 @@
         </div>
       </section>
     {/if}
-
-    <section class="panel">
-      <div class="panel-header">
-        <h2>{t('dash.recentActivity', $locale)}</h2>
-      </div>
-      <div class="panel-body">
-        {#if recentActivity.length === 0}
-          <div class="empty-state">{t('dash.noActivity', $locale)}</div>
-        {:else}
-          {#each recentActivity as act}
-            <div class="activity-item">
-              <span class="activity-time">{new Date(act.createdAt as string).toLocaleTimeString()}</span>
-              <span>{act.eventType as string}</span>
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </section>
   </div>
 </div>
+
+{#if certHistoryModal}
+  <div class="dash-cert-modal-overlay" role="presentation" onclick={() => (certHistoryModal = null)}>
+    <div
+      class="dash-cert-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('dash.certificateHistory', $locale)}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <div class="dash-cert-modal-head">
+        <h3>{t('dash.certificateHistory', $locale)} — {certHistoryModal.courseTitle}</h3>
+        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>
+          {t('admin.cancel', $locale)}
+        </button>
+      </div>
+      <div class="dash-cert-modal-list">
+        {#each certHistoryModal.certificates as cert}
+          <div class="dash-cert-modal-row">
+            <span>#{cert.certificateNumber}</span>
+            <span>{new Date(cert.issuedAt).toLocaleDateString($locale)}</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}

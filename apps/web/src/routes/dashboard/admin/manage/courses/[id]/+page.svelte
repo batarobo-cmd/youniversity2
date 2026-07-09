@@ -8,6 +8,7 @@
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
   import { moduleActivities, normalizeActivityType, isEvaluableActivity } from '$lib/activity-types';
+  import { splitCertificatesByAttempt } from '$lib/certificate-attempts';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
@@ -85,7 +86,29 @@
   let reportingFilterQuery = $state('');
   let reportingFilterAssignment = $state('');
   let reportingFilterState = $state('');
-  let certHistoryModal = $state<{ userName: string; completions: ReportingRow['completions'] } | null>(null);
+  let certHistoryModal = $state<{
+    userName: string;
+    userId: string;
+    completions: ReportingRow['completions'];
+  } | null>(null);
+  let completionRulesSynced = $state(false);
+
+  const sortedIssuedCerts = $derived(
+    [...issuedCerts].sort(
+      (a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime(),
+    ),
+  );
+
+  function formatCertificateIssuedAt(iso: string) {
+    return new Date(iso).toLocaleString($locale, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }
+
+  function formatCertificateDate(iso: string) {
+    return new Date(iso).toLocaleDateString($locale, { dateStyle: 'medium' });
+  }
 
   const filteredReportingRows = $derived(
     reportingRows.filter((row) => {
@@ -152,7 +175,7 @@
     publishStartsAt = toLocalDateTimeInput(c.startsAt);
     publishEndsAt = toLocalDateTimeInput(c.endsAt);
     publicationMode = publishStartsAt || publishEndsAt ? 'schedule' : 'manual';
-    parseRules((c.completionRules as CompletionRule[]) ?? []);
+    parseRules((c.completionRules as CompletionRule[]) ?? [], certs.length > 0);
     syncMandatoryFromCourse(c);
     enrollments = enr;
     issuedCerts = certs;
@@ -167,9 +190,51 @@
       data.certificates as CertRow[],
       data.reporting as ReportingRow[],
     );
+    void ensureCompletionRulesPersisted(data.course as Record<string, unknown> | null);
   });
 
-  function parseRules(rules: CompletionRule[]) {
+  function hasPersistedCertificateRule(rules: CompletionRule[]) {
+    return rules.some(
+      (rule) =>
+        (rule.config as { certificate?: { enabled?: boolean } })?.certificate?.enabled === true,
+    );
+  }
+
+  async function writeCompletionRules(
+    certificate?: { enabled: boolean; titleTemplate: string },
+    rules?: CompletionRule[],
+  ) {
+    const baseRules =
+      rules ??
+      evalRules.filter((r) => !(r.config as { certificate?: unknown })?.certificate);
+    await serverMutate('apiMutation', `/api/courses/${courseId}/completion-rules`, 'PUT', {
+      rules: baseRules.length
+        ? baseRules
+        : [{ type: 'all_lessons_complete', config: {}, isRequired: true }],
+      certificate,
+    });
+  }
+
+  async function ensureCompletionRulesPersisted(loadedCourse: Record<string, unknown> | null) {
+    if (!loadedCourse || completionRulesSynced || saving) return;
+
+    const loadedRules = (loadedCourse.completionRules as CompletionRule[]) ?? [];
+    const shouldEnableCert = certEnabled || issuedCerts.length > 0;
+    if (!shouldEnableCert || hasPersistedCertificateRule(loadedRules)) return;
+
+    completionRulesSynced = true;
+    try {
+      await writeCompletionRules({
+        enabled: true,
+        titleTemplate: certTitle.trim() || title,
+      });
+      await refreshCourse();
+    } catch {
+      completionRulesSynced = false;
+    }
+  }
+
+  function parseRules(rules: CompletionRule[], hasIssuedCerts = false) {
     const evalOnly = rules.filter((r) => !(r.config as { certificate?: unknown })?.certificate);
     const certRule = rules.find((r) => (r.config as { certificate?: unknown })?.certificate) as
       | CompletionRule
@@ -179,7 +244,7 @@
       : [{ type: 'all_lessons_complete', config: {}, isRequired: true }];
     const cert = (certRule?.config as { certificate?: { enabled?: boolean; titleTemplate?: string } })
       ?.certificate;
-    certEnabled = cert?.enabled ?? false;
+    certEnabled = cert?.enabled ?? hasIssuedCerts;
     certTitle = cert?.titleTemplate ?? '';
   }
 
@@ -292,11 +357,13 @@
         }
       }
 
-      const rules: CompletionRule[] = [{ type: 'all_lessons_complete', config: {}, isRequired: true }];
-      await serverMutate('apiMutation', `/api/courses/${courseId}/completion-rules`, 'PUT', {
-        rules,
-        certificate: certEnabled ? { enabled: true, titleTemplate: certTitle.trim() } : undefined,
-      });
+      const keepCertificates = certEnabled || issuedCerts.length > 0;
+      await writeCompletionRules(
+        keepCertificates
+          ? { enabled: true, titleTemplate: certTitle.trim() || title }
+          : undefined,
+        [{ type: 'all_lessons_complete', config: {}, isRequired: true }],
+      );
       message = t('admin.saved', $locale);
       await refreshCourse();
     } catch (e) {
@@ -312,14 +379,11 @@
     message = '';
     error = '';
     try {
-      const rules = evalRules.filter((r) => !(r.config as { certificate?: unknown })?.certificate);
-      await serverMutate('apiMutation', `/api/courses/${courseId}/completion-rules`, 'PUT', {
-        rules: rules.length ? rules : [{ type: 'all_lessons_complete', config: {}, isRequired: true }],
-        certificate: {
-          enabled: certEnabled,
-          titleTemplate: certTitle.trim() || title,
-        },
-      });
+      await writeCompletionRules(
+        certEnabled
+          ? { enabled: true, titleTemplate: certTitle.trim() || title }
+          : undefined,
+      );
       message = t('admin.saved', $locale);
       await refreshCourse();
     } catch (e) {
@@ -516,19 +580,16 @@
     return 'idle';
   }
 
-  function isCurrentAttemptCompleted(row: ReportingRow) {
-    return row.enrollment?.status === 'completed' && row.progress.progressPercent >= 100;
+  function certificateSplit(row: ReportingRow) {
+    return splitCertificatesByAttempt(row.completions, row.enrollment?.enrolledAt);
   }
 
   function currentAttemptCertificate(row: ReportingRow) {
-    if (!isCurrentAttemptCompleted(row) || row.completions.length === 0) return null;
-    return row.completions[0];
+    return certificateSplit(row).current;
   }
 
   function historicalCertificates(row: ReportingRow) {
-    if (row.completions.length === 0) return [];
-    if (isCurrentAttemptCompleted(row)) return row.completions.slice(1);
-    return row.completions;
+    return certificateSplit(row).historical;
   }
 
   async function resetStudentProgress(userId: string) {
@@ -549,8 +610,39 @@
   function openCertHistory(row: ReportingRow) {
     certHistoryModal = {
       userName: row.user.name,
+      userId: row.user.id,
       completions: historicalCertificates(row),
     };
+  }
+
+  async function deleteCertificate(userId: string, certificateId: string, certificateNumber: string) {
+    const confirmMsg = t('admin.deleteCertificateConfirm', $locale).replace(
+      '{number}',
+      certificateNumber,
+    );
+    if (!confirm(confirmMsg)) return;
+    saving = true;
+    error = '';
+    try {
+      await serverMutate(
+        'apiMutation',
+        `/api/courses/${courseId}/reporting/${userId}/certificates/${certificateId}`,
+        'DELETE',
+      );
+      message = t('admin.saved', $locale);
+      if (certHistoryModal?.userId === userId) {
+        const remaining = certHistoryModal.completions.filter((cert) => cert.id !== certificateId);
+        certHistoryModal =
+          remaining.length > 0
+            ? { ...certHistoryModal, completions: remaining }
+            : null;
+      }
+      await refreshCourse();
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
@@ -593,8 +685,8 @@
       <span class="course-edit-tabs-divider" aria-hidden="true"></span>
       <div class="course-edit-tabs-secondary">
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'settings'} onclick={() => (activeTab = 'settings')}>{t('admin.tabSettings', $locale)}</button>
-        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'evaluation'} onclick={() => (activeTab = 'evaluation')}>{t('admin.tabEvaluation', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'students'} onclick={() => (activeTab = 'students')}>{t('admin.tabStudents', $locale)}</button>
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'evaluation'} onclick={() => (activeTab = 'evaluation')}>{t('admin.tabEvaluation', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'certificate'} onclick={() => (activeTab = 'certificate')}>{t('admin.tabCertificate', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'reporting'} onclick={() => (activeTab = 'reporting')}>{t('admin.tabReporting', $locale)}</button>
       </div>
@@ -840,11 +932,11 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each issuedCerts as cert}
+                  {#each sortedIssuedCerts as cert}
                     <tr>
                       <td>{cert.certificateNumber}</td>
                       <td>{cert.userName}<br /><span class="course-edit-sub">{cert.userEmail}</span></td>
-                      <td>{new Date(cert.issuedAt).toLocaleDateString($locale)}</td>
+                      <td>{formatCertificateIssuedAt(cert.issuedAt)}</td>
                     </tr>
                   {/each}
                 </tbody>
@@ -952,9 +1044,24 @@
                         <div class="reporting-cert-list">
                           <div class="reporting-cert-inline">
                             {#if currentAttemptCertificate(row)}
+                              {@const currentCert = currentAttemptCertificate(row)!}
                               <span class="reporting-cert-current">
-                                #{currentAttemptCertificate(row)?.certificateNumber} · {new Date(currentAttemptCertificate(row)?.issuedAt as string).toLocaleDateString($locale)}
+                                #{currentCert.certificateNumber} · {formatCertificateDate(currentCert.issuedAt)}
                               </span>
+                              <button
+                                type="button"
+                                class="reporting-cert-delete-btn"
+                                title={t('admin.deleteCertificate', $locale)}
+                                aria-label={t('admin.deleteCertificate', $locale)}
+                                disabled={saving}
+                                onclick={() =>
+                                  deleteCertificate(row.user.id, currentCert.id, currentCert.certificateNumber)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                  <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                                  <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+                                </svg>
+                              </button>
                             {:else}
                               <span class="course-edit-sub reporting-cert-empty">—</span>
                             {/if}
@@ -1012,7 +1119,25 @@
         {#each certHistoryModal.completions as completion}
           <div class="reporting-modal-row">
             <span>#{completion.certificateNumber}</span>
-            <span>{new Date(completion.issuedAt).toLocaleDateString($locale)}</span>
+            <span>{formatCertificateDate(completion.issuedAt)}</span>
+            <button
+              type="button"
+              class="reporting-cert-delete-btn"
+              title={t('admin.deleteCertificate', $locale)}
+              aria-label={t('admin.deleteCertificate', $locale)}
+              disabled={saving}
+              onclick={() =>
+                deleteCertificate(
+                  certHistoryModal!.userId,
+                  completion.id,
+                  completion.certificateNumber,
+                )}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+              </svg>
+            </button>
           </div>
         {/each}
       </div>

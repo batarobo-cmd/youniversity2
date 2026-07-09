@@ -450,7 +450,7 @@ courseRoutes.get('/:id/certificates', requireRole('admin', 'instructor'), async 
     .from(certificates)
     .innerJoin(users, eq(certificates.userId, users.id))
     .where(eq(certificates.courseId, courseId))
-    .orderBy(certificates.issuedAt);
+    .orderBy(desc(certificates.issuedAt));
 
   return c.json(rows);
 });
@@ -709,6 +709,51 @@ courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin', 
     resetLessonCount: lessonIds.length,
   });
 });
+
+courseRoutes.delete(
+  '/:id/reporting/:userId/certificates/:certificateId',
+  requireRole('admin', 'instructor'),
+  async (c) => {
+    const actor = c.get('user') as AuthUser;
+    const courseId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const certificateId = c.req.param('certificateId');
+
+    const [certificate] = await db
+      .select()
+      .from(certificates)
+      .where(eq(certificates.id, certificateId))
+      .limit(1);
+
+    if (!certificate || certificate.userId !== userId || certificate.courseId !== courseId) {
+      return c.json({ error: 'Certificate not found' }, 404);
+    }
+
+    await db.delete(certificates).where(eq(certificates.id, certificateId));
+
+    const [student] = await db
+      .select({ name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const courseTitle = await getCourseTitle(courseId);
+    void recordUserActivity(actor.id, 'certificate.deleted', {
+      courseId,
+      payload: {
+        studentId: userId,
+        studentName: student?.name,
+        studentEmail: student?.email,
+        courseTitle,
+        courseId,
+        certificateNumber: certificate.certificateNumber,
+        certificateId,
+      },
+    });
+
+    return c.json({ ok: true });
+  },
+);
 
 courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), async (c) => {
   const courseId = c.req.param('id');

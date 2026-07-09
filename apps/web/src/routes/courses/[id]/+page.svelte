@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { page } from '$app/stores';
   import { goto, invalidate } from '$app/navigation';
-  import { isAuthenticated, locale, isAdmin } from '$lib/stores/auth';
+  import { isAuthenticated, locale, isAdmin, user } from '$lib/stores/auth';
   import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
@@ -66,6 +67,17 @@
 
     const unsubWs = lastMessage.subscribe((msg) => {
       if (!msg) return;
+      const payload = msg.payload as { userId?: string } | undefined;
+      const selfId = get(user)?.id;
+
+      if (
+        msg.type === WS_EVENTS.COMPLETION_EVALUATED &&
+        selfId &&
+        payload?.userId === selfId
+      ) {
+        return;
+      }
+
       if (
         msg.type === WS_EVENTS.COURSE_UPDATED ||
         msg.type === WS_EVENTS.PROGRESS_UPDATED ||

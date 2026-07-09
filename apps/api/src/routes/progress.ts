@@ -6,7 +6,7 @@ import { lessonProgress, activityEvents, lessons, courseModules, courses } from 
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { evaluateCourseCompletion } from '../services/completion';
 import { broadcastToCourse } from '../realtime/hub';
-import { canStudentViewCourse, canStudentUpdateProgress } from '../services/course-access';
+import { canStudentViewCourse, canStudentUpdateProgress, getStudentEnrollment } from '../services/course-access';
 
 export const progressRoutes = new Hono();
 
@@ -42,7 +42,16 @@ progressRoutes.get('/course/:courseId', async (c) => {
     .from(lessonProgress)
     .where(eq(lessonProgress.userId, user.id));
 
-  return c.json(progress.filter((p) => lessonIds.includes(p.lessonId)));
+  const filtered = progress.filter((p) => lessonIds.includes(p.lessonId));
+
+  if (user.role === 'student') {
+    const enrollment = await getStudentEnrollment(user.id, courseId);
+    if (enrollment && ['active', 'completed'].includes(enrollment.status)) {
+      await evaluateCourseCompletion(user.id, courseId);
+    }
+  }
+
+  return c.json(filtered);
 });
 
 progressRoutes.post('/', async (c) => {

@@ -1,4 +1,4 @@
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, count } from 'drizzle-orm';
 import { db } from '../db';
 import {
   completionRules,
@@ -14,6 +14,45 @@ import {
   isProgressFullyComplete,
 } from './course-completion';
 import { allocateCertificateNumber } from './certificate-number';
+
+async function isCourseCertificateEnabled(
+  courseId: string,
+  rules: Array<{ config: unknown }>,
+): Promise<boolean> {
+  const fromRules = rules.some(
+    (rule) => (rule.config as { certificate?: { enabled?: boolean } })?.certificate?.enabled,
+  );
+  if (fromRules) return true;
+
+  const [row] = await db
+    .select({ total: count() })
+    .from(certificates)
+    .where(eq(certificates.courseId, courseId));
+
+  return Number(row?.total ?? 0) > 0;
+}
+
+async function hasCertificateForCurrentAttempt(
+  userId: string,
+  courseId: string,
+  enrolledAt: Date,
+): Promise<boolean> {
+  const rows = await db
+    .select({ issuedAt: certificates.issuedAt })
+    .from(certificates)
+    .where(and(eq(certificates.userId, userId), eq(certificates.courseId, courseId)));
+
+  return rows.some((row) => row.issuedAt >= enrolledAt);
+}
+
+async function issueCourseCertificate(userId: string, courseId: string) {
+  const certNumber = await allocateCertificateNumber();
+  await db.insert(certificates).values({
+    userId,
+    courseId,
+    certificateNumber: certNumber,
+  });
+}
 
 export async function evaluateCourseCompletion(userId: string, courseId: string) {
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
@@ -48,42 +87,62 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
     .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)))
     .limit(1);
 
-  if (!enrollment || ['completed', 'failed', 'suspended', 'revoked'].includes(enrollment.status)) {
+  if (!enrollment || ['suspended', 'revoked'].includes(enrollment.status)) {
     return { passed, enrollment };
   }
 
   if (!passed) return { passed, enrollment };
 
-  const [updated] = await db
-    .update(enrollments)
-    .set({
-      status: 'completed',
-      completedAt: new Date(),
-    })
-    .where(eq(enrollments.id, enrollment.id))
-    .returning();
-
   const rules = await db.select().from(completionRules).where(eq(completionRules.courseId, courseId));
-  const certRule = rules.find(
-    (rule) => (rule.config as { certificate?: { enabled?: boolean } })?.certificate?.enabled,
-  );
-  const certConfig = (certRule?.config as { certificate?: { enabled?: boolean; titleTemplate?: string } })
-    ?.certificate;
+  const certEnabled = await isCourseCertificateEnabled(courseId, rules);
 
-  if (certConfig?.enabled) {
-    const certNumber = await allocateCertificateNumber();
-    await db.insert(certificates).values({
+  let updatedEnrollment = enrollment;
+  let changed = false;
+
+  if (enrollment.status === 'active') {
+    [updatedEnrollment] = await db
+      .update(enrollments)
+      .set({
+        status: 'completed',
+        completedAt: new Date(),
+      })
+      .where(eq(enrollments.id, enrollment.id))
+      .returning();
+
+    changed = true;
+
+    if (certEnabled) {
+      await issueCourseCertificate(userId, courseId);
+    }
+  } else if (enrollment.status === 'completed') {
+    const hasCurrentCert = await hasCertificateForCurrentAttempt(
       userId,
       courseId,
-      certificateNumber: certNumber,
-    });
+      enrollment.enrolledAt,
+    );
+
+    if (certEnabled && !hasCurrentCert) {
+      await issueCourseCertificate(userId, courseId);
+      [updatedEnrollment] = await db
+        .update(enrollments)
+        .set({ completedAt: new Date() })
+        .where(eq(enrollments.id, enrollment.id))
+        .returning();
+      changed = true;
+    }
+  } else {
+    return { passed, enrollment };
+  }
+
+  if (!changed) {
+    return { passed, enrollment: updatedEnrollment };
   }
 
   const payload = {
     userId,
     courseId,
     status: 'completed' as const,
-    enrollmentId: updated.id,
+    enrollmentId: updatedEnrollment.id,
   };
 
   broadcastToUser(userId, {
@@ -98,5 +157,5 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
     timestamp: new Date().toISOString(),
   });
 
-  return { passed, enrollment: updated };
+  return { passed, enrollment: updatedEnrollment };
 }

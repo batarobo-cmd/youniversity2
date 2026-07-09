@@ -7,6 +7,7 @@ import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { broadcastToCourse, broadcastToUser, broadcastToAdmin } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
+import { clearCourseLessonProgress } from '../services/enrollment-progress';
 
 export const enrollmentRoutes = new Hono();
 
@@ -56,6 +57,10 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
       return c.json({ error: 'Already enrolled', enrollment: prev }, 409);
     }
 
+    if (prev.status === 'revoked') {
+      await clearCourseLessonProgress(body.data.userId, body.data.courseId);
+    }
+
     const [enrollment] = await db
       .update(enrollments)
       .set({
@@ -97,8 +102,20 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
         studentId: body.data.userId,
         courseTitle,
         courseId: body.data.courseId,
+        previousStatus: prev.status,
       },
     });
+
+    if (prev.status === 'revoked') {
+      const progressMessage = {
+        type: WS_EVENTS.PROGRESS_UPDATED,
+        payload: { userId: body.data.userId, courseId: body.data.courseId, reset: true },
+        timestamp: new Date().toISOString(),
+      };
+      broadcastToCourse(body.data.courseId, progressMessage);
+      broadcastToAdmin(progressMessage);
+      broadcastToUser(body.data.userId, progressMessage);
+    }
 
     return c.json(enrollment, 200);
   }

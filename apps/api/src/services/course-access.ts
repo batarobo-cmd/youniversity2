@@ -7,10 +7,12 @@ export function isStaff(user: AuthUser) {
   return user.role === 'admin' || user.role === 'instructor';
 }
 
-const STUDENT_LISTED_STATUSES = new Set(['active', 'completed', 'failed', 'expired']);
+export function canStudentOpenCourse(enrollmentStatus: string | null | undefined): boolean {
+  return enrollmentStatus === 'active' || enrollmentStatus === 'completed';
+}
 
 export function isEnrollmentListedForStudent(status: string): boolean {
-  return STUDENT_LISTED_STATUSES.has(status);
+  return canStudentOpenCourse(status);
 }
 
 export async function getStudentEnrollment(userId: string, courseId: string) {
@@ -38,7 +40,7 @@ export async function canStudentViewCourse(user: AuthUser, courseId: string): Pr
   const enrollment = await getStudentEnrollment(user.id, courseId);
   if (!enrollment) return false;
 
-  return isEnrollmentListedForStudent(enrollment.status);
+  return canStudentOpenCourse(enrollment.status);
 }
 
 export async function canStudentUpdateProgress(user: AuthUser, courseId: string): Promise<boolean> {

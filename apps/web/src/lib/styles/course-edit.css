@@ -358,9 +358,8 @@
 
 .reporting-cert-current {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .reporting-cert-empty {
@@ -471,6 +470,7 @@
 
 .reporting-modal-row {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.5rem 0.625rem;
@@ -478,6 +478,36 @@
   border-radius: var(--radius-sm);
   background: var(--color-surface-hover);
   font-size: 0.8125rem;
+}
+
+.reporting-cert-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-danger, #b42318);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.reporting-cert-delete-btn svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.reporting-cert-delete-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger, #b42318) 8%, white);
+  border-color: color-mix(in srgb, var(--color-danger, #b42318) 35%, var(--color-border));
+}
+
+.reporting-cert-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .reporting-state--idle {
@@ -580,7 +610,7 @@
 }
 
 .reporting-col-certs {
-  width: 9.75rem;
+  width: 11rem;
 }
 
 .reporting-col-actions {

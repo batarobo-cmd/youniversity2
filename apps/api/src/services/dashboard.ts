@@ -15,6 +15,8 @@ import {
 import type { AuthUser } from '../middleware/auth';
 import { isCourseVisibleToStudents } from './course-visibility';
 import { countsForCourseCompletion, isProgressFullyComplete } from './course-completion';
+import { canStudentOpenCourse } from './course-access';
+import { evaluateCourseCompletion } from './completion';
 
 async function getCourseProgressPercent(userId: string, courseId: string): Promise<number> {
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
@@ -52,9 +54,47 @@ export type StudentCourseView = {
     certificateNumber: string;
     issuedAt: string;
   } | null;
+  certificates: Array<{
+    id: string;
+    certificateNumber: string;
+    issuedAt: string;
+  }>;
+  canOpenCourse: boolean;
 };
 
 type CourseBucket = 'future' | 'active' | 'past';
+
+function hasCourseAchievement(
+  enrollment: { status: string; completedAt: Date | null },
+  certCount: number,
+  progressPercent: number,
+): boolean {
+  return (
+    enrollment.status === 'completed' ||
+    enrollment.completedAt != null ||
+    certCount > 0 ||
+    progressPercent >= 100
+  );
+}
+
+function shouldListEnrollmentForStudent(status: string, hasAchievement: boolean): boolean {
+  if (status === 'revoked') return hasAchievement;
+  return true;
+}
+
+function displayEnrollmentStatus(
+  enrollment: { status: string; completedAt: Date | null },
+  certCount: number,
+  progressPercent: number,
+): string {
+  if (
+    hasCourseAchievement(enrollment, certCount, progressPercent) &&
+    ['revoked', 'suspended'].includes(enrollment.status)
+  ) {
+    return 'completed';
+  }
+  return enrollment.status;
+}
 
 function classifyCourseBucket(
   enrollment: { status: string; enrolledAt: Date; expiresAt: Date | null },
@@ -72,6 +112,30 @@ function classifyCourseBucket(
   return 'active';
 }
 
+function resolveCourseBucket(
+  enrollment: { status: string; enrolledAt: Date; expiresAt: Date | null; completedAt: Date | null },
+  course: { startsAt: Date | null; endsAt: Date | null },
+  now: Date,
+  certCount: number,
+  progressPercent: number,
+): CourseBucket {
+  if (
+    hasCourseAchievement(enrollment, certCount, progressPercent) &&
+    ['revoked', 'suspended'].includes(enrollment.status)
+  ) {
+    return 'past';
+  }
+  return classifyCourseBucket(enrollment, course, now);
+}
+
+function isCourseCompletedForStudent(course: StudentCourseView): boolean {
+  return (
+    course.enrollmentStatus === 'completed' ||
+    course.certificates.length > 0 ||
+    course.progressPercent >= 100
+  );
+}
+
 export async function getStudentCourseOverview(userId: string, locale: string) {
   const now = new Date();
 
@@ -81,7 +145,19 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     .where(eq(enrollments.userId, userId))
     .orderBy(desc(enrollments.enrolledAt));
 
-  if (userEnrollments.length === 0) {
+  for (const enrollment of userEnrollments) {
+    if (['active', 'completed'].includes(enrollment.status)) {
+      await evaluateCourseCompletion(userId, enrollment.courseId);
+    }
+  }
+
+  const userCerts = await db
+    .select()
+    .from(certificates)
+    .where(eq(certificates.userId, userId))
+    .orderBy(desc(certificates.issuedAt));
+
+  if (userEnrollments.length === 0 && userCerts.length === 0) {
     return {
       futureCourses: [] as StudentCourseView[],
       activeCourses: [] as StudentCourseView[],
@@ -90,15 +166,22 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     };
   }
 
-  const courseIds = userEnrollments.map((e) => e.courseId);
+  const certsByCourse = new Map<string, typeof userCerts>();
+  for (const cert of userCerts) {
+    const list = certsByCourse.get(cert.courseId) ?? [];
+    list.push(cert);
+    certsByCourse.set(cert.courseId, list);
+  }
+
+  const courseIds = [
+    ...new Set([...userEnrollments.map((e) => e.courseId), ...userCerts.map((c) => c.courseId)]),
+  ];
   const courseRows = await db.select().from(courses).where(inArray(courses.id, courseIds));
   const translations = await db
     .select()
     .from(courseTranslations)
     .where(and(inArray(courseTranslations.courseId, courseIds), eq(courseTranslations.locale, locale)));
 
-  const userCerts = await db.select().from(certificates).where(eq(certificates.userId, userId));
-  const certMap = new Map(userCerts.map((c) => [c.courseId, c]));
   const translationMap = new Map(translations.map((t) => [t.courseId, t]));
   const courseMap = new Map(courseRows.map((c) => [c.id, c]));
 
@@ -110,52 +193,122 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
   let activeCount = 0;
   let completedCount = 0;
 
-  for (const enrollment of userEnrollments) {
-    if (['suspended', 'revoked'].includes(enrollment.status)) continue;
+  const buildCourseView = async (
+    courseId: string,
+    enrollment: (typeof userEnrollments)[number] | null,
+  ): Promise<StudentCourseView | null> => {
+    const course = courseMap.get(courseId);
+    if (!course || !isCourseVisibleToStudents(course, now)) return null;
 
-    const course = courseMap.get(enrollment.courseId);
-    if (!course || !isCourseVisibleToStudents(course, now)) continue;
-
-    const translation = translationMap.get(enrollment.courseId);
+    const translation = translationMap.get(courseId);
     const title = translation?.title ?? course.slug;
     const progressPercent =
-      enrollment.status === 'completed'
+      enrollment?.status === 'completed'
         ? 100
-        : await getCourseProgressPercent(userId, enrollment.courseId);
-    const startDate = course.startsAt ?? enrollment.enrolledAt;
-    const endDate = course.endsAt ?? enrollment.expiresAt;
-    const cert = certMap.get(enrollment.courseId);
+        : await getCourseProgressPercent(userId, courseId);
+    const isOngoingEnrollment = enrollment?.status === 'active';
+    const startDate = course.startsAt ?? enrollment?.enrolledAt ?? null;
+    const endDate = course.endsAt ?? enrollment?.expiresAt ?? null;
+    const courseCerts = certsByCourse.get(courseId) ?? [];
+    const certItems = courseCerts.map((cert) => ({
+      id: cert.id,
+      certificateNumber: cert.certificateNumber,
+      issuedAt: cert.issuedAt.toISOString(),
+    }));
+    const enrollmentLike = enrollment ?? {
+      status: 'revoked' as const,
+      completedAt: null,
+      enrolledAt: courseCerts[0]?.issuedAt ?? now,
+      expiresAt: null,
+    };
+    const hasAchievement = hasCourseAchievement(enrollmentLike, certItems.length, progressPercent);
 
-    const item: StudentCourseView = {
+    if (enrollment && !shouldListEnrollmentForStudent(enrollment.status, hasAchievement)) {
+      return null;
+    }
+
+    const displayProgressPercent = isOngoingEnrollment
+      ? progressPercent
+      : hasAchievement
+        ? Math.max(progressPercent, 100)
+        : progressPercent;
+    const visibleCerts = isOngoingEnrollment ? [] : certItems;
+    const enrolledAtMs = enrollment?.enrolledAt?.getTime() ?? 0;
+    const currentAttemptCert = certItems
+      .filter((cert) => new Date(cert.issuedAt).getTime() >= enrolledAtMs)
+      .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime())[0];
+
+    const completedAt =
+      enrollment?.completedAt?.toISOString() ??
+      currentAttemptCert?.issuedAt ??
+      certItems[0]?.issuedAt ??
+      undefined;
+
+    return {
       id: course.id,
       slug: course.slug,
       title,
       description: translation?.description ?? '',
-      progressPercent,
-      enrolledAt: enrollment.enrolledAt.toISOString(),
-      expiresAt: enrollment.expiresAt?.toISOString(),
+      progressPercent: displayProgressPercent,
+      enrolledAt: (enrollment?.enrolledAt ?? courseCerts[0]?.issuedAt ?? now).toISOString(),
+      expiresAt: enrollment?.expiresAt?.toISOString(),
       startsAt: startDate?.toISOString(),
       endsAt: endDate?.toISOString(),
-      completedAt: enrollment.completedAt?.toISOString(),
-      enrollmentStatus: enrollment.status,
-      certificate: cert
-        ? {
-            id: cert.id,
-            certificateNumber: cert.certificateNumber,
-            issuedAt: cert.issuedAt.toISOString(),
-          }
-        : null,
+      completedAt,
+      enrollmentStatus: enrollment
+        ? isOngoingEnrollment
+          ? enrollment.status
+          : displayEnrollmentStatus(enrollment, certItems.length, progressPercent)
+        : 'completed',
+      certificates: visibleCerts,
+      certificate: visibleCerts[0] ?? null,
+      canOpenCourse: enrollment ? canStudentOpenCourse(enrollment.status) : false,
     };
+  };
 
-    const bucket = classifyCourseBucket(enrollment, course, now);
+  for (const enrollment of userEnrollments) {
+    const item = await buildCourseView(enrollment.courseId, enrollment);
+    if (!item) continue;
+
+    const courseCerts = certsByCourse.get(enrollment.courseId) ?? [];
+    const rawProgressPercent =
+      enrollment.status === 'completed'
+        ? 100
+        : await getCourseProgressPercent(userId, enrollment.courseId);
+    const hasAchievement = hasCourseAchievement(enrollment, courseCerts.length, rawProgressPercent);
+    const bucket = resolveCourseBucket(
+      enrollment,
+      courseMap.get(enrollment.courseId)!,
+      now,
+      courseCerts.length,
+      rawProgressPercent,
+    );
+
     if (bucket === 'future') futureCourses.push(item);
     else if (bucket === 'active') {
       activeCourses.push(item);
       activeCount++;
-      totalProgress += progressPercent;
+      totalProgress += item.progressPercent;
     } else pastCourses.push(item);
 
-    if (enrollment.status === 'completed') completedCount++;
+    if (
+      enrollment.status === 'completed' ||
+      (['revoked', 'suspended'].includes(enrollment.status) && hasAchievement)
+    ) {
+      completedCount++;
+    }
+  }
+
+  const listedCourseIds = new Set(
+    [...futureCourses, ...activeCourses, ...pastCourses].map((course) => course.id),
+  );
+
+  for (const courseId of certsByCourse.keys()) {
+    if (listedCourseIds.has(courseId)) continue;
+    const item = await buildCourseView(courseId, null);
+    if (!item) continue;
+    pastCourses.push(item);
+    completedCount++;
   }
 
   return {
@@ -176,17 +329,11 @@ export async function getStudentDashboard(userId: string, locale: string) {
   const currentYear = new Date().getFullYear();
 
   const completedThisYear = overview.pastCourses.filter((course) => {
-    if (course.enrollmentStatus !== 'completed') return false;
-    const doneAt = course.completedAt ?? course.certificate?.issuedAt;
+    if (!isCourseCompletedForStudent(course)) return false;
+    const doneAt = course.completedAt ?? course.certificates[0]?.issuedAt ?? course.certificate?.issuedAt;
     if (!doneAt) return false;
     return new Date(doneAt).getFullYear() === currentYear;
   });
-
-  const courseIds = [
-    ...overview.activeCourses,
-    ...overview.futureCourses,
-    ...overview.pastCourses,
-  ].map((c) => c.id);
 
   const calendarEvents: Array<{
     id: string;
@@ -238,16 +385,6 @@ export async function getStudentDashboard(userId: string, locale: string) {
 
   upcomingDeadlines.sort((a, b) => a.daysLeft - b.daysLeft);
 
-  const recentActivity =
-    courseIds.length > 0
-      ? await db
-          .select()
-          .from(activityEvents)
-          .where(eq(activityEvents.userId, userId))
-          .orderBy(desc(activityEvents.createdAt))
-          .limit(8)
-      : [];
-
   return {
     stats: overview.stats,
     activeCourses: overview.activeCourses,
@@ -255,12 +392,6 @@ export async function getStudentDashboard(userId: string, locale: string) {
     currentYear,
     calendarEvents,
     upcomingDeadlines,
-    recentActivity: recentActivity.map((a) => ({
-      id: a.id,
-      eventType: a.eventType,
-      courseId: a.courseId,
-      createdAt: a.createdAt.toISOString(),
-    })),
   };
 }
 

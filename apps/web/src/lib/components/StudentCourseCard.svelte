@@ -13,6 +13,7 @@
     completedAt?: string;
     certificate?: { certificateNumber: string; issuedAt: string } | null;
     enrollmentStatus?: string;
+    canOpenCourse?: boolean;
   };
 
   let {
@@ -23,19 +24,34 @@
     variant?: 'active' | 'future' | 'past';
   } = $props();
 
+  const canOpen = $derived(course.canOpenCourse === true);
+
   function formatDate(iso?: string) {
     if (!iso) return '';
     return new Date(iso).toLocaleDateString($locale, { dateStyle: 'medium' });
   }
 </script>
 
-<article class="course-card" class:course-card--future={variant === 'future'} class:course-card--past={variant === 'past'}>
+<article
+  class="course-card"
+  class:course-card--future={variant === 'future'}
+  class:course-card--past={variant === 'past'}
+  class:course-card--locked={!canOpen}
+>
   <div class="course-card-info">
-    <h3><a href="/courses/{course.id}">{course.title}</a></h3>
+    <h3>
+      {#if canOpen}
+        <a href="/courses/{course.id}">{course.title}</a>
+      {:else}
+        <span>{course.title}</span>
+      {/if}
+    </h3>
     {#if course.enrollmentStatus === 'completed'}
       <span class="status-chip status-chip--done">{t('courses.statusCompleted', $locale)}</span>
     {:else if course.enrollmentStatus === 'active'}
       <span class="status-chip">{t('courses.statusActive', $locale)}</span>
+    {:else if course.enrollmentStatus === 'suspended'}
+      <span class="status-chip status-chip--suspended">{t('admin.enrollmentSuspended', $locale)}</span>
     {/if}
     {#if course.description}
       <p>{course.description}</p>
@@ -51,16 +67,22 @@
           <span>{t('course.progress', $locale)}</span>
           <span>{course.progressPercent}%</span>
         </div>
-        <div class="progress-bar">
+        <div class="progress-bar" class:progress-bar--frozen={!canOpen}>
           <div class="progress-bar-fill" style="width: {course.progressPercent}%"></div>
         </div>
       </div>
     {/if}
 
     {#if course.certificate}
-      <span class="cert-badge">🏆 {course.certificate.certificateNumber}</span>
+      <span class="cert-badge">🏆 #{course.certificate.certificateNumber}</span>
       <span class="course-card-meta">{formatDate(course.certificate.issuedAt)}</span>
     {/if}
+
+    {#if !canOpen}
+      <span class="course-card-meta course-card-access-closed">{t('courses.accessClosed', $locale)}</span>
+    {/if}
   </div>
-  <a href="/courses/{course.id}" class="btn btn-sm course-card-action">{t('courses.open', $locale)} →</a>
+  {#if canOpen}
+    <a href="/courses/{course.id}" class="btn btn-sm course-card-action">{t('courses.open', $locale)} →</a>
+  {/if}
 </article>
