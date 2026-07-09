@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import {
     isAuthenticated,
     isPlatformAdmin,
     user as currentUser,
     locale,
   } from '$lib/stores/auth';
-  import { api } from '$lib/api';
   import { t } from '$lib/i18n';
+  import { submitAction } from '$lib/client/form-action';
   import { USER_ROLES, SUPPORTED_LOCALES, type UserRole } from '@youniversity2/shared';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
   import UserLogsModal from '$lib/components/UserLogsModal.svelte';
@@ -90,7 +90,7 @@
 
   $effect(() => {
     users = data.users as ManagedUser[];
-    error = data.loadError ?? '';
+    if (data.loadError) error = data.loadError;
   });
 
   onMount(() => {
@@ -106,16 +106,24 @@
     };
   });
 
-  async function loadUsers() {
+  async function refreshUsers() {
     loading = true;
-    error = '';
     try {
-      users = (await api.getUsers()) as ManagedUser[];
-    } catch (e) {
-      error = (e as Error).message;
+      await invalidateAll();
     } finally {
       loading = false;
     }
+  }
+
+  async function runMutation(action: string, fields: Record<string, string | null | undefined>) {
+    const result = await submitAction(action, fields);
+    if (result.type === 'failure') {
+      error = String(result.data?.error ?? 'Chyba');
+      return false;
+    }
+    message = t('admin.saved', $locale);
+    await refreshUsers();
+    return true;
   }
 
   function roleLabel(role: UserRole) {
@@ -200,26 +208,30 @@
           country: formCountry.trim() || null,
         };
         if (formPassword.trim()) payload.password = formPassword;
-        await api.updateUser(editing.id, payload);
+        const ok = await runMutation('saveUser', {
+          mode: 'update',
+          id: editing.id,
+          payload: JSON.stringify(payload),
+        });
+        if (ok) closeModal();
       } else {
         if (!formPassword.trim()) {
           error = t('auth.password', $locale) + '?';
           saving = false;
           return;
         }
-        await api.createUser({
-          name: formName.trim(),
-          email: formEmail.trim(),
-          password: formPassword,
-          role: formRole,
-          preferredLocale: formLocale,
+        const ok = await runMutation('saveUser', {
+          mode: 'create',
+          payload: JSON.stringify({
+            name: formName.trim(),
+            email: formEmail.trim(),
+            password: formPassword,
+            role: formRole,
+            preferredLocale: formLocale,
+          }),
         });
+        if (ok) closeModal();
       }
-      message = t('admin.saved', $locale);
-      closeModal();
-      await loadUsers();
-    } catch (e) {
-      error = (e as Error).message;
     } finally {
       saving = false;
     }
@@ -239,13 +251,7 @@
     if (!confirm(t('admin.usersDeleteConfirm', $locale))) return;
     error = '';
     message = '';
-    try {
-      await api.deleteUser(u.id);
-      message = t('admin.saved', $locale);
-      await loadUsers();
-    } catch (e) {
-      error = (e as Error).message;
-    }
+    await runMutation('deleteUser', { id: u.id });
   }
 
   async function toggleSuspend(u: ManagedUser) {
@@ -254,13 +260,11 @@
     if (!confirm(t(confirmKey, $locale))) return;
     error = '';
     message = '';
-    try {
-      await api.updateUser(u.id, { isSuspended: willSuspend });
-      message = t('admin.saved', $locale);
-      await loadUsers();
-    } catch (e) {
-      error = (e as Error).message;
-    }
+    await runMutation('saveUser', {
+      mode: 'update',
+      id: u.id,
+      payload: JSON.stringify({ isSuspended: willSuspend }),
+    });
   }
 
   function formatDate(iso: string) {

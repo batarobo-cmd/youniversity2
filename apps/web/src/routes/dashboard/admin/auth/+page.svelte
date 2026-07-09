@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import { isAuthenticated, isPlatformAdmin, locale } from '$lib/stores/auth';
-  import { api } from '$lib/api';
+  import { submitAction } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
@@ -103,21 +103,9 @@
   }
 
   $effect(() => {
-    error = data.loadError ?? '';
+    if (data.loadError) error = data.loadError;
     applySettings(data.authSettings as Record<string, unknown> | null);
   });
-
-  async function loadSettings() {
-    loading = true;
-    error = '';
-    try {
-      applySettings((await api.getAdminAuthSettings()) as Record<string, unknown>);
-    } catch (e) {
-      error = (e as Error).message;
-    } finally {
-      loading = false;
-    }
-  }
 
   async function saveSettings(e: Event) {
     e.preventDefault();
@@ -125,26 +113,30 @@
     error = '';
     message = '';
     try {
-      await api.updateAdminAuthSettings({
-        manualRegistrationEnabled,
-        allowedLoginDomains: textToDomains(loginDomainsText),
-        allowedRegistrationDomains: textToDomains(registerDomainsText),
-        google: {
-          enabled: google.enabled,
-          clientId: google.clientId.trim(),
-          clientSecret: google.clientSecret,
-        },
-        microsoft: {
-          enabled: microsoft.enabled,
-          clientId: microsoft.clientId.trim(),
-          clientSecret: microsoft.clientSecret,
-          tenantId: microsoft.tenantId?.trim() || 'common',
-        },
+      const result = await submitAction('saveSettings', {
+        payload: JSON.stringify({
+          manualRegistrationEnabled,
+          allowedLoginDomains: textToDomains(loginDomainsText),
+          allowedRegistrationDomains: textToDomains(registerDomainsText),
+          google: {
+            enabled: google.enabled,
+            clientId: google.clientId.trim(),
+            clientSecret: google.clientSecret,
+          },
+          microsoft: {
+            enabled: microsoft.enabled,
+            clientId: microsoft.clientId.trim(),
+            clientSecret: microsoft.clientSecret,
+            tenantId: microsoft.tenantId?.trim() || 'common',
+          },
+        }),
       });
+      if (result.type === 'failure') {
+        error = String(result.data?.error ?? 'Chyba');
+        return;
+      }
       message = t('admin.saved', $locale);
-      await loadSettings();
-    } catch (e) {
-      error = (e as Error).message;
+      await invalidateAll();
     } finally {
       saving = false;
     }

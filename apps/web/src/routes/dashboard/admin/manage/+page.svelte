@@ -1,11 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { isAuthenticated, isAdmin, locale, token } from '$lib/stores/auth';
-  import { get } from 'svelte/store';
-  import { api } from '$lib/api';
+  import { goto, invalidateAll } from '$app/navigation';
+  import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
+  import { submitAction } from '$lib/client/form-action';
   import CategoryCourseTree from '$lib/components/CategoryCourseTree.svelte';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
@@ -36,7 +35,7 @@
   $effect(() => {
     categories = data.categories as Category[];
     courses = data.courses as Course[];
-    error = data.loadError ?? '';
+    if (data.loadError) error = data.loadError;
   });
 
   onMount(() => {
@@ -47,7 +46,7 @@
       if (!admin) goto('/dashboard');
     });
     const unsubWs = subscribeDashboardRefresh(() => {
-      if (get(token)) void loadAll();
+      void refreshData();
     });
     return () => {
       unsubAuth();
@@ -56,18 +55,31 @@
     };
   });
 
-  async function loadAll() {
+  async function refreshData() {
     loading = true;
-    error = '';
     try {
-      const [cats, crs] = await Promise.all([api.getCategories(), api.getCourses()]);
-      categories = cats as Category[];
-      courses = crs as Course[];
-    } catch (e) {
-      error = (e as Error).message;
+      await invalidateAll();
     } finally {
       loading = false;
     }
+  }
+
+  async function runMutation(
+    action: string,
+    fields: Record<string, string | null | undefined>,
+    options: { throwOnError?: boolean } = {},
+  ) {
+    error = '';
+    message = '';
+    const result = await submitAction(action, fields);
+    if (result.type === 'failure') {
+      error = String(result.data?.error ?? 'Chyba');
+      if (options.throwOnError) throw new Error(error);
+      return false;
+    }
+    message = t('admin.saved', $locale);
+    await refreshData();
+    return true;
   }
 
   function slugify(value: string) {
@@ -80,16 +92,7 @@
   }
 
   async function handleAddCategory(name: string, slug: string, parentId?: string | null) {
-    error = '';
-    message = '';
-    try {
-      await api.createCategory({ name, slug, parentId: parentId ?? null });
-      message = t('admin.saved', $locale);
-      await loadAll();
-    } catch (e) {
-      error = (e as Error).message;
-      throw e;
-    }
+    await runMutation('createCategory', { name, slug, parentId: parentId ?? null }, { throwOnError: true });
   }
 
   async function handleAddSubcategory(parentId: string, name: string, slug: string) {
@@ -97,28 +100,11 @@
   }
 
   async function handleUpdateCategory(id: string, name: string, slug: string) {
-    error = '';
-    message = '';
-    try {
-      await api.updateCategory(id, { name, slug });
-      message = t('admin.saved', $locale);
-      await loadAll();
-    } catch (e) {
-      error = (e as Error).message;
-      throw e;
-    }
+    await runMutation('updateCategory', { id, name, slug }, { throwOnError: true });
   }
 
   async function handleRemoveCategory(id: string) {
-    error = '';
-    message = '';
-    try {
-      await api.deleteCategory(id);
-      message = t('admin.saved', $locale);
-      await loadAll();
-    } catch (e) {
-      error = (e as Error).message;
-    }
+    await runMutation('deleteCategory', { id });
   }
 
   function resolveId(manual: string, name: string) {
@@ -128,47 +114,30 @@
   }
 
   async function handleAddCourse(categoryId: string | null) {
-    error = '';
-    message = '';
-    try {
-      const slug = resolveId(courseDraft.slug, courseDraft.title);
-      await api.createCourse({
+    const slug = resolveId(courseDraft.slug, courseDraft.title);
+    await runMutation(
+      'createCourse',
+      {
         slug,
         title: courseDraft.title.trim(),
         description: courseDraft.desc.trim(),
         categoryId,
         defaultLocale: $locale,
-      });
-      message = t('admin.saved', $locale);
-      await loadAll();
-    } catch (e) {
-      error = (e as Error).message;
-      throw e;
-    }
+      },
+      { throwOnError: true },
+    );
   }
 
   async function handleTogglePublish(course: Course) {
-    error = '';
-    try {
-      await api.publishCourse(course.id, !course.isPublished);
-      message = t('admin.saved', $locale);
-      await loadAll();
-    } catch (e) {
-      error = (e as Error).message;
-    }
+    await runMutation('publishCourse', {
+      id: course.id,
+      isPublished: String(!course.isPublished),
+    });
   }
 
   async function handleRemoveCourse(courseId: string) {
     if (!confirm(t('admin.deleteCourseConfirm', $locale))) return;
-    error = '';
-    message = '';
-    try {
-      await api.deleteCourse(courseId);
-      message = t('admin.saved', $locale);
-      await loadAll();
-    } catch (e) {
-      error = (e as Error).message;
-    }
+    await runMutation('deleteCourse', { id: courseId });
   }
 </script>
 
