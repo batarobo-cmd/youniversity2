@@ -11,15 +11,15 @@
 
   let {
     user = null,
+    appVersion = 'dev',
     children,
-  }: { user?: User | null; children: import('svelte').Snippet } = $props();
+  }: { user?: User | null; appVersion?: string; children: import('svelte').Snippet } = $props();
 
   function isActive(path: string) {
     return $page.url.pathname === path || $page.url.pathname.startsWith(path + '/');
   }
 
   const showStudentCourses = $derived(!isAdminUser(user));
-  const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
 </script>
 
 <div class="app-shell">

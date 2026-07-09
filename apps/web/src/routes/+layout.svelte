@@ -76,7 +76,7 @@
 {#if authPage}
   {@render children()}
 {:else}
-  <AppShell user={$authUser ?? data.user}>
+  <AppShell user={$authUser ?? data.user} appVersion={data.appVersion}>
     <div class="page-enter">
       {@render children()}
     </div>

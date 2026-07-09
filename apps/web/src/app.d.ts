@@ -8,6 +8,7 @@ declare global {
       token?: string | null;
       user?: User | null;
       isAuthPage?: boolean;
+      appVersion?: string;
     }
   }
 }

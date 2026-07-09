@@ -1,6 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { SESSION_COOKIE } from '$lib/session';
+import { dev } from '$app/environment';
+import { execSync } from 'node:child_process';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 const SESSION_MAX_AGE = 60 * 60; // 1 hodina
@@ -8,6 +10,20 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 function isAuthPath(pathname: string) {
   return pathname === '/' || pathname === '/login' || pathname.startsWith('/auth/');
+}
+
+function resolveAppVersion() {
+  // In local dev, resolve Git SHA on each request so new commits appear immediately.
+  if (dev) {
+    try {
+      return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+        .toString()
+        .trim();
+    } catch {
+      // fall through to build-time version
+    }
+  }
+  return import.meta.env.VITE_APP_VERSION || 'dev';
 }
 
 async function fetchSessionUser(sessionId: string, fetch: typeof globalThis.fetch) {
@@ -56,5 +72,5 @@ export const load: LayoutServerLoad = async ({ cookies, url, fetch }) => {
     }
   }
 
-  return { token: sessionId, user, isAuthPage: isAuthPath(pathname) };
+  return { token: sessionId, user, isAuthPage: isAuthPath(pathname), appVersion: resolveAppVersion() };
 };
