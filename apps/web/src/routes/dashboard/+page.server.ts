@@ -1,9 +1,11 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { handleApiQuery } from '$lib/server/api-action';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
-export const load: PageServerLoad = async ({ parent, fetch }) => {
+export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
+  depends('dashboard');
   const { token, user } = await parent();
 
   if (!token) {
@@ -29,4 +31,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
       dashboardError: 'API server nie je dostupný. Spustite bun run dev.',
     };
   }
+};
+
+export const actions = {
+  apiQuery: ({ cookies, fetch, request }) => handleApiQuery(fetch, cookies, request, 'admin'),
 };

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { api } from '$lib/api';
+  import { queryApi } from '$lib/client/form-action';
 
   type Student = { id: string; name: string; email: string };
 
@@ -45,7 +45,8 @@
     if (loaded || loading) return;
     loading = true;
     try {
-      allStudents = await api.getStudents();
+      const result = await queryApi<Student[]>('apiQuery', '/api/admin/students');
+      allStudents = result.data ?? [];
       loaded = true;
     } catch {
       allStudents = [];

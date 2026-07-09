@@ -39,3 +39,42 @@ export function actionErrorMessage(result: ActionResult): string | null {
 export function isActionSuccess(result: ActionResult): boolean {
   return result.type === 'success';
 }
+
+export async function queryApi<T = unknown>(
+  action: string,
+  path: string,
+): Promise<{ data: T | null; error: string | null }> {
+  const result = await submitAction(action, { path });
+  const err = actionErrorMessage(result);
+  if (!isActionSuccess(result) || err) {
+    return { data: null, error: err ?? 'Operácia zlyhala.' };
+  }
+  const data = (result.data as { data?: T } | undefined)?.data ?? null;
+  return { data, error: null };
+}
+
+export async function mutateApi(
+  action: string,
+  path: string,
+  method = 'POST',
+  body?: unknown,
+): Promise<{ ok: boolean; error: string | null }> {
+  const fields: Record<string, string> = { path, method };
+  if (body !== undefined) fields.body = JSON.stringify(body);
+  const result = await submitAction(action, fields);
+  const err = actionErrorMessage(result);
+  if (!isActionSuccess(result) || err) {
+    return { ok: false, error: err ?? 'Operácia zlyhala.' };
+  }
+  return { ok: true, error: null };
+}
+
+export async function serverMutate(
+  action: string,
+  path: string,
+  method = 'POST',
+  body?: unknown,
+): Promise<void> {
+  const { ok, error } = await mutateApi(action, path, method, body);
+  if (!ok) throw new Error(error ?? 'Operácia zlyhala.');
+}

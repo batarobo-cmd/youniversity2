@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ACTIVITY_TYPES } from '@youniversity2/shared';
-  import { api } from '$lib/api';
+  import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { normalizeActivityType } from '$lib/activity-types';
   import type { Locale } from '@youniversity2/shared';
@@ -136,7 +136,7 @@
     const title = newModuleTitle.trim();
     if (!title) return;
     await run(async () => {
-      await api.createCourseModule(courseId, { title });
+      await serverMutate('apiMutation', `/api/courses/${courseId}/modules`, 'POST', { title });
       newModuleTitle = '';
       addingModule = false;
     });
@@ -144,13 +144,13 @@
 
   async function deleteModule(moduleId: string) {
     if (!confirm(t('admin.deleteModuleConfirm', locale))) return;
-    await run(() => api.deleteCourseModule(moduleId));
+    await run(() => serverMutate('apiMutation', `/api/modules/${moduleId}`, 'DELETE'));
   }
 
   async function saveModuleTitle(moduleId: string, title: string) {
     const trimmed = title.trim();
     if (!trimmed) return;
-    await run(() => api.updateCourseModule(moduleId, { title: trimmed }));
+    await run(() => serverMutate('apiMutation', `/api/modules/${moduleId}`, 'PATCH', { title: trimmed }));
   }
 
   function moduleHasTextActivity(mod: ModuleRow) {
@@ -190,7 +190,7 @@
     const content = newActivityDescription.trim();
     if (isTextType(newActivityType)) {
       await run(async () => {
-        await api.createActivity(moduleId, {
+        await serverMutate('apiMutation', `/api/modules/${moduleId}/activities`, 'POST', {
           type: 'text',
           content: content || undefined,
         });
@@ -203,7 +203,7 @@
     const title = newActivityTitle.trim();
     if (!title) return;
     await run(async () => {
-      await api.createActivity(moduleId, {
+      await serverMutate('apiMutation', `/api/modules/${moduleId}/activities`, 'POST', {
         type: newActivityType,
         title,
         content: content || undefined,
@@ -247,7 +247,7 @@
 
     if (isTextType(activity.type)) {
       await run(() =>
-        api.updateActivity(activity.id, {
+        serverMutate('apiMutation', `/api/activities/${activity.id}`, 'PATCH', {
           content: editContent,
           config,
         }),
@@ -259,7 +259,7 @@
     const title = editTitle.trim();
     if (!title) return;
     await run(() =>
-      api.updateActivity(activity.id, {
+      serverMutate('apiMutation', `/api/activities/${activity.id}`, 'PATCH', {
         title,
         content: editContent,
         config,
@@ -273,7 +273,7 @@
 
   async function deleteActivity(activityId: string) {
     if (!confirm(t('admin.deleteActivityConfirm', locale))) return;
-    await run(() => api.deleteActivity(activityId));
+    await run(() => serverMutate('apiMutation', `/api/activities/${activityId}`, 'DELETE'));
     if (editingId === activityId) editingId = null;
   }
 
@@ -287,14 +287,20 @@
 
   async function persistModuleOrder(moduleIds: string[]) {
     await run(async () => {
-      await Promise.all(moduleIds.map((id, index) => api.updateCourseModule(id, { sortOrder: index })));
+      await Promise.all(
+        moduleIds.map((id, index) =>
+          serverMutate('apiMutation', `/api/modules/${id}`, 'PATCH', { sortOrder: index }),
+        ),
+      );
     });
   }
 
   async function persistActivities(moduleId: string, activityIds: string[]) {
     await run(async () => {
       await Promise.all(
-        activityIds.map((id, index) => api.updateActivity(id, { moduleId, sortOrder: index })),
+        activityIds.map((id, index) =>
+          serverMutate('apiMutation', `/api/activities/${id}`, 'PATCH', { moduleId, sortOrder: index }),
+        ),
       );
     });
   }
@@ -345,11 +351,15 @@
     clearDragState();
     await run(async () => {
       await Promise.all(
-        targetIds.map((id, index) => api.updateActivity(id, { moduleId: targetModuleId, sortOrder: index })),
+        targetIds.map((id, index) =>
+          serverMutate('apiMutation', `/api/activities/${id}`, 'PATCH', { moduleId: targetModuleId, sortOrder: index }),
+        ),
       );
       if (sourceModule.id !== targetModuleId) {
         await Promise.all(
-          sourceIds.map((id, index) => api.updateActivity(id, { moduleId: sourceModule.id, sortOrder: index })),
+          sourceIds.map((id, index) =>
+            serverMutate('apiMutation', `/api/activities/${id}`, 'PATCH', { moduleId: sourceModule.id, sortOrder: index }),
+          ),
         );
       }
     });

@@ -1,22 +1,30 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, locale, isAdmin } from '$lib/stores/auth';
-  import { api } from '$lib/api';
+  import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
   import { WS_EVENTS } from '@youniversity2/shared';
   import { moduleActivities, normalizeActivityType } from '$lib/activity-types';
+  import type { PageData } from './$types';
   import '$lib/styles/courses.css';
 
-  let course = $state<Record<string, unknown> | null>(null);
-  let progress = $state<Array<Record<string, unknown>>>([]);
+  let { data }: { data: PageData } = $props();
+
+  let course = $state<Record<string, unknown> | null>(data.course);
+  let progress = $state<Array<Record<string, unknown>>>(data.progress as Array<Record<string, unknown>>);
   let activeLesson = $state<Record<string, unknown> | null>(null);
   let activeModuleId = $state<string | null>(null);
-  let loading = $state(true);
+  let loading = $state(false);
 
   const courseId = $derived($page.params.id);
+
+  $effect(() => {
+    course = data.course;
+    progress = data.progress as Array<Record<string, unknown>>;
+  });
 
   $effect(() => {
     const id = courseId;
@@ -25,7 +33,6 @@
     activeModuleId = null;
     joinCourse(id);
     trackActivity('course.opened', id);
-    void loadCourse(id);
   });
 
   onMount(() => {
@@ -40,7 +47,7 @@
         msg.type === WS_EVENTS.PROGRESS_UPDATED ||
         msg.type === WS_EVENTS.COMPLETION_EVALUATED
       ) {
-        loadCourse(courseId);
+        void refreshCourse();
       }
     });
 
@@ -50,13 +57,10 @@
     };
   });
 
-  async function loadCourse(id = courseId) {
+  async function refreshCourse() {
     loading = true;
     try {
-      course = await api.getCourse(id);
-      progress = (await api.getCourseProgress(id)) as Array<Record<string, unknown>>;
-    } catch {
-      course = null;
+      await invalidate('student:course');
     } finally {
       loading = false;
     }
@@ -123,25 +127,29 @@
   }
 
   async function markComplete(lessonId: string) {
-    await api.updateProgress({ lessonId, isComplete: true, percentComplete: 100 });
+    await serverMutate('apiMutation', '/api/progress', 'POST', {
+      lessonId,
+      isComplete: true,
+      percentComplete: 100,
+    });
     trackActivity('lesson.completed', courseId, lessonId);
-    progress = (await api.getCourseProgress(courseId)) as Array<Record<string, unknown>>;
+    await invalidate('student:course');
   }
 
   async function submitTest(lessonId: string) {
-    await api.updateProgress({
+    await serverMutate('apiMutation', '/api/progress', 'POST', {
       lessonId,
       isComplete: true,
       score: 85,
       percentComplete: 100,
     });
     trackActivity('quiz.completed', courseId, lessonId, { score: 85 });
-    progress = (await api.getCourseProgress(courseId)) as Array<Record<string, unknown>>;
+    await invalidate('student:course');
   }
 
   async function translateCourse(targetLocale: string) {
-    await api.translateCourse(courseId, targetLocale);
-    await loadCourse();
+    await serverMutate('apiMutation', `/api/courses/${courseId}/translate`, 'POST', { targetLocale });
+    await invalidate('student:course');
   }
 </script>
 

@@ -1,5 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { handleApiQuery } from '$lib/server/api-action';
 import { actionPlatformAdminOrFail, isActionFailure } from '$lib/server/actions';
 import { requireAuthToken, requirePlatformAdmin, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
@@ -55,7 +56,6 @@ export const actions = {
     }
 
     if (isActionFailure(mutation)) return mutation;
-
     return { success: true };
   },
 
@@ -71,7 +71,9 @@ export const actions = {
       method: 'DELETE',
     });
     if (isActionFailure(mutation)) return mutation;
-
     return { success: true };
   },
+
+  apiQuery: ({ cookies, fetch, request }) =>
+    handleApiQuery(fetch, cookies, request, 'platformAdmin'),
 };

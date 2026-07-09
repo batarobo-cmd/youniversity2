@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { user, isAuthenticated, locale, setLocale, setAuth } from '$lib/stores/auth';
-  import { api } from '$lib/api';
+  import { actionErrorMessage, isActionSuccess, submitAction } from '$lib/client/form-action';
   import { t, SUPPORTED_LOCALES } from '$lib/i18n';
   import type { Locale, User } from '@youniversity2/shared';
   import { SESSION_STORAGE_KEY } from '$lib/session';
@@ -87,10 +87,15 @@
         payload.newPassword = newPassword;
       }
 
-      const updated = await api.updateProfile(payload);
+      const result = await submitAction('saveProfile', {
+        payload: JSON.stringify(payload),
+      });
+      const err = actionErrorMessage(result);
+      if (!isActionSuccess(result) || err) throw new Error(err ?? 'Uloženie zlyhalo.');
+      const updated = (result.data as { user?: User } | undefined)?.user;
       setLocale(preferredLocale);
       const sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
-      if ($user && sessionId) setAuth(sessionId, { ...$user, ...updated });
+      if ($user && sessionId && updated) setAuth(sessionId, { ...$user, ...updated });
       message = t('profile.saved', $locale);
       currentPassword = '';
       newPassword = '';

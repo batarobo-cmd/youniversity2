@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { api } from '$lib/api';
+  import { queryApi } from '$lib/client/form-action';
 
   type HistoryKind = 'registrations' | 'logins';
 
@@ -45,18 +45,17 @@
     loading = true;
     error = '';
     try {
-      const params = {
-        q: query.trim() || undefined,
-        from: dateFrom || undefined,
-        to: dateTo || undefined,
-        limit: 100,
-        offset: 0,
-      };
-      const result =
+      const sp = new URLSearchParams({ limit: '100', offset: '0' });
+      if (query.trim()) sp.set('q', query.trim());
+      if (dateFrom) sp.set('from', dateFrom);
+      if (dateTo) sp.set('to', dateTo);
+      const path =
         kind === 'registrations'
-          ? await api.getRegistrationHistory(params)
-          : await api.getLoginHistory(params);
-      items = result.items;
+          ? `/api/admin/registrations/history?${sp}`
+          : `/api/admin/logins/history?${sp}`;
+      const result = await queryApi<{ items: Array<Record<string, unknown>> }>('apiQuery', path);
+      if (result.error || !result.data) throw new Error(result.error ?? 'Chyba');
+      items = result.data.items;
     } catch (e) {
       error = (e as Error).message;
       items = [];

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { api } from '$lib/api';
+  import { queryApi } from '$lib/client/form-action';
   import { describeUserLog } from '$lib/user-log-labels';
 
   type ManagedUser = { id: string; name: string; email: string };
@@ -48,15 +48,19 @@
     loading = true;
     error = '';
     try {
-      const result = await api.getUserLogs(user.id, {
-        q: query.trim() || undefined,
-        from: dateFrom || undefined,
-        to: dateTo || undefined,
-        limit: 150,
-      });
-      items = result.items;
-      total = result.total;
-      retentionFrom = result.retentionFrom;
+      const sp = new URLSearchParams({ locale: $locale, limit: '150' });
+      if (query.trim()) sp.set('q', query.trim());
+      if (dateFrom) sp.set('from', dateFrom);
+      if (dateTo) sp.set('to', dateTo);
+      const result = await queryApi<{
+        items: Array<Record<string, unknown>>;
+        total: number;
+        retentionFrom: string;
+      }>('apiQuery', `/api/admin/users/${user.id}/logs?${sp}`);
+      if (result.error || !result.data) throw new Error(result.error ?? 'Chyba');
+      items = result.data.items;
+      total = result.data.total;
+      retentionFrom = result.data.retentionFrom;
     } catch (e) {
       error = (e as Error).message;
       items = [];

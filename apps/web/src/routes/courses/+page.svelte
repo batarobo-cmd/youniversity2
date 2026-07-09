@@ -1,21 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
-  import { api } from '$lib/api';
   import { t } from '$lib/i18n';
   import { WS_EVENTS } from '@youniversity2/shared';
   import { lastMessage } from '$lib/stores/realtime';
   import StudentCourseCard from '$lib/components/StudentCourseCard.svelte';
+  import type { PageData } from './$types';
   import '$lib/styles/courses.css';
   import '$lib/styles/dashboard.css';
 
   type CourseItem = Record<string, unknown>;
 
-  let futureCourses = $state<CourseItem[]>([]);
-  let activeCourses = $state<CourseItem[]>([]);
-  let pastCourses = $state<CourseItem[]>([]);
-  let loading = $state(true);
+  let { data }: { data: PageData } = $props();
+
+  const futureCourses = $derived(data.overview.futureCourses as CourseItem[]);
+  const activeCourses = $derived(data.overview.activeCourses as CourseItem[]);
+  const pastCourses = $derived(data.overview.pastCourses as CourseItem[]);
+  let loading = $state(false);
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
@@ -23,12 +25,11 @@
     });
     const unsubAdmin = isAdmin.subscribe((admin) => {
       if (admin) goto('/dashboard');
-      else void loadCourses();
     });
 
     const unsubWs = lastMessage.subscribe((msg) => {
       if (msg?.type === WS_EVENTS.ENROLLMENT_CHANGED || msg?.type === WS_EVENTS.COURSE_UPDATED) {
-        void loadCourses();
+        void refreshCourses();
       }
     });
 
@@ -39,17 +40,10 @@
     };
   });
 
-  async function loadCourses() {
+  async function refreshCourses() {
     loading = true;
     try {
-      const data = await api.getStudentCoursesOverview();
-      futureCourses = data.futureCourses;
-      activeCourses = data.activeCourses;
-      pastCourses = data.pastCourses;
-    } catch {
-      futureCourses = [];
-      activeCourses = [];
-      pastCourses = [];
+      await invalidate('student:courses');
     } finally {
       loading = false;
     }
@@ -65,7 +59,9 @@
   <p>{t('courses.subtitle', $locale)}</p>
 </div>
 
-{#if loading}
+{#if data.loadError}
+  <div class="form-error">{data.loadError}</div>
+{:else if loading}
   <p class="loading-text">...</p>
 {:else if !hasAny}
   <div class="empty-state">{t('courses.empty', $locale)}</div>
@@ -79,7 +75,7 @@
         {:else}
           <div class="student-courses-list">
             {#each activeCourses as course (course.id)}
-              <StudentCourseCard {course} variant="active" />
+              <StudentCourseCard {course} />
             {/each}
           </div>
         {/if}
@@ -94,7 +90,7 @@
         {:else}
           <div class="student-courses-list">
             {#each futureCourses as course (course.id)}
-              <StudentCourseCard {course} variant="future" />
+              <StudentCourseCard {course} />
             {/each}
           </div>
         {/if}
@@ -109,7 +105,7 @@
         {:else}
           <div class="student-courses-list">
             {#each pastCourses as course (course.id)}
-              <StudentCourseCard {course} variant="past" />
+              <StudentCourseCard {course} />
             {/each}
           </div>
         {/if}

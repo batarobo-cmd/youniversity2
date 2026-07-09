@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { handleApiQuery } from '$lib/server/api-action';
 import { requireAdmin, requireAuthToken, serverApiJson } from '$lib/server/api';
 
 export const load: PageServerLoad = async ({ parent, fetch }) => {
@@ -17,4 +18,8 @@ export const load: PageServerLoad = async ({ parent, fetch }) => {
     dashboard: result.data,
     loadError: result.error,
   };
+};
+
+export const actions = {
+  apiQuery: ({ cookies, fetch, request }) => handleApiQuery(fetch, cookies, request, 'admin'),
 };

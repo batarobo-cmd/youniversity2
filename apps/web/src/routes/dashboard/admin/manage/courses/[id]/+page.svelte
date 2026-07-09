@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
-  import { api } from '$lib/api';
+  import { mutateApi, serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
@@ -140,18 +140,11 @@
     certTitle = cert?.titleTemplate ?? '';
   }
 
-  async function loadAll() {
+  async function refreshCourse() {
     loading = true;
     error = '';
     try {
-      const [c, enr, certs] = await Promise.all([
-        api.getCourse(courseId),
-        api.getEnrollments(courseId) as Promise<EnrollmentRow[]>,
-        api.getCourseCertificates(courseId),
-      ]);
-      applyCourseData(c, enr, certs as CertRow[]);
-    } catch (e) {
-      error = (e as Error).message;
+      await invalidate('course:edit');
     } finally {
       loading = false;
     }
@@ -172,7 +165,7 @@
         throw new Error(t('admin.publishDateRangeInvalid', $locale));
       }
 
-      await api.updateCourseContent(courseId, {
+      await serverMutate('apiMutation', `/api/courses/${courseId}/content`, 'PATCH', {
         title: title.trim(),
         description,
         slug: slug.trim(),
@@ -182,7 +175,7 @@
         locale: $locale,
       });
       message = t('admin.saved', $locale);
-      await loadAll();
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -201,12 +194,12 @@
         { type: 'quiz_min_score', config: { minScore: minQuizScore }, isRequired: true },
         { type: 'video_watch_percent', config: { percent: videoWatchPercent }, isRequired: false },
       ];
-      await api.updateCompletionRules(courseId, {
+      await serverMutate('apiMutation', `/api/courses/${courseId}/completion-rules`, 'PUT', {
         rules,
         certificate: certEnabled ? { enabled: true, titleTemplate: certTitle.trim() } : undefined,
       });
       message = t('admin.saved', $locale);
-      await loadAll();
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -221,7 +214,7 @@
     error = '';
     try {
       const rules = evalRules.filter((r) => !(r.config as { certificate?: unknown })?.certificate);
-      await api.updateCompletionRules(courseId, {
+      await serverMutate('apiMutation', `/api/courses/${courseId}/completion-rules`, 'PUT', {
         rules: rules.length ? rules : [{ type: 'all_lessons_complete', config: {}, isRequired: true }],
         certificate: {
           enabled: certEnabled,
@@ -229,7 +222,7 @@
         },
       });
       message = t('admin.saved', $locale);
-      await loadAll();
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -242,11 +235,11 @@
     saving = true;
     error = '';
     try {
-      await api.createEnrollment(enrollUserId, courseId);
+      await serverMutate('apiMutation', '/api/enrollments', 'POST', { userId: enrollUserId, courseId });
       enrollUserId = '';
       studentSearch?.reset();
       message = t('admin.enrolled', $locale);
-      enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -258,9 +251,9 @@
     saving = true;
     error = '';
     try {
-      await api.createEnrollment(userId, courseId);
-      enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+      await serverMutate('apiMutation', '/api/enrollments', 'POST', { userId, courseId });
       message = t('admin.enrolled', $locale);
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -272,9 +265,9 @@
     if (!confirm(t('admin.revokeEnrollmentConfirm', $locale))) return;
     saving = true;
     try {
-      await api.revokeEnrollment(id);
-      enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+      await serverMutate('apiMutation', `/api/enrollments/${id}`, 'DELETE');
       message = t('admin.saved', $locale);
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -286,9 +279,9 @@
     if (!confirm(t('admin.deleteEnrollmentConfirm', $locale))) return;
     saving = true;
     try {
-      await api.deleteEnrollmentPermanently(id);
-      enrollments = (await api.getEnrollments(courseId)) as EnrollmentRow[];
+      await serverMutate('apiMutation', `/api/enrollments/${id}/permanent`, 'DELETE');
       message = t('admin.saved', $locale);
+      await refreshCourse();
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -297,7 +290,7 @@
   }
 
   async function reloadCourse() {
-    course = await api.getCourse(courseId);
+    await invalidate('course:edit');
   }
 
   const modules = $derived((course?.modules as Array<Record<string, unknown>>) ?? []);

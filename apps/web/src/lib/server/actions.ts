@@ -25,7 +25,7 @@ export function adminOrFail(user: User | null | undefined) {
 
 export type ActionAuth = { token: string; user: User };
 
-async function actionUserOrFail(
+export async function actionUserOrFail(
   fetch: typeof globalThis.fetch,
   cookies: Cookies,
 ): Promise<ActionFailure<{ error?: string }> | ActionAuth> {
