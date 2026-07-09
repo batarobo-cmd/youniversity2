@@ -262,6 +262,53 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  justify-content: center;
+}
+
+.course-students-table th.students-col-status,
+.course-students-table td.students-col-status,
+.course-students-table th.students-col-actions,
+.course-students-table td.students-col-actions {
+  text-align: center;
+}
+
+.reporting-table th.reporting-col-name,
+.reporting-table td.reporting-col-name {
+  text-align: left;
+}
+
+.reporting-table th.reporting-col-assignment,
+.reporting-table td.reporting-col-assignment,
+.reporting-table th.reporting-col-progress,
+.reporting-table td.reporting-col-progress,
+.reporting-table th.reporting-col-evaluation,
+.reporting-table td.reporting-col-evaluation,
+.reporting-table th.reporting-col-certs,
+.reporting-table td.reporting-col-certs,
+.reporting-table th.reporting-col-actions,
+.reporting-table td.reporting-col-actions {
+  text-align: center;
+}
+
+.reporting-col-progress .reporting-progress-cell {
+  align-items: center;
+}
+
+.reporting-col-progress .progress-bar {
+  margin-inline: auto;
+}
+
+.reporting-col-certs .reporting-cert-inline {
+  justify-content: center;
+}
+
+.reporting-col-assignment .users-role-badge,
+.reporting-col-evaluation .users-role-badge {
+  margin-inline: auto;
+}
+
+.reporting-col-actions .reporting-reset-btn {
+  margin-inline: auto;
 }
 
 .enrollment-status--completed {
@@ -499,7 +546,6 @@
 
 .reporting-col-actions {
   width: 5.25rem;
-  text-align: right;
 }
 
 .reporting-col-name .course-edit-sub {

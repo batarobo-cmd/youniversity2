@@ -695,28 +695,28 @@
             <p class="cat-tree-empty">{t('admin.noEnrollments', $locale)}</p>
           {:else}
             <div class="users-table-wrap course-edit-table">
-              <table class="users-table">
+              <table class="users-table course-students-table">
                 <thead>
                   <tr>
-                    <th>{t('admin.studentName', $locale)}</th>
-                    <th>E-mail</th>
-                    <th>{t('admin.enrolledAt', $locale)}</th>
-                    <th>{t('admin.enrollmentStatus', $locale)}</th>
-                    <th></th>
+                    <th class="students-col-name">{t('admin.studentName', $locale)}</th>
+                    <th class="students-col-email">E-mail</th>
+                    <th class="students-col-date">{t('admin.enrolledAt', $locale)}</th>
+                    <th class="students-col-status">{t('admin.enrollmentStatus', $locale)}</th>
+                    <th class="students-col-actions">{t('admin.reportingColActions', $locale)}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {#each assignedEnrollments as row}
                     <tr>
-                      <td>{row.user.name}</td>
-                      <td>{row.user.email}</td>
-                      <td>{formatEnrolledAt(row.enrollment.enrolledAt)}</td>
-                      <td>
+                      <td class="students-col-name">{row.user.name}</td>
+                      <td class="students-col-email">{row.user.email}</td>
+                      <td class="students-col-date">{formatEnrolledAt(row.enrollment.enrolledAt)}</td>
+                      <td class="students-col-status">
                         <span class="users-role-badge enrollment-status--{row.enrollment.status}">
                           {enrollmentStatusLabel(row.enrollment.status)}
                         </span>
                       </td>
-                      <td>
+                      <td class="students-col-actions">
                         <div class="enrollment-actions">
                           {#if row.enrollment.status === 'suspended'}
                             <button
