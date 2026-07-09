@@ -19,6 +19,7 @@
   }
 
   const showStudentCourses = $derived(!isAdminUser(user));
+  const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
 </script>
 
 <div class="app-shell">
@@ -57,4 +58,10 @@
   <main class="app-main">
     {@render children()}
   </main>
+
+  {#if isAdminUser(user)}
+    <div class="app-version-badge" aria-label="Application version">
+      {appVersion}
+    </div>
+  {/if}
 </div>
