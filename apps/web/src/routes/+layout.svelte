@@ -48,7 +48,8 @@
   });
 
   $effect(() => {
-    if (!browser || authPage || wsStarted || !data.token) return;
+    const sessionToken = $token ?? data.token;
+    if (!browser || authPage || wsStarted || !sessionToken) return;
     wsStarted = true;
 
     initActivityTracker();
@@ -68,7 +69,8 @@
   });
 
   $effect(() => {
-    if (!browser || authPage || !data.token) return;
+    const sessionToken = $token ?? data.token;
+    if (!browser || authPage || !sessionToken) return;
     trackPageView($page.url.pathname);
   });
 </script>
