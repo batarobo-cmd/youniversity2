@@ -27,7 +27,7 @@
     if (refreshing) return;
     refreshing = true;
     try {
-      await invalidate('dashboard');
+      await invalidate('student:dashboard');
       dashboardError = null;
     } catch {
       /* ponechaj posledné zobrazené dáta */

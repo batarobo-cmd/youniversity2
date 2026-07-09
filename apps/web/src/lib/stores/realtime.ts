@@ -14,6 +14,7 @@ export const activityFeed = writable<Array<{ userName: string; eventType: string
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let reconnectToken: string | null = null;
 
 export function startHeartbeat() {
   stopHeartbeat();
@@ -35,8 +36,9 @@ export function stopHeartbeat() {
 }
 
 export function connectWebSocket(sessionToken?: string) {
-  const t = sessionToken ?? get(token);
+  const t = sessionToken ?? get(token) ?? reconnectToken;
   if (!t || socket?.readyState === WebSocket.OPEN) return;
+  reconnectToken = t;
 
   wsStatus.set('connecting');
 
@@ -72,7 +74,7 @@ export function connectWebSocket(sessionToken?: string) {
   socket.onclose = () => {
     wsStatus.set('disconnected');
     socket = null;
-    reconnectTimer = setTimeout(connectWebSocket, 3000);
+    reconnectTimer = setTimeout(() => connectWebSocket(reconnectToken ?? undefined), 3000);
   };
 
   socket.onerror = () => {
@@ -84,6 +86,7 @@ export function disconnectWebSocket() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   socket?.close();
   socket = null;
+  reconnectToken = null;
   wsStatus.set('disconnected');
 }
 
