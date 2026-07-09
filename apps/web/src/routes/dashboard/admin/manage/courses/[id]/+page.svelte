@@ -192,6 +192,10 @@
     mandatoryByActivityId = { ...mandatoryByActivityId, [activityId]: checked };
   }
 
+  function mandatoryCountInModule(mod: { activities: Array<Record<string, unknown>> }) {
+    return mod.activities.filter((activity) => mandatoryByActivityId[activity.id as string]).length;
+  }
+
   async function refreshCourse() {
     loading = true;
     error = '';
@@ -605,27 +609,53 @@
       <section class="panel course-edit-panel">
         <div class="panel-header"><h2>{t('admin.tabEvaluation', $locale)}</h2></div>
         <div class="panel-body">
-          <form class="course-edit-form" onsubmit={saveEvaluation}>
-            <p class="course-edit-hint">{t('admin.evaluationHint', $locale)}</p>
+          <form class="course-edit-form evaluation-form" onsubmit={saveEvaluation}>
+            <div class="evaluation-form-intro">
+              <p class="course-edit-hint">{t('admin.evaluationHint', $locale)}</p>
+              {#if evaluationModules().length > 0}
+                <span class="evaluation-summary-badge">
+                  {t('admin.evaluationMandatorySummary', $locale).replace(
+                    '{count}',
+                    String(mandatoryActivityCount()),
+                  )}
+                </span>
+              {/if}
+            </div>
             {#if evaluationModules().length === 0}
               <p class="cat-tree-empty">{t('admin.evaluationEmpty', $locale)}</p>
             {:else}
               <div class="evaluation-activity-list">
                 {#each evaluationModules() as mod}
                   <section class="evaluation-module-block">
-                    <h3 class="evaluation-module-title">{mod.title as string}</h3>
+                    <div class="evaluation-module-head">
+                      <h3 class="evaluation-module-title">{mod.title as string}</h3>
+                      <span class="evaluation-module-count">
+                        {mandatoryCountInModule(mod)}/{mod.activities.length}
+                        {t('admin.evaluationModuleMandatory', $locale)}
+                      </span>
+                    </div>
                     <ul class="evaluation-activity-rows">
                       {#each mod.activities as activity}
-                        <li class="evaluation-activity-row">
-                          <label class="evaluation-activity-label">
-                            <input
-                              type="checkbox"
-                              checked={mandatoryByActivityId[activity.id as string] ?? false}
-                              onchange={(e) => setMandatory(activity.id as string, e.currentTarget.checked)}
-                            />
-                            <span class="evaluation-activity-copy">
-                              <span class="evaluation-activity-type">{activityTypeLabel(activity.type as string)}</span>
-                              <span class="evaluation-activity-name">{activity.title as string}</span>
+                        {@const activityId = activity.id as string}
+                        {@const isMandatory = mandatoryByActivityId[activityId] ?? false}
+                        <li class="evaluation-activity-row" class:evaluation-activity-row--on={isMandatory}>
+                          <div class="evaluation-activity-main">
+                            <span class="evaluation-activity-type">{activityTypeLabel(activity.type as string)}</span>
+                            <span class="evaluation-activity-name">{activity.title as string}</span>
+                          </div>
+                          <label class="evaluation-switch-row">
+                            <span class="evaluation-switch-text">
+                              {isMandatory
+                                ? t('admin.evaluationMandatoryOn', $locale)
+                                : t('admin.evaluationMandatoryOff', $locale)}
+                            </span>
+                            <span class="evaluation-switch">
+                              <input
+                                type="checkbox"
+                                checked={isMandatory}
+                                onchange={(e) => setMandatory(activityId, e.currentTarget.checked)}
+                              />
+                              <span class="evaluation-switch-slider" aria-hidden="true"></span>
                             </span>
                           </label>
                         </li>
@@ -634,16 +664,12 @@
                   </section>
                 {/each}
               </div>
-              <p class="course-edit-hint evaluation-mandatory-summary">
-                {t('admin.evaluationMandatorySummary', $locale).replace(
-                  '{count}',
-                  String(mandatoryActivityCount()),
-                )}
-              </p>
             {/if}
-            <button type="submit" class="btn btn-sm" disabled={saving || evaluationModules().length === 0}>
-              {t('admin.saveChanges', $locale)}
-            </button>
+            <div class="evaluation-form-actions">
+              <button type="submit" class="btn btn-sm" disabled={saving || evaluationModules().length === 0}>
+                {t('admin.saveChanges', $locale)}
+              </button>
+            </div>
           </form>
         </div>
       </section>
