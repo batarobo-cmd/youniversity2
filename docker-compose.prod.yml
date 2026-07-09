@@ -38,6 +38,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+      args:
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-dev}
     container_name: you2-web
     environment:
       API_URL: http://api:3001

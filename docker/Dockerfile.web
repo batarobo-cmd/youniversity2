@@ -12,8 +12,10 @@ RUN bun install --frozen-lockfile
 COPY packages/shared packages/shared
 COPY apps/web apps/web
 
+ARG VITE_APP_VERSION=dev
 ENV API_URL=http://api:3001
 ENV VITE_API_URL=
+ENV VITE_APP_VERSION=${VITE_APP_VERSION}
 RUN bun run --filter @youniversity2/web build
 
 FROM oven/bun:1.2-alpine AS runner

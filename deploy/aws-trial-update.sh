@@ -11,6 +11,9 @@ git fetch origin main
 git restore deploy/aws-trial-update.sh deploy/aws-trial-bootstrap.sh 2>/dev/null || true
 git pull --ff-only origin main
 
+export VITE_APP_VERSION="$(git rev-parse --short HEAD)"
+echo "==> Verzia buildu: ${VITE_APP_VERSION}"
+
 echo "==> Rebuild a reštart kontajnerov..."
 docker compose -f docker-compose.prod.yml build --no-cache web api
 docker compose -f docker-compose.prod.yml up -d --force-recreate web api nginx

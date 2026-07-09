@@ -17,6 +17,9 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+export VITE_APP_VERSION="$(git rev-parse --short HEAD)"
+echo "==> Verzia buildu: ${VITE_APP_VERSION}"
+
 echo "==> Build a štart kontajnerov..."
 docker compose -f docker-compose.prod.yml up -d --build
 
