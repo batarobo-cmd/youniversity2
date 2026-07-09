@@ -6,7 +6,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "==> Git pull..."
-git pull origin main
+git fetch origin main
+# Ignore local chmod-only edits to deploy scripts from older pulls.
+git restore deploy/aws-trial-update.sh deploy/aws-trial-bootstrap.sh 2>/dev/null || true
+git pull --ff-only origin main
 
 echo "==> Rebuild a reštart kontajnerov..."
 docker compose -f docker-compose.prod.yml build --no-cache web api
