@@ -53,7 +53,7 @@
     wsStarted = true;
 
     initActivityTracker();
-    connectWebSocket();
+    connectWebSocket(sessionToken);
     startHeartbeat();
 
     const unsub = token.subscribe((t) => {

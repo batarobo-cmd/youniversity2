@@ -34,8 +34,8 @@ export function stopHeartbeat() {
   }
 }
 
-export function connectWebSocket() {
-  const t = get(token);
+export function connectWebSocket(sessionToken?: string) {
+  const t = sessionToken ?? get(token);
   if (!t || socket?.readyState === WebSocket.OPEN) return;
 
   wsStatus.set('connecting');
