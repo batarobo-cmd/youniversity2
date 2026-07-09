@@ -251,7 +251,7 @@ export const certificates = pgTable('certificates', {
   courseId: uuid('course_id')
     .notNull()
     .references(() => courses.id),
-  certificateNumber: varchar('certificate_number', { length: 50 }).notNull().unique(),
+  certificateNumber: varchar('certificate_number', { length: 10 }).notNull().unique(),
   pdfKey: varchar('pdf_key', { length: 500 }),
   issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
 });

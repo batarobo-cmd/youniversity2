@@ -21,8 +21,15 @@ docker compose -f docker-compose.prod.yml up -d --force-recreate web api nginx
 echo "==> Stav kontajnerov..."
 docker compose -f docker-compose.prod.yml ps
 
-echo "==> DB schéma..."
+echo "==> Čakám na API..."
 sleep 8
+
+echo "==> Migrácia čísel certifikátov (pred zmenou schémy)..."
+docker compose -f docker-compose.prod.yml exec -T api bun run db:migrate-cert-numbers || {
+  echo "WARN: db:migrate-cert-numbers zlyhal — skontrolujte API logy"
+}
+
+echo "==> DB schéma..."
 docker compose -f docker-compose.prod.yml exec -T api bun run db:push || {
   echo "WARN: db:push zlyhal — skontrolujte API logy"
 }

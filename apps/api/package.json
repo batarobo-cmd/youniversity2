@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "bun run src/db/seed.ts",
     "db:ensure-demo": "bun run src/db/ensure-demo-users.ts",
+    "db:migrate-cert-numbers": "bun run src/db/migrate-certificate-numbers.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

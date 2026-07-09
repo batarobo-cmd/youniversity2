@@ -13,6 +13,7 @@ import {
   countsForCourseCompletion,
   isProgressFullyComplete,
 } from './course-completion';
+import { allocateCertificateNumber } from './certificate-number';
 
 export async function evaluateCourseCompletion(userId: string, courseId: string) {
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
@@ -70,7 +71,7 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
     ?.certificate;
 
   if (certConfig?.enabled) {
-    const certNumber = `YO2-${Date.now()}-${userId.slice(0, 8).toUpperCase()}`;
+    const certNumber = await allocateCertificateNumber();
     await db.insert(certificates).values({
       userId,
       courseId,
