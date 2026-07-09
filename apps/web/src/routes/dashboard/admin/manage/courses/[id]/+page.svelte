@@ -810,14 +810,22 @@
           {:else}
             <div class="users-table-wrap course-edit-table reporting-table-wrap">
               <table class="users-table reporting-table">
+                <colgroup>
+                  <col class="reporting-col-name" />
+                  <col class="reporting-col-assignment" />
+                  <col class="reporting-col-progress" />
+                  <col class="reporting-col-evaluation" />
+                  <col class="reporting-col-certs" />
+                  <col class="reporting-col-actions" />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th class="reporting-col-name">{t('admin.studentName', $locale)}</th>
-                    <th class="reporting-col-assignment">{t('admin.reportingAssignmentStatus', $locale)}</th>
-                    <th class="reporting-col-progress">{t('course.progress', $locale)}</th>
-                    <th class="reporting-col-evaluation reporting-progress-col">{t('admin.reportingProgressEvaluation', $locale)}</th>
-                    <th class="reporting-col-certs">{t('admin.issuedCertificates', $locale)}</th>
-                    <th class="reporting-col-actions"><span class="reporting-col-actions-label">{t('admin.reportingActions', $locale)}</span></th>
+                    <th class="reporting-col-name" title={t('admin.studentName', $locale)}>{t('admin.reportingColName', $locale)}</th>
+                    <th class="reporting-col-assignment" title={t('admin.reportingAssignmentStatus', $locale)}>{t('admin.reportingColAssignment', $locale)}</th>
+                    <th class="reporting-col-progress" title={t('course.progress', $locale)}>{t('admin.reportingColProgress', $locale)}</th>
+                    <th class="reporting-col-evaluation" title={t('admin.reportingProgressEvaluation', $locale)}>{t('admin.reportingColEvaluation', $locale)}</th>
+                    <th class="reporting-col-certs" title={t('admin.issuedCertificates', $locale)}>{t('admin.reportingColCerts', $locale)}</th>
+                    <th class="reporting-col-actions">{t('admin.reportingColActions', $locale)}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -849,32 +857,38 @@
                           {/if}
                         </div>
                       </td>
-                      <td class="reporting-col-evaluation reporting-progress-col">
+                      <td class="reporting-col-evaluation">
                         <span class="users-role-badge reporting-progress-badge reporting-state--{reportingProgressStateClass(row)}">
                           {reportingProgressStateLabel(row)}
                         </span>
                       </td>
                       <td class="reporting-col-certs">
                         <div class="reporting-cert-list">
-                          {#if currentAttemptCertificate(row)}
-                            <div class="reporting-cert-inline">
-                              <span>#{currentAttemptCertificate(row)?.certificateNumber} · {new Date(currentAttemptCertificate(row)?.issuedAt as string).toLocaleDateString($locale)}</span>
-                              {#if historicalCertificates(row).length > 0}
-                                <button type="button" class="btn btn-ghost btn-sm reporting-history-btn" onclick={() => openCertHistory(row)}>
-                                  {t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})
-                                </button>
-                              {/if}
-                            </div>
-                          {:else if historicalCertificates(row).length > 0}
-                            <div class="reporting-cert-inline">
-                              <span class="course-edit-sub">—</span>
-                              <button type="button" class="btn btn-ghost btn-sm reporting-history-btn" onclick={() => openCertHistory(row)}>
-                                {t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})
+                          <div class="reporting-cert-inline">
+                            {#if currentAttemptCertificate(row)}
+                              <span class="reporting-cert-current">
+                                #{currentAttemptCertificate(row)?.certificateNumber} · {new Date(currentAttemptCertificate(row)?.issuedAt as string).toLocaleDateString($locale)}
+                              </span>
+                            {:else}
+                              <span class="course-edit-sub reporting-cert-empty">—</span>
+                            {/if}
+                            {#if historicalCertificates(row).length > 0}
+                              <button
+                                type="button"
+                                class="reporting-cert-history-btn"
+                                title="{t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})"
+                                aria-label="{t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})"
+                                onclick={() => openCertHistory(row)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                  <path d="M12 3 2 8l10 5 10-5-10-5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+                                  <path d="M6 11v4.5c0 1.8 2.7 3 6 3s6-1.2 6-3V11" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                                  <path d="M22 8v5.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                                </svg>
+                                <span class="reporting-cert-history-count">{historicalCertificates(row).length}</span>
                               </button>
-                            </div>
-                          {:else}
-                            <span class="course-edit-sub">—</span>
-                          {/if}
+                            {/if}
+                          </div>
                         </div>
                       </td>
                       <td class="reporting-col-actions">
