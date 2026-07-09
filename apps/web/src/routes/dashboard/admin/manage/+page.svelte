@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
@@ -22,21 +22,16 @@
 
   let { data }: { data: PageData } = $props();
 
-  let categories = $state<Category[]>(data.categories as Category[]);
-  let courses = $state<Course[]>(data.courses as Course[]);
+  const categories = $derived(data.categories as Category[]);
+  const courses = $derived(data.courses as Course[]);
   let loading = $state(false);
   let message = $state('');
-  let error = $state(data.loadError ?? '');
+  let mutationError = $state('');
+  const error = $derived(mutationError || data.loadError || '');
 
   let expanded = $state<Record<string, boolean>>({});
   let openCourseForm = $state<string | null>(null);
   let courseDraft = $state({ title: '', slug: '', desc: '' });
-
-  $effect(() => {
-    categories = data.categories as Category[];
-    courses = data.courses as Course[];
-    if (data.loadError) error = data.loadError;
-  });
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
@@ -58,7 +53,7 @@
   async function refreshData() {
     loading = true;
     try {
-      await invalidateAll();
+      await invalidate('admin:manage');
     } finally {
       loading = false;
     }
@@ -69,12 +64,12 @@
     fields: Record<string, string | null | undefined>,
     options: { throwOnError?: boolean } = {},
   ) {
-    error = '';
+    mutationError = '';
     message = '';
     const result = await submitAction(action, fields);
     if (result.type === 'failure') {
-      error = String(result.data?.error ?? 'Chyba');
-      if (options.throwOnError) throw new Error(error);
+      mutationError = String(result.data?.error ?? 'Chyba');
+      if (options.throwOnError) throw new Error(mutationError);
       return false;
     }
     message = t('admin.saved', $locale);

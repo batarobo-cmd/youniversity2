@@ -8,6 +8,6 @@ export async function submitAction(
   for (const [key, value] of Object.entries(data)) {
     if (value != null && value !== '') fd.set(key, value);
   }
-  const res = await fetch(`?/${action}`, { method: 'POST', body: fd });
+  const res = await fetch(`?/${action}`, { method: 'POST', body: fd, credentials: 'include' });
   return deserialize(await res.text());
 }

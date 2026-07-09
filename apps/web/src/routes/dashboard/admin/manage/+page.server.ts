@@ -4,7 +4,8 @@ import { SESSION_COOKIE } from '$lib/session';
 import { requireAdmin, requireAuthToken, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
 
-export const load: PageServerLoad = async ({ parent, fetch }) => {
+export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
+  depends('admin:manage');
   const { token, user } = await parent();
   requireAuthToken(token);
   requireAdmin(user);

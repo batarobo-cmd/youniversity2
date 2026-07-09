@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isPlatformAdmin, locale } from '$lib/stores/auth';
   import { submitAction } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
@@ -22,7 +22,8 @@
   let loading = $state(false);
   let saving = $state(false);
   let message = $state('');
-  let error = $state(data.loadError ?? '');
+  let mutationError = $state('');
+  const error = $derived(mutationError || data.loadError || '');
 
   let manualRegistrationEnabled = $state(true);
   let loginDomainsText = $state('');
@@ -103,14 +104,13 @@
   }
 
   $effect(() => {
-    if (data.loadError) error = data.loadError;
     applySettings(data.authSettings as Record<string, unknown> | null);
   });
 
   async function saveSettings(e: Event) {
     e.preventDefault();
     saving = true;
-    error = '';
+    mutationError = '';
     message = '';
     try {
       const result = await submitAction('saveSettings', {
@@ -132,11 +132,11 @@
         }),
       });
       if (result.type === 'failure') {
-        error = String(result.data?.error ?? 'Chyba');
+        mutationError = String(result.data?.error ?? 'Chyba');
         return;
       }
       message = t('admin.saved', $locale);
-      await invalidateAll();
+      await invalidate('admin:auth');
     } finally {
       saving = false;
     }

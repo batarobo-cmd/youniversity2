@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import {
     isAuthenticated,
     isPlatformAdmin,
@@ -45,11 +45,12 @@
 
   let { data }: { data: PageData } = $props();
 
-  let users = $state<ManagedUser[]>(data.users as ManagedUser[]);
+  const users = $derived(data.users as ManagedUser[]);
   let loading = $state(false);
   let search = $state('');
   let message = $state('');
-  let error = $state(data.loadError ?? '');
+  let mutationError = $state('');
+  const error = $derived(mutationError || data.loadError || '');
 
   let modalOpen = $state(false);
   let editing = $state<ManagedUser | null>(null);
@@ -88,11 +89,6 @@
     }),
   );
 
-  $effect(() => {
-    users = data.users as ManagedUser[];
-    if (data.loadError) error = data.loadError;
-  });
-
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((auth) => {
       if (!auth) goto('/');
@@ -109,16 +105,17 @@
   async function refreshUsers() {
     loading = true;
     try {
-      await invalidateAll();
+      await invalidate('admin:users');
     } finally {
       loading = false;
     }
   }
 
   async function runMutation(action: string, fields: Record<string, string | null | undefined>) {
+    mutationError = '';
     const result = await submitAction(action, fields);
     if (result.type === 'failure') {
-      error = String(result.data?.error ?? 'Chyba');
+      mutationError = String(result.data?.error ?? 'Chyba');
       return false;
     }
     message = t('admin.saved', $locale);
@@ -151,7 +148,7 @@
     formCity = '';
     formCountry = '';
     modalOpen = true;
-    error = '';
+    mutationError = '';
     message = '';
   }
 
@@ -174,7 +171,7 @@
     formCity = u.city ?? '';
     formCountry = u.country ?? '';
     modalOpen = true;
-    error = '';
+    mutationError = '';
     message = '';
   }
 
@@ -186,7 +183,7 @@
   async function saveUser(e: Event) {
     e.preventDefault();
     saving = true;
-    error = '';
+    mutationError = '';
     message = '';
     try {
       if (editing) {
@@ -216,7 +213,7 @@
         if (ok) closeModal();
       } else {
         if (!formPassword.trim()) {
-          error = t('auth.password', $locale) + '?';
+          mutationError = t('auth.password', $locale) + '?';
           saving = false;
           return;
         }
@@ -249,7 +246,7 @@
 
   async function removeUser(u: ManagedUser) {
     if (!confirm(t('admin.usersDeleteConfirm', $locale))) return;
-    error = '';
+    mutationError = '';
     message = '';
     await runMutation('deleteUser', { id: u.id });
   }
@@ -258,7 +255,7 @@
     const willSuspend = !u.isSuspended;
     const confirmKey = willSuspend ? 'admin.usersSuspendConfirm' : 'admin.usersUnsuspendConfirm';
     if (!confirm(t(confirmKey, $locale))) return;
-    error = '';
+    mutationError = '';
     message = '';
     await runMutation('saveUser', {
       mode: 'update',
