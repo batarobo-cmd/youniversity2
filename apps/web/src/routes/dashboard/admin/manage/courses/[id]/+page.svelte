@@ -875,7 +875,6 @@
                   <option value="active">{t('admin.enrollmentActive', $locale)}</option>
                   <option value="suspended">{t('admin.enrollmentSuspended', $locale)}</option>
                   <option value="revoked">{t('admin.assignmentRemoved', $locale)}</option>
-                  <option value="none">{t('admin.reportingNoEnrollment', $locale)}</option>
                   <option value="completed">{t('admin.enrollmentCompleted', $locale)}</option>
                 </select>
               </label>
