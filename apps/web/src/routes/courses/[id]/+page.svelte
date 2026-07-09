@@ -7,7 +7,7 @@
   import { t } from '$lib/i18n';
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
   import { WS_EVENTS } from '@youniversity2/shared';
-  import { moduleActivities, normalizeActivityType } from '$lib/activity-types';
+  import { moduleActivities, normalizeActivityType, countsForCourseCompletion, isProgressFullyComplete } from '$lib/activity-types';
   import type { PageData } from './$types';
   import '$lib/styles/courses.css';
 
@@ -381,18 +381,22 @@
   }
 
   function isLessonComplete(lessonId: string) {
-    return Boolean(getLessonProgress(lessonId)?.isComplete);
+    return isProgressFullyComplete(getLessonProgress(lessonId));
+  }
+
+  function requiredActivities(mod: Record<string, unknown>) {
+    return selectableActivities(mod).filter((item) => countsForCourseCompletion(item as { type?: string; isRequired?: boolean }));
   }
 
   function moduleCompletion(mod: Record<string, unknown>) {
-    const activities = selectableActivities(mod);
+    const activities = requiredActivities(mod);
     const total = activities.length;
     const completed = activities.filter((a) => isLessonComplete(a.id as string)).length;
     return { total, completed, done: total > 0 && completed === total };
   }
 
   function courseCompletion() {
-    const allActivities = sortedModules().flatMap((mod) => selectableActivities(mod));
+    const allActivities = sortedModules().flatMap((mod) => requiredActivities(mod));
     const total = allActivities.length;
     const completed = allActivities.filter((a) => isLessonComplete(a.id as string)).length;
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;

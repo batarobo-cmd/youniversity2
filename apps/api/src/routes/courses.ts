@@ -463,7 +463,7 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
     moduleIds.length > 0
       ? await db.select().from(lessons).where(inArray(lessons.moduleId, moduleIds))
       : [];
-  const courseLessons = allLessons.filter((l) => l.type !== 'text');
+  const courseLessons = allLessons.filter((l) => l.type !== 'text' && l.isRequired);
   const lessonIds = courseLessons.map((l) => l.id);
 
   const enrollmentRows = await db
@@ -520,7 +520,9 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
         email: certsByUser.get(userId)?.[0]?.userEmail ?? '',
       } as { id: string; name: string; email: string });
     const userProgress = progressRows.filter((p) => p.userId === userId);
-    const completedActivities = userProgress.filter((p) => p.isComplete).length;
+    const completedActivities = userProgress.filter(
+      (p) => p.isComplete && p.percentComplete >= 100,
+    ).length;
     const totalActivities = courseLessons.length;
     const progressPercent = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
     const started = progressPercent > 0;

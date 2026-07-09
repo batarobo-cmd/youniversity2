@@ -14,6 +14,7 @@ import {
 } from '../db/schema';
 import type { AuthUser } from '../middleware/auth';
 import { isCourseVisibleToStudents } from './course-visibility';
+import { countsForCourseCompletion, isProgressFullyComplete } from './course-completion';
 
 async function getCourseProgressPercent(userId: string, courseId: string): Promise<number> {
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
@@ -21,7 +22,7 @@ async function getCourseProgressPercent(userId: string, courseId: string): Promi
   if (moduleIds.length === 0) return 0;
 
   const allLessons = await db.select().from(lessons);
-  const courseLessons = allLessons.filter((l) => moduleIds.includes(l.moduleId) && l.type !== 'text');
+  const courseLessons = allLessons.filter((l) => moduleIds.includes(l.moduleId) && countsForCourseCompletion(l));
   if (courseLessons.length === 0) return 100;
 
   const lessonIds = courseLessons.map((l) => l.id);
@@ -30,7 +31,7 @@ async function getCourseProgressPercent(userId: string, courseId: string): Promi
     .from(lessonProgress)
     .where(and(eq(lessonProgress.userId, userId), inArray(lessonProgress.lessonId, lessonIds)));
 
-  const completed = progress.filter((p) => p.isComplete).length;
+  const completed = progress.filter((p) => isProgressFullyComplete(p)).length;
   return Math.round((completed / courseLessons.length) * 100);
 }
 

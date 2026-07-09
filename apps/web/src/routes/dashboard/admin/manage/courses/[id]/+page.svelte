@@ -7,6 +7,7 @@
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
+  import { moduleActivities, normalizeActivityType, isEvaluableActivity } from '$lib/activity-types';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
@@ -66,8 +67,7 @@
   let publishEndsAt = $state('');
 
   let evalRules = $state<CompletionRule[]>([]);
-  let minQuizScore = $state(70);
-  let videoWatchPercent = $state(80);
+  let mandatoryByActivityId = $state<Record<string, boolean>>({});
 
   let enrollments = $state<EnrollmentRow[]>(data.enrollments as EnrollmentRow[]);
   let enrollUserId = $state('');
@@ -123,6 +123,7 @@
     publishEndsAt = toLocalDateTimeInput(c.endsAt);
     publicationMode = publishStartsAt || publishEndsAt ? 'schedule' : 'manual';
     parseRules((c.completionRules as CompletionRule[]) ?? []);
+    syncMandatoryFromCourse(c);
     enrollments = enr;
     issuedCerts = certs;
     reportingRows = reporting;
@@ -146,15 +147,49 @@
     evalRules = evalOnly.length
       ? evalOnly
       : [{ type: 'all_lessons_complete', config: {}, isRequired: true }];
-    const quiz = evalOnly.find((r) => r.type === 'quiz_min_score');
-    if (quiz?.config && typeof quiz.config.minScore === 'number') minQuizScore = quiz.config.minScore as number;
-    const video = evalOnly.find((r) => r.type === 'video_watch_percent');
-    if (video?.config && typeof video.config.percent === 'number')
-      videoWatchPercent = video.config.percent as number;
     const cert = (certRule?.config as { certificate?: { enabled?: boolean; titleTemplate?: string } })
       ?.certificate;
     certEnabled = cert?.enabled ?? false;
     certTitle = cert?.titleTemplate ?? '';
+  }
+
+  function syncMandatoryFromCourse(c: Record<string, unknown> | null) {
+    if (!c) return;
+    const next: Record<string, boolean> = {};
+    for (const mod of (c.modules as Array<Record<string, unknown>>) ?? []) {
+      for (const activity of moduleActivities(mod)) {
+        if (!isEvaluableActivity(activity as { type?: string })) continue;
+        next[activity.id as string] = (activity as { isRequired?: boolean }).isRequired !== false;
+      }
+    }
+    mandatoryByActivityId = next;
+  }
+
+  function evaluationModules() {
+    return [...modules]
+      .sort((a, b) => (a.sortOrder as number) - (b.sortOrder as number))
+      .map((mod) => ({
+        ...mod,
+        activities: moduleActivities(mod)
+          .filter((activity) => isEvaluableActivity(activity as { type?: string }))
+          .sort((a, b) => (a.sortOrder as number) - (b.sortOrder as number)),
+      }))
+      .filter((mod) => mod.activities.length > 0);
+  }
+
+  function mandatoryActivityCount() {
+    return Object.values(mandatoryByActivityId).filter(Boolean).length;
+  }
+
+  function activityTypeLabel(type: string) {
+    const normalized = normalizeActivityType(type);
+    const key = `activity.type.${normalized}`;
+    const label = t(key, $locale);
+    return label === key ? normalized : label;
+  }
+
+  function setMandatory(activityId: string, checked: boolean) {
+    mandatoryByActivityId = { ...mandatoryByActivityId, [activityId]: checked };
   }
 
   async function refreshCourse() {
@@ -206,11 +241,24 @@
     message = '';
     error = '';
     try {
-      const rules: CompletionRule[] = [
-        { type: 'all_lessons_complete', config: {}, isRequired: true },
-        { type: 'quiz_min_score', config: { minScore: minQuizScore }, isRequired: true },
-        { type: 'video_watch_percent', config: { percent: videoWatchPercent }, isRequired: false },
-      ];
+      if (mandatoryActivityCount() === 0) {
+        throw new Error(t('admin.evaluationMandatoryRequired', $locale));
+      }
+
+      for (const mod of modules) {
+        for (const activity of moduleActivities(mod)) {
+          if (!isEvaluableActivity(activity as { type?: string })) continue;
+          const activityId = activity.id as string;
+          const shouldBeRequired = mandatoryByActivityId[activityId] ?? false;
+          const currentRequired = (activity as { isRequired?: boolean }).isRequired !== false;
+          if (shouldBeRequired === currentRequired) continue;
+          await serverMutate('apiMutation', `/api/activities/${activityId}`, 'PATCH', {
+            isRequired: shouldBeRequired,
+          });
+        }
+      }
+
+      const rules: CompletionRule[] = [{ type: 'all_lessons_complete', config: {}, isRequired: true }];
       await serverMutate('apiMutation', `/api/courses/${courseId}/completion-rules`, 'PUT', {
         rules,
         certificate: certEnabled ? { enabled: true, titleTemplate: certTitle.trim() } : undefined,
@@ -559,15 +607,43 @@
         <div class="panel-body">
           <form class="course-edit-form" onsubmit={saveEvaluation}>
             <p class="course-edit-hint">{t('admin.evaluationHint', $locale)}</p>
-            <div class="cat-tree-field">
-              <label for="quiz-score">{t('admin.minQuizScore', $locale)}</label>
-              <input id="quiz-score" type="number" min="0" max="100" bind:value={minQuizScore} />
-            </div>
-            <div class="cat-tree-field">
-              <label for="video-pct">{t('admin.videoWatchPercent', $locale)}</label>
-              <input id="video-pct" type="number" min="0" max="100" bind:value={videoWatchPercent} />
-            </div>
-            <button type="submit" class="btn btn-sm" disabled={saving}>{t('admin.saveChanges', $locale)}</button>
+            {#if evaluationModules().length === 0}
+              <p class="cat-tree-empty">{t('admin.evaluationEmpty', $locale)}</p>
+            {:else}
+              <div class="evaluation-activity-list">
+                {#each evaluationModules() as mod}
+                  <section class="evaluation-module-block">
+                    <h3 class="evaluation-module-title">{mod.title as string}</h3>
+                    <ul class="evaluation-activity-rows">
+                      {#each mod.activities as activity}
+                        <li class="evaluation-activity-row">
+                          <label class="evaluation-activity-label">
+                            <input
+                              type="checkbox"
+                              checked={mandatoryByActivityId[activity.id as string] ?? false}
+                              onchange={(e) => setMandatory(activity.id as string, e.currentTarget.checked)}
+                            />
+                            <span class="evaluation-activity-copy">
+                              <span class="evaluation-activity-type">{activityTypeLabel(activity.type as string)}</span>
+                              <span class="evaluation-activity-name">{activity.title as string}</span>
+                            </span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  </section>
+                {/each}
+              </div>
+              <p class="course-edit-hint evaluation-mandatory-summary">
+                {t('admin.evaluationMandatorySummary', $locale).replace(
+                  '{count}',
+                  String(mandatoryActivityCount()),
+                )}
+              </p>
+            {/if}
+            <button type="submit" class="btn btn-sm" disabled={saving || evaluationModules().length === 0}>
+              {t('admin.saveChanges', $locale)}
+            </button>
           </form>
         </div>
       </section>
