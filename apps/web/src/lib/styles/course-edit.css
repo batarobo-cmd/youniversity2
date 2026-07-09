@@ -276,7 +276,7 @@
 }
 
 .reporting-progress-cell {
-  min-width: 180px;
+  min-width: 0;
   display: grid;
   gap: 0.35rem;
 }
@@ -393,8 +393,109 @@
 }
 
 .course-edit-table .reporting-progress-col {
-  min-width: 10.5rem;
+  min-width: 0;
   white-space: nowrap;
+}
+
+.reporting-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reporting-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.reporting-table th,
+.reporting-table td {
+  padding: 0.7rem 0.6rem;
+  vertical-align: top;
+}
+
+.reporting-table th {
+  white-space: normal;
+  line-height: 1.25;
+  hyphens: auto;
+}
+
+.reporting-col-name {
+  width: 17%;
+}
+
+.reporting-col-assignment {
+  width: 12%;
+}
+
+.reporting-col-progress {
+  width: 24%;
+}
+
+.reporting-col-evaluation {
+  width: 13%;
+}
+
+.reporting-col-certs {
+  width: 22%;
+}
+
+.reporting-col-actions {
+  width: 12%;
+  text-align: right;
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--color-bg-elevated);
+  box-shadow: -10px 0 14px -12px rgba(15, 23, 42, 0.22);
+}
+
+.reporting-table thead .reporting-col-actions {
+  background: var(--color-surface-hover);
+}
+
+.reporting-table tbody tr:hover .reporting-col-actions {
+  background: var(--color-surface-hover);
+}
+
+.reporting-col-actions-label {
+  font-size: 0.6875rem;
+}
+
+.reporting-col-name .course-edit-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reporting-progress-cell span {
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.reporting-cert-list {
+  min-width: 0;
+}
+
+.reporting-cert-inline {
+  min-width: 0;
+}
+
+.reporting-cert-inline > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reporting-reset-btn {
+  white-space: nowrap;
+}
+
+.reporting-history-btn {
+  flex-shrink: 0;
 }
 
 .course-edit-table .reporting-progress-badge {

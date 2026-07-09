@@ -249,8 +249,11 @@ const sk: Messages = {
   'admin.reportingStateSuspended': 'Suspendovaný',
   'admin.reportingStateRevoked': 'Odobratý z kurzu',
   'admin.reportingProgressFrozen': 'Postup je zmrazený (neaktívne priradenie)',
+  'admin.reportingProgressFrozenShort': 'Zmrazený postup',
   'admin.reportingNoEnrollment': 'Nepriradený',
   'admin.reportingResetProgress': 'Resetovať progres',
+  'admin.reportingResetProgressShort': 'Reset',
+  'admin.reportingActions': 'Akcie',
   'admin.reportingOlderCertificates': 'Staršie certifikáty',
   'admin.reportingCertificateHistory': 'História certifikátov',
   'admin.reportingResetConfirm':
@@ -679,8 +682,11 @@ const en: Messages = {
   'admin.reportingStateSuspended': 'Suspended',
   'admin.reportingStateRevoked': 'Removed from course',
   'admin.reportingProgressFrozen': 'Progress is frozen (inactive enrollment)',
+  'admin.reportingProgressFrozenShort': 'Frozen progress',
   'admin.reportingNoEnrollment': 'Not enrolled',
   'admin.reportingResetProgress': 'Reset progress',
+  'admin.reportingResetProgressShort': 'Reset',
+  'admin.reportingActions': 'Actions',
   'admin.reportingOlderCertificates': 'Older certificates',
   'admin.reportingCertificateHistory': 'Certificate history',
   'admin.reportingResetConfirm':

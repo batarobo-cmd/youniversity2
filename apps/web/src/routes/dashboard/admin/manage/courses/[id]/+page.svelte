@@ -808,31 +808,31 @@
           {#if reportingRows.length === 0}
             <p class="cat-tree-empty">{t('admin.reportingEmpty', $locale)}</p>
           {:else}
-            <div class="users-table-wrap course-edit-table">
-              <table class="users-table">
+            <div class="users-table-wrap course-edit-table reporting-table-wrap">
+              <table class="users-table reporting-table">
                 <thead>
                   <tr>
-                    <th>{t('admin.studentName', $locale)}</th>
-                    <th>{t('admin.reportingAssignmentStatus', $locale)}</th>
-                    <th>{t('course.progress', $locale)}</th>
-                    <th class="reporting-progress-col">{t('admin.reportingProgressEvaluation', $locale)}</th>
-                    <th>{t('admin.issuedCertificates', $locale)}</th>
-                    <th></th>
+                    <th class="reporting-col-name">{t('admin.studentName', $locale)}</th>
+                    <th class="reporting-col-assignment">{t('admin.reportingAssignmentStatus', $locale)}</th>
+                    <th class="reporting-col-progress">{t('course.progress', $locale)}</th>
+                    <th class="reporting-col-evaluation reporting-progress-col">{t('admin.reportingProgressEvaluation', $locale)}</th>
+                    <th class="reporting-col-certs">{t('admin.issuedCertificates', $locale)}</th>
+                    <th class="reporting-col-actions"><span class="reporting-col-actions-label">{t('admin.reportingActions', $locale)}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {#each reportingRows as row}
                     <tr>
-                      <td>
+                      <td class="reporting-col-name">
                         {row.user.name}<br />
                         <span class="course-edit-sub">{row.user.email}</span>
                       </td>
-                      <td>
+                      <td class="reporting-col-assignment">
                         <span class="users-role-badge enrollment-status--{assignmentStatusClass(row)}">
                           {assignmentStatusLabel(row)}
                         </span>
                       </td>
-                      <td>
+                      <td class="reporting-col-progress">
                         <div class="reporting-progress-cell">
                           {#if isActiveEnrollment(row)}
                             <div class="progress-bar">
@@ -843,16 +843,18 @@
                             <div class="progress-bar reporting-progress-cell--frozen">
                               <div class="progress-bar-fill" style="width: {row.progress.progressPercent}%"></div>
                             </div>
-                            <span>{t('admin.reportingProgressFrozen', $locale)}</span>
+                            <span title={t('admin.reportingProgressFrozen', $locale)}>
+                              {t('admin.reportingProgressFrozenShort', $locale)}
+                            </span>
                           {/if}
                         </div>
                       </td>
-                      <td class="reporting-progress-col">
+                      <td class="reporting-col-evaluation reporting-progress-col">
                         <span class="users-role-badge reporting-progress-badge reporting-state--{reportingProgressStateClass(row)}">
                           {reportingProgressStateLabel(row)}
                         </span>
                       </td>
-                      <td>
+                      <td class="reporting-col-certs">
                         <div class="reporting-cert-list">
                           {#if currentAttemptCertificate(row)}
                             <div class="reporting-cert-inline">
@@ -875,14 +877,15 @@
                           {/if}
                         </div>
                       </td>
-                      <td>
+                      <td class="reporting-col-actions">
                         <button
                           type="button"
-                          class="btn btn-ghost btn-sm"
+                          class="btn btn-ghost btn-sm reporting-reset-btn"
                           disabled={saving || !row.enrollment}
+                          title={t('admin.reportingResetProgress', $locale)}
                           onclick={() => resetStudentProgress(row.user.id)}
                         >
-                          {t('admin.reportingResetProgress', $locale)}
+                          {t('admin.reportingResetProgressShort', $locale)}
                         </button>
                       </td>
                     </tr>
