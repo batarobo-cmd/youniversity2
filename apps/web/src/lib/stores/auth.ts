@@ -5,8 +5,9 @@ import { SESSION_STORAGE_KEY } from '../session';
 
 const LOCALE_KEY = 'yo2_locale';
 
-/** API URL — v produkcii vždy same-origin /api cez nginx; v dev Vite proxy. */
-export const API_BASE = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_URL ?? '');
+/** V prehliadači vždy same-origin /api (nginx → web proxy → API). Na serveri len dev override. */
+export const API_BASE =
+  typeof window !== 'undefined' ? '' : (import.meta.env.VITE_API_URL ?? '');
 
 export function isAdminUser(u: Pick<User, 'role'> | null | undefined): boolean {
   return u?.role === 'admin' || u?.role === 'instructor';

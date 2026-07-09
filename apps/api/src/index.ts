@@ -23,6 +23,7 @@ app.use(
   '*',
   cors({
     origin: config.corsOrigin,
+    credentials: true,
     allowHeaders: ['Content-Type', 'Authorization', 'X-Tab-Session'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),

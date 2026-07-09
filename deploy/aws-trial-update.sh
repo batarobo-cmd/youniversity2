@@ -9,7 +9,8 @@ echo "==> Git pull..."
 git pull origin main
 
 echo "==> Rebuild a reštart kontajnerov..."
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml build --no-cache web api
+docker compose -f docker-compose.prod.yml up -d --force-recreate web api nginx
 
 echo "==> Stav kontajnerov..."
 docker compose -f docker-compose.prod.yml ps
