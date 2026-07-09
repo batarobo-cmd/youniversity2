@@ -85,6 +85,8 @@ export type Activity = Lesson & { type: ActivityType | LessonType };
 
 export interface ActivityConfig {
   videoSource?: VideoSource;
+  videoCompletionMode?: 'manual_confirm' | 'watch_to_end';
+  videoRequiredWatchSeconds?: number;
   videoUrl?: string;
   embedUrl?: string;
   audioUrl?: string;

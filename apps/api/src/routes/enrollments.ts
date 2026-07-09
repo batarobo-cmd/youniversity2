@@ -192,6 +192,102 @@ enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) =>
   return c.json(enrollment);
 });
 
+enrollmentRoutes.post('/:id/suspend', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
+  const enrollmentId = c.req.param('id');
+
+  const [existing] = await db.select().from(enrollments).where(eq(enrollments.id, enrollmentId)).limit(1);
+  if (!existing) return c.json({ error: 'Enrollment not found' }, 404);
+
+  if (!['active', 'completed', 'failed', 'expired'].includes(existing.status)) {
+    return c.json({ error: 'Cannot suspend this enrollment' }, 400);
+  }
+
+  const [enrollment] = await db
+    .update(enrollments)
+    .set({ status: 'suspended' })
+    .where(eq(enrollments.id, enrollmentId))
+    .returning();
+
+  broadcastToUser(enrollment.userId, {
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment, action: 'suspended' },
+    timestamp: new Date().toISOString(),
+  });
+
+  broadcastToAdmin({
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment, action: 'suspended' },
+    timestamp: new Date().toISOString(),
+  });
+
+  const [student] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, enrollment.userId))
+    .limit(1);
+  const courseTitle = await getCourseTitle(enrollment.courseId);
+  void recordUserActivity(actor.id, 'enrollment.suspended', {
+    courseId: enrollment.courseId,
+    payload: {
+      studentName: student?.name,
+      studentId: enrollment.userId,
+      courseTitle,
+      courseId: enrollment.courseId,
+    },
+  });
+
+  return c.json(enrollment);
+});
+
+enrollmentRoutes.post('/:id/unsuspend', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
+  const enrollmentId = c.req.param('id');
+
+  const [existing] = await db.select().from(enrollments).where(eq(enrollments.id, enrollmentId)).limit(1);
+  if (!existing) return c.json({ error: 'Enrollment not found' }, 404);
+
+  if (existing.status !== 'suspended') {
+    return c.json({ error: 'Enrollment is not suspended' }, 400);
+  }
+
+  const [enrollment] = await db
+    .update(enrollments)
+    .set({ status: 'active' })
+    .where(eq(enrollments.id, enrollmentId))
+    .returning();
+
+  broadcastToUser(enrollment.userId, {
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment, action: 'unsuspended' },
+    timestamp: new Date().toISOString(),
+  });
+
+  broadcastToAdmin({
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: { enrollment, action: 'unsuspended' },
+    timestamp: new Date().toISOString(),
+  });
+
+  const [student] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, enrollment.userId))
+    .limit(1);
+  const courseTitle = await getCourseTitle(enrollment.courseId);
+  void recordUserActivity(actor.id, 'enrollment.unsuspended', {
+    courseId: enrollment.courseId,
+    payload: {
+      studentName: student?.name,
+      studentId: enrollment.userId,
+      courseTitle,
+      courseId: enrollment.courseId,
+    },
+  });
+
+  return c.json(enrollment);
+});
+
 enrollmentRoutes.delete('/:id/permanent', requireRole('admin', 'instructor'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const enrollmentId = c.req.param('id');

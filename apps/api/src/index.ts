@@ -9,6 +9,7 @@ import { adminRoutes } from './routes/admin';
 import { enrollmentRoutes } from './routes/enrollments';
 import { progressRoutes } from './routes/progress';
 import { courseContentRoutes } from './routes/course-content';
+import { mediaRoutes } from './routes/media';
 import { config } from './config';
 import {
   initRealtimeHub,
@@ -39,6 +40,7 @@ app.route('/api/categories', categoryRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/enrollments', enrollmentRoutes);
 app.route('/api/progress', progressRoutes);
+app.route('/api/media', mediaRoutes);
 
 await initRealtimeHub();
 

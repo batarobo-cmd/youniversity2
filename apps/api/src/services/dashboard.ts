@@ -21,8 +21,8 @@ async function getCourseProgressPercent(userId: string, courseId: string): Promi
   if (moduleIds.length === 0) return 0;
 
   const allLessons = await db.select().from(lessons);
-  const courseLessons = allLessons.filter((l) => moduleIds.includes(l.moduleId));
-  if (courseLessons.length === 0) return 0;
+  const courseLessons = allLessons.filter((l) => moduleIds.includes(l.moduleId) && l.type !== 'text');
+  if (courseLessons.length === 0) return 100;
 
   const lessonIds = courseLessons.map((l) => l.id);
   const progress = await db
@@ -60,7 +60,7 @@ function classifyCourseBucket(
   course: { startsAt: Date | null; endsAt: Date | null },
   now: Date,
 ): CourseBucket {
-  if (['completed', 'failed', 'expired', 'revoked'].includes(enrollment.status)) {
+  if (['completed', 'failed', 'expired'].includes(enrollment.status)) {
     return 'past';
   }
 
@@ -110,6 +110,8 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
   let completedCount = 0;
 
   for (const enrollment of userEnrollments) {
+    if (['suspended', 'revoked'].includes(enrollment.status)) continue;
+
     const course = courseMap.get(enrollment.courseId);
     if (!course || !isCourseVisibleToStudents(course, now)) continue;
 

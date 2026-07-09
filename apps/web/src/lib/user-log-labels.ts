@@ -75,6 +75,8 @@ export function describeUserLog(entry: LogEntry, locale: Locale): string {
     case 'enrollment.created':
     case 'enrollment.reactivated':
     case 'enrollment.revoked':
+    case 'enrollment.suspended':
+    case 'enrollment.unsuspended':
       return `${eventBaseLabel(entry.eventType, locale)}: ${p.studentName ?? '—'} → ${p.courseTitle ?? p.courseId ?? '—'}`;
 
     case 'course.created':

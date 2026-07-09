@@ -15,6 +15,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1083.0",
     "@hono/node-server": "^1.14.1",
     "@youniversity2/shared": "workspace:*",
     "bcryptjs": "^3.0.2",

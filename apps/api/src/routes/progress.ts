@@ -6,7 +6,7 @@ import { lessonProgress, activityEvents, lessons, courseModules, courses } from 
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { evaluateCourseCompletion } from '../services/completion';
 import { broadcastToCourse } from '../realtime/hub';
-import { canStudentViewCourse } from '../services/course-access';
+import { canStudentViewCourse, canStudentUpdateProgress } from '../services/course-access';
 
 export const progressRoutes = new Hono();
 
@@ -58,7 +58,7 @@ progressRoutes.post('/', async (c) => {
   const [mod] = await db.select().from(courseModules).where(eq(courseModules.id, lesson.moduleId)).limit(1);
   if (!mod) return c.json({ error: 'Module not found' }, 404);
 
-  if (!(await canStudentViewCourse(user, mod.courseId))) {
+  if (!(await canStudentUpdateProgress(user, mod.courseId))) {
     return c.json({ error: 'Course not found' }, 404);
   }
 
@@ -70,11 +70,17 @@ progressRoutes.post('/', async (c) => {
 
   let progress;
   if (existing) {
+    const nextPercent =
+      percentComplete !== undefined
+        ? Math.max(existing.percentComplete, Math.round(percentComplete))
+        : existing.percentComplete;
+    const nextIsComplete =
+      isComplete !== undefined ? existing.isComplete || isComplete : existing.isComplete;
     [progress] = await db
       .update(lessonProgress)
       .set({
-        percentComplete: percentComplete ?? existing.percentComplete,
-        isComplete: isComplete ?? existing.isComplete,
+        percentComplete: nextPercent,
+        isComplete: nextIsComplete,
         score: score ?? existing.score,
         attempts: score !== undefined ? existing.attempts + 1 : existing.attempts,
         lastActivityAt: new Date(),

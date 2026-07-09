@@ -23,7 +23,7 @@ export type LessonType = (typeof LESSON_TYPES)[number];
 export const VIDEO_SOURCES = ['upload', 'youtube', 'vimeo', 'external'] as const;
 export type VideoSource = (typeof VIDEO_SOURCES)[number];
 
-export const ENROLLMENT_STATUSES = ['active', 'completed', 'failed', 'expired', 'revoked'] as const;
+export const ENROLLMENT_STATUSES = ['active', 'completed', 'failed', 'expired', 'revoked', 'suspended'] as const;
 export type EnrollmentStatus = (typeof ENROLLMENT_STATUSES)[number];
 
 export const COMPLETION_RULE_TYPES = [

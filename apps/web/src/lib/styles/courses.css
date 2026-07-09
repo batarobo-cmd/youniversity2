@@ -91,6 +91,33 @@
   margin-bottom: 1.25rem;
 }
 
+.course-inline-progress {
+  margin-bottom: 1.1rem;
+}
+
+.course-inline-progress__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7rem;
+  color: var(--color-muted);
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.course-complete-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, white);
+  background: var(--color-success-muted);
+  color: var(--color-success);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.55rem;
+}
+
 .course-admin-actions {
   display: flex;
   gap: 0.5rem;
@@ -118,6 +145,29 @@
   margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.module-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.module-progress-chip,
+.module-complete-chip {
+  font-size: 0.62rem;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-muted);
+}
+
+.module-complete-chip {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 35%, white);
+  background: var(--color-success-muted);
 }
 
 .module-block--clickable {
@@ -174,6 +224,11 @@
   background: var(--color-primary-muted);
   border-color: rgba(99, 102, 241, 0.3);
   color: var(--color-text);
+}
+
+.lesson-btn--done {
+  border-color: color-mix(in srgb, var(--color-success) 25%, white);
+  background: color-mix(in srgb, var(--color-success-muted) 60%, white);
 }
 
 .lesson-btn .check {
@@ -283,6 +338,18 @@
   width: 100%;
   height: 100%;
   border: none;
+}
+
+.video-rule-note {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.video-rule-warning {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--color-warning);
 }
 
 @media (max-width: 900px) {

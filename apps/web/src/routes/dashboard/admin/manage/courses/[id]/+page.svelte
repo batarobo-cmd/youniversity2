@@ -13,7 +13,7 @@
   import '$lib/styles/admin-users.css';
   import '$lib/styles/course-edit.css';
 
-  type Tab = 'settings' | 'content' | 'evaluation' | 'students' | 'certificate';
+  type Tab = 'settings' | 'content' | 'evaluation' | 'students' | 'certificate' | 'reporting';
 
   type CompletionRule = {
     id?: string;
@@ -33,6 +33,18 @@
     issuedAt: string;
     userName: string;
     userEmail: string;
+  };
+
+  type ReportingRow = {
+    user: { id: string; name: string; email: string };
+    enrollment: { id: string; status: string; enrolledAt: string; completedAt?: string | null } | null;
+    progress: {
+      totalActivities: number;
+      completedActivities: number;
+      progressPercent: number;
+      started: boolean;
+    };
+    completions: Array<{ id: string; certificateNumber: string; issuedAt: string }>;
   };
 
   let { data }: { data: PageData } = $props();
@@ -64,6 +76,8 @@
   let certEnabled = $state(false);
   let certTitle = $state('');
   let issuedCerts = $state<CertRow[]>(data.certificates as CertRow[]);
+  let reportingRows = $state<ReportingRow[]>(data.reporting as ReportingRow[]);
+  let certHistoryModal = $state<{ userName: string; completions: ReportingRow['completions'] } | null>(null);
 
   function toLocalDateTimeInput(value: unknown): string {
     if (!value) return '';
@@ -97,6 +111,7 @@
     c: Record<string, unknown> | null,
     enr: EnrollmentRow[],
     certs: CertRow[],
+    reporting: ReportingRow[],
   ) {
     if (!c) return;
     course = c;
@@ -110,6 +125,7 @@
     parseRules((c.completionRules as CompletionRule[]) ?? []);
     enrollments = enr;
     issuedCerts = certs;
+    reportingRows = reporting;
   }
 
   $effect(() => {
@@ -118,6 +134,7 @@
       data.course,
       data.enrollments as EnrollmentRow[],
       data.certificates as CertRow[],
+      data.reporting as ReportingRow[],
     );
   });
 
@@ -289,30 +306,136 @@
     }
   }
 
+  async function suspendEnrollment(id: string) {
+    if (!confirm(t('admin.suspendEnrollmentConfirm', $locale))) return;
+    saving = true;
+    try {
+      await serverMutate('apiMutation', `/api/enrollments/${id}/suspend`, 'POST');
+      message = t('admin.saved', $locale);
+      await refreshCourse();
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function unsuspendEnrollment(id: string) {
+    if (!confirm(t('admin.unsuspendEnrollmentConfirm', $locale))) return;
+    saving = true;
+    try {
+      await serverMutate('apiMutation', `/api/enrollments/${id}/unsuspend`, 'POST');
+      message = t('admin.saved', $locale);
+      await refreshCourse();
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      saving = false;
+    }
+  }
+
   async function reloadCourse() {
     await invalidate('course:edit');
   }
 
   const modules = $derived((course?.modules as Array<Record<string, unknown>>) ?? []);
 
-  const activeEnrolledIds = $derived(
-    enrollments.filter((r) => r.enrollment.status === 'active').map((r) => r.user.id),
+  const assignedEnrollments = $derived(
+    enrollments.filter((row) => row.enrollment.status !== 'revoked'),
   );
+
+  const assignedUserIds = $derived(assignedEnrollments.map((row) => row.user.id));
+
+  function canSuspendEnrollment(status: string) {
+    return status === 'active' || status === 'completed' || status === 'failed' || status === 'expired';
+  }
+
+  function canRevokeEnrollment(status: string) {
+    return canSuspendEnrollment(status) || status === 'suspended';
+  }
 
   function formatEnrolledAt(iso: string) {
     return new Date(iso).toLocaleString($locale, { dateStyle: 'medium', timeStyle: 'short' });
   }
 
   function enrollmentStatusLabel(status: string) {
-    const keys: Record<string, 'admin.enrollmentActive' | 'admin.enrollmentRevoked' | 'admin.enrollmentCompleted' | 'admin.enrollmentFailed' | 'admin.enrollmentExpired'> = {
+    const keys: Record<
+      string,
+      | 'admin.enrollmentActive'
+      | 'admin.enrollmentRevoked'
+      | 'admin.enrollmentSuspended'
+      | 'admin.enrollmentCompleted'
+      | 'admin.enrollmentFailed'
+      | 'admin.enrollmentExpired'
+    > = {
       active: 'admin.enrollmentActive',
       revoked: 'admin.enrollmentRevoked',
+      suspended: 'admin.enrollmentSuspended',
       completed: 'admin.enrollmentCompleted',
       failed: 'admin.enrollmentFailed',
       expired: 'admin.enrollmentExpired',
     };
     const key = keys[status];
     return key ? t(key, $locale) : status;
+  }
+
+  function reportingStateLabel(row: ReportingRow) {
+    if (row.enrollment?.status === 'suspended') return t('admin.reportingStateSuspended', $locale);
+    if (row.enrollment?.status === 'revoked') return t('admin.reportingStateRevoked', $locale);
+    if (row.enrollment?.status !== 'active') return t('admin.reportingStateInactive', $locale);
+    if (row.progress.progressPercent >= 100) return t('admin.reportingStateCompleted', $locale);
+    if (row.progress.progressPercent > 0) return t('admin.reportingStateStarted', $locale);
+    return t('admin.reportingStateNotStarted', $locale);
+  }
+
+  function isActiveEnrollment(row: ReportingRow) {
+    return row.enrollment?.status === 'active';
+  }
+
+  function reportingStateClass(row: ReportingRow) {
+    if (row.enrollment?.status === 'suspended') return 'suspended';
+    if (row.enrollment?.status === 'revoked') return 'revoked';
+    if (!isActiveEnrollment(row)) return 'inactive';
+    if (row.progress.progressPercent >= 100) return 'completed';
+    if (row.progress.progressPercent > 0) return 'started';
+    return 'idle';
+  }
+
+  function isCurrentAttemptCompleted(row: ReportingRow) {
+    return row.enrollment?.status === 'completed' && row.progress.progressPercent >= 100;
+  }
+
+  function currentAttemptCertificate(row: ReportingRow) {
+    if (!isCurrentAttemptCompleted(row) || row.completions.length === 0) return null;
+    return row.completions[0];
+  }
+
+  function historicalCertificates(row: ReportingRow) {
+    if (row.completions.length === 0) return [];
+    if (isCurrentAttemptCompleted(row)) return row.completions.slice(1);
+    return row.completions;
+  }
+
+  async function resetStudentProgress(userId: string) {
+    if (!confirm(t('admin.reportingResetConfirm', $locale))) return;
+    saving = true;
+    error = '';
+    try {
+      await serverMutate('apiMutation', `/api/courses/${courseId}/reporting/${userId}/reset-progress`, 'POST');
+      message = t('admin.saved', $locale);
+      await refreshCourse();
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      saving = false;
+    }
+  }
+
+  function openCertHistory(row: ReportingRow) {
+    certHistoryModal = {
+      userName: row.user.name,
+      completions: historicalCertificates(row),
+    };
   }
 </script>
 
@@ -358,6 +481,7 @@
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'evaluation'} onclick={() => (activeTab = 'evaluation')}>{t('admin.tabEvaluation', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'students'} onclick={() => (activeTab = 'students')}>{t('admin.tabStudents', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'certificate'} onclick={() => (activeTab = 'certificate')}>{t('admin.tabCertificate', $locale)}</button>
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'reporting'} onclick={() => (activeTab = 'reporting')}>{t('admin.tabReporting', $locale)}</button>
       </div>
     </nav>
 
@@ -444,7 +568,7 @@
           <div class="course-edit-enroll-row">
             <StudentSearchPicker
               bind:this={studentSearch}
-              excludeIds={activeEnrolledIds}
+              excludeIds={assignedUserIds}
               disabled={saving}
               onSelect={(user) => {
                 enrollUserId = user?.id ?? '';
@@ -453,7 +577,9 @@
             <button type="button" class="btn btn-sm" disabled={saving || !enrollUserId} onclick={addEnrollment}>{t('admin.assign', $locale)}</button>
           </div>
 
-          {#if enrollments.length === 0}
+          <p class="course-edit-hint">{t('admin.studentsTabHint', $locale)}</p>
+
+          {#if assignedEnrollments.length === 0}
             <p class="cat-tree-empty">{t('admin.noEnrollments', $locale)}</p>
           {:else}
             <div class="users-table-wrap course-edit-table">
@@ -468,7 +594,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each enrollments as row}
+                  {#each assignedEnrollments as row}
                     <tr>
                       <td>{row.user.name}</td>
                       <td>{row.user.email}</td>
@@ -479,19 +605,37 @@
                         </span>
                       </td>
                       <td>
-                        {#if row.enrollment.status === 'active'}
-                          <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => revokeEnrollment(row.enrollment.id)}>{t('admin.revokeEnrollment', $locale)}</button>
-                        {:else if row.enrollment.status === 'revoked'}
-                          <button type="button" class="btn btn-sm" disabled={saving} onclick={() => restoreEnrollment(row.user.id)}>{t('admin.restoreEnrollment', $locale)}</button>
-                          <button
-                            type="button"
-                            class="btn btn-ghost btn-sm"
-                            disabled={saving}
-                            onclick={() => deleteEnrollmentPermanently(row.enrollment.id)}
-                          >
-                            {t('admin.deleteEnrollment', $locale)}
-                          </button>
-                        {/if}
+                        <div class="enrollment-actions">
+                          {#if row.enrollment.status === 'suspended'}
+                            <button
+                              type="button"
+                              class="btn btn-sm"
+                              disabled={saving}
+                              onclick={() => unsuspendEnrollment(row.enrollment.id)}
+                            >
+                              {t('admin.unsuspendEnrollment', $locale)}
+                            </button>
+                          {:else if canSuspendEnrollment(row.enrollment.status)}
+                            <button
+                              type="button"
+                              class="btn btn-ghost btn-sm"
+                              disabled={saving}
+                              onclick={() => suspendEnrollment(row.enrollment.id)}
+                            >
+                              {t('admin.suspendEnrollment', $locale)}
+                            </button>
+                          {/if}
+                          {#if canRevokeEnrollment(row.enrollment.status)}
+                            <button
+                              type="button"
+                              class="btn btn-ghost btn-sm"
+                              disabled={saving}
+                              onclick={() => revokeEnrollment(row.enrollment.id)}
+                            >
+                              {t('admin.revokeEnrollment', $locale)}
+                            </button>
+                          {/if}
+                        </div>
                       </td>
                     </tr>
                   {/each}
@@ -501,7 +645,7 @@
           {/if}
         </div>
       </section>
-    {:else}
+    {:else if activeTab === 'certificate'}
       <section class="panel course-edit-panel">
         <div class="panel-header"><h2>{t('admin.tabCertificate', $locale)}</h2></div>
         <div class="panel-body">
@@ -544,6 +688,122 @@
           {/if}
         </div>
       </section>
+    {:else}
+      <section class="panel course-edit-panel">
+        <div class="panel-header"><h2>{t('admin.tabReporting', $locale)}</h2></div>
+        <div class="panel-body">
+          <p class="course-edit-hint">{t('admin.reportingHint', $locale)}</p>
+          {#if reportingRows.length === 0}
+            <p class="cat-tree-empty">{t('admin.reportingEmpty', $locale)}</p>
+          {:else}
+            <div class="users-table-wrap course-edit-table">
+              <table class="users-table">
+                <thead>
+                  <tr>
+                    <th>{t('admin.studentName', $locale)}</th>
+                    <th>{t('admin.enrollmentStatus', $locale)}</th>
+                    <th>{t('course.progress', $locale)}</th>
+                    <th>{t('dash.status', $locale)}</th>
+                    <th>{t('admin.issuedCertificates', $locale)}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each reportingRows as row}
+                    <tr>
+                      <td>
+                        {row.user.name}<br />
+                        <span class="course-edit-sub">{row.user.email}</span>
+                      </td>
+                      <td>
+                        {#if row.enrollment}
+                          <span class="users-role-badge enrollment-status--{row.enrollment.status}">
+                            {enrollmentStatusLabel(row.enrollment.status)}
+                          </span>
+                        {:else}
+                          <span class="users-role-badge enrollment-status--revoked">{t('admin.reportingNoEnrollment', $locale)}</span>
+                        {/if}
+                      </td>
+                      <td>
+                        <div class="reporting-progress-cell">
+                          {#if isActiveEnrollment(row)}
+                            <div class="progress-bar">
+                              <div class="progress-bar-fill" style="width: {row.progress.progressPercent}%"></div>
+                            </div>
+                            <span>{row.progress.completedActivities}/{row.progress.totalActivities} ({row.progress.progressPercent}%)</span>
+                          {:else}
+                            <div class="progress-bar reporting-progress-cell--frozen">
+                              <div class="progress-bar-fill" style="width: {row.progress.progressPercent}%"></div>
+                            </div>
+                            <span>{t('admin.reportingProgressFrozen', $locale)}</span>
+                          {/if}
+                        </div>
+                      </td>
+                      <td>
+                        <span class="users-role-badge reporting-state--{reportingStateClass(row)}">
+                          {reportingStateLabel(row)}
+                        </span>
+                      </td>
+                      <td>
+                        <div class="reporting-cert-list">
+                          {#if currentAttemptCertificate(row)}
+                            <div class="reporting-cert-inline">
+                              <span>#{currentAttemptCertificate(row)?.certificateNumber} · {new Date(currentAttemptCertificate(row)?.issuedAt as string).toLocaleDateString($locale)}</span>
+                              {#if historicalCertificates(row).length > 0}
+                                <button type="button" class="btn btn-ghost btn-sm reporting-history-btn" onclick={() => openCertHistory(row)}>
+                                  {t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})
+                                </button>
+                              {/if}
+                            </div>
+                          {:else if historicalCertificates(row).length > 0}
+                            <div class="reporting-cert-inline">
+                              <span class="course-edit-sub">—</span>
+                              <button type="button" class="btn btn-ghost btn-sm reporting-history-btn" onclick={() => openCertHistory(row)}>
+                                {t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})
+                              </button>
+                            </div>
+                          {:else}
+                            <span class="course-edit-sub">—</span>
+                          {/if}
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-sm"
+                          disabled={saving || !row.enrollment}
+                          onclick={() => resetStudentProgress(row.user.id)}
+                        >
+                          {t('admin.reportingResetProgress', $locale)}
+                        </button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </section>
     {/if}
   {/if}
 </div>
+
+{#if certHistoryModal}
+  <div class="reporting-modal-overlay" role="presentation" onclick={() => (certHistoryModal = null)}>
+    <div class="reporting-modal" role="dialog" aria-modal="true" aria-label={t('admin.reportingCertificateHistory', $locale)} onclick={(e) => e.stopPropagation()}>
+      <div class="reporting-modal-head">
+        <h3>{t('admin.reportingCertificateHistory', $locale)} — {certHistoryModal.userName}</h3>
+        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>{t('admin.cancel', $locale)}</button>
+      </div>
+      <div class="reporting-modal-list">
+        {#each certHistoryModal.completions as completion}
+          <div class="reporting-modal-row">
+            <span>#{completion.certificateNumber}</span>
+            <span>{new Date(completion.issuedAt).toLocaleDateString($locale)}</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}

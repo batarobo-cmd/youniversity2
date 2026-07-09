@@ -75,7 +75,7 @@
         {:else}
           <div class="student-courses-list">
             {#each activeCourses as course (course.id)}
-              <StudentCourseCard {course} />
+              <StudentCourseCard {course} variant="active" />
             {/each}
           </div>
         {/if}
@@ -90,7 +90,7 @@
         {:else}
           <div class="student-courses-list">
             {#each futureCourses as course (course.id)}
-              <StudentCourseCard {course} />
+              <StudentCourseCard {course} variant="future" />
             {/each}
           </div>
         {/if}
@@ -105,7 +105,7 @@
         {:else}
           <div class="student-courses-list">
             {#each pastCourses as course (course.id)}
-              <StudentCourseCard {course} />
+              <StudentCourseCard {course} variant="past" />
             {/each}
           </div>
         {/if}

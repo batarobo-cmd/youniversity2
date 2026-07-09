@@ -3,6 +3,14 @@
   import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { normalizeActivityType } from '$lib/activity-types';
+  import VideoActivityFields from '$lib/components/VideoActivityFields.svelte';
+  import {
+    configFromVideoForm,
+    emptyVideoForm,
+    validateVideoForm,
+    videoFormFromConfig,
+    type VideoFormState,
+  } from '$lib/video-config';
   import type { Locale } from '@youniversity2/shared';
 
   type ActivityRow = {
@@ -47,6 +55,8 @@
   let newActivityType = $state<(typeof ACTIVITY_TYPES)[number]>('text');
   let newActivityTitle = $state('');
   let newActivityDescription = $state('');
+  let newVideoForm = $state<VideoFormState>(emptyVideoForm());
+  let editVideoForm = $state<VideoFormState>(emptyVideoForm());
   let dragModuleId = $state<string | null>(null);
   let dragActivity = $state<{ id: string; moduleId: string } | null>(null);
   let dropTargetModuleId = $state<string | null>(null);
@@ -99,6 +109,44 @@
 
   function isTextType(type: string) {
     return normalizeActivityType(type) === 'text';
+  }
+
+  function isVideoType(type: string) {
+    return normalizeActivityType(type) === 'video';
+  }
+
+  function videoValidationMessages() {
+    return {
+      uploadRequired: t('admin.videoUploadRequired', locale),
+      embedRequired: t('admin.videoEmbedRequired', locale),
+      embedInvalid: t('admin.videoEmbedInvalid', locale),
+      watchToEndNeedsNative: t('admin.videoWatchNativeOnly', locale),
+      watchDurationNeedsTrackable: t('admin.videoWatchDurationTrackableOnly', locale),
+    };
+  }
+
+  function videoSourceSummary(config?: Record<string, unknown>) {
+    if (!config) return '';
+    if (config.videoSource === 'upload' || config.fileKey) {
+      return (config.fileName as string) || t('admin.videoModeUpload', locale);
+    }
+    if (config.videoSource === 'vimeo') return 'Vimeo';
+    if (config.videoSource === 'external') return t('admin.videoProvider.external', locale);
+    return 'YouTube';
+  }
+
+  function getNewActivityValidationError(): string | null {
+    if (isTextType(newActivityType)) return null;
+
+    if (!newActivityTitle.trim()) {
+      return t('admin.activityTitleRequired', locale);
+    }
+
+    if (isVideoType(newActivityType)) {
+      return validateVideoForm(newVideoForm, videoValidationMessages());
+    }
+
+    return null;
   }
 
   function activityLabel(type: string) {
@@ -184,6 +232,7 @@
     newActivityType = (preferred ?? 'presentation') as (typeof ACTIVITY_TYPES)[number];
     newActivityTitle = '';
     newActivityDescription = '';
+    newVideoForm = emptyVideoForm();
   }
 
   async function addActivity(moduleId: string) {
@@ -201,16 +250,25 @@
     }
 
     const title = newActivityTitle.trim();
-    if (!title) return;
+    const validationError = getNewActivityValidationError();
+    if (validationError) {
+      error = validationError;
+      return;
+    }
+
+    const config = isVideoType(newActivityType) ? configFromVideoForm(newVideoForm) : undefined;
+
     await run(async () => {
       await serverMutate('apiMutation', `/api/modules/${moduleId}/activities`, 'POST', {
         type: newActivityType,
         title,
         content: content || undefined,
+        config,
       });
       addingToModule = null;
       newActivityTitle = '';
       newActivityDescription = '';
+      newVideoForm = emptyVideoForm();
     });
   }
 
@@ -219,9 +277,13 @@
     editTitle = activity.title;
     editContent = activity.content ?? '';
     const cfg = activity.config ?? {};
+    if (isVideoType(activity.type)) {
+      editVideoForm = videoFormFromConfig(cfg);
+      editConfigUrl = '';
+      return;
+    }
+    editVideoForm = emptyVideoForm();
     editConfigUrl =
-      (cfg.embedUrl as string) ||
-      (cfg.videoUrl as string) ||
       (cfg.audioUrl as string) ||
       (cfg.presentationUrl as string) ||
       '';
@@ -230,7 +292,6 @@
   function configForType(type: string, url: string): Record<string, unknown> | undefined {
     const normalized = normalizeActivityType(type);
     if (!url.trim()) return undefined;
-    if (normalized === 'video') return { embedUrl: url.trim() };
     if (normalized === 'audio') return { audioUrl: url.trim() };
     if (normalized === 'presentation') return { presentationUrl: url.trim() };
     return undefined;
@@ -238,12 +299,23 @@
 
   function showUrlField(type: string) {
     const normalized = normalizeActivityType(type);
-    return normalized === 'video' || normalized === 'audio' || normalized === 'presentation';
+    return normalized === 'audio' || normalized === 'presentation';
   }
 
   async function saveActivity(activity: ActivityRow) {
     const normalized = normalizeActivityType(activity.type);
-    const config = configForType(activity.type, editConfigUrl);
+    let config: Record<string, unknown> | undefined;
+
+    if (isVideoType(activity.type)) {
+      const videoError = validateVideoForm(editVideoForm, videoValidationMessages());
+      if (videoError) {
+        error = videoError;
+        return;
+      }
+      config = configFromVideoForm(editVideoForm);
+    } else {
+      config = configForType(activity.type, editConfigUrl);
+    }
 
     if (isTextType(activity.type)) {
       await run(() =>
@@ -492,6 +564,9 @@
                 {:else}
                   <div class="activity-title-block">
                     <span class="activity-title">{activity.title}</span>
+                    {#if isVideoType(activity.type)}
+                      <span class="activity-video-source">{videoSourceSummary(activity.config)}</span>
+                    {/if}
                     {#if activity.content}
                       <span class="activity-description-preview">{activity.content}</span>
                     {/if}
@@ -522,7 +597,9 @@
                     <span>{contentFieldLabel(activity.type)}</span>
                     <textarea class="activity-description-input" rows="4" bind:value={editContent} disabled={saving}></textarea>
                   </label>
-                  {#if showUrlField(activity.type)}
+                  {#if isVideoType(activity.type)}
+                    <VideoActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editVideoForm} />
+                  {:else if showUrlField(activity.type)}
                     <label>
                       <span>{t('admin.activityMediaUrl', locale)}</span>
                       <input type="url" bind:value={editConfigUrl} disabled={saving} placeholder="https://..." />
@@ -577,6 +654,9 @@
                 type="text"
                 placeholder={t('admin.activityTitlePlaceholder', locale)}
                 bind:value={newActivityTitle}
+                oninput={() => {
+                  if (error) error = '';
+                }}
                 disabled={saving}
               />
               <textarea
@@ -586,8 +666,16 @@
                 bind:value={newActivityDescription}
                 disabled={saving}
               ></textarea>
+              {#if isVideoType(newActivityType)}
+                <VideoActivityFields courseId={courseId} {locale} disabled={saving} bind:form={newVideoForm} />
+              {/if}
             {/if}
-            <button type="button" class="btn btn-sm" disabled={saving} onclick={() => addActivity(mod.id)}>
+            <button
+              type="button"
+              class="btn btn-sm"
+              disabled={saving}
+              onclick={() => addActivity(mod.id)}
+            >
               {t('admin.addActivity', locale)}
             </button>
             <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => (addingToModule = null)}>

@@ -217,6 +217,24 @@
   line-height: 1.5;
 }
 
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  padding: 0.15rem 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.68rem;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+}
+
+.status-chip--done {
+  border-color: color-mix(in srgb, var(--color-success) 35%, white);
+  color: var(--color-success);
+  background: var(--color-success-muted);
+}
+
 .progress-bar-wrap {
   margin-top: 0.75rem;
 }

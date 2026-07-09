@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
 import {
@@ -8,6 +8,7 @@ import {
   courseModules,
   moduleTranslations,
   lessons,
+  lessonProgress,
   lessonTranslations,
   enrollments,
   completionRules,
@@ -17,10 +18,11 @@ import {
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
 import { translateContent } from '../services/translation';
-import { broadcastToCourse, broadcastToAdmin, broadcastToCourseEnrollees } from '../realtime/hub';
+import { broadcastToCourse, broadcastToAdmin, broadcastToCourseEnrollees, broadcastToUser } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 import { isCourseVisibleToStudents } from '../services/course-visibility';
+import { canStudentViewCourse, isEnrollmentListedForStudent } from '../services/course-access';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
@@ -56,7 +58,11 @@ courseRoutes.get('/', async (c) => {
 
     return c.json(
       result
-        .filter((r) => isCourseVisibleToStudents(r.course, now))
+        .filter(
+          (r) =>
+            isCourseVisibleToStudents(r.course, now) &&
+            isEnrollmentListedForStudent(r.enrollment.status),
+        )
         .map((r) => ({
           ...r.course,
           title: r.translation?.title ?? r.course.slug,
@@ -131,8 +137,13 @@ courseRoutes.get('/:id', async (c) => {
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return c.json({ error: 'Course not found' }, 404);
 
-  if (user.role === 'student' && !isCourseVisibleToStudents(course)) {
-    return c.json({ error: 'Course not found' }, 404);
+  if (user.role === 'student') {
+    if (!isCourseVisibleToStudents(course)) {
+      return c.json({ error: 'Course not found' }, 404);
+    }
+    if (!(await canStudentViewCourse(user, courseId))) {
+      return c.json({ error: 'Course not found' }, 404);
+    }
   }
 
   const [translation] = await db
@@ -441,6 +452,180 @@ courseRoutes.get('/:id/certificates', requireRole('admin', 'instructor'), async 
     .orderBy(certificates.issuedAt);
 
   return c.json(rows);
+});
+
+courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c) => {
+  const courseId = c.req.param('id');
+
+  const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
+  const moduleIds = modules.map((m) => m.id);
+  const allLessons =
+    moduleIds.length > 0
+      ? await db.select().from(lessons).where(inArray(lessons.moduleId, moduleIds))
+      : [];
+  const courseLessons = allLessons.filter((l) => l.type !== 'text');
+  const lessonIds = courseLessons.map((l) => l.id);
+
+  const enrollmentRows = await db
+    .select({
+      enrollment: enrollments,
+      user: { id: users.id, name: users.name, email: users.email },
+    })
+    .from(enrollments)
+    .innerJoin(users, eq(enrollments.userId, users.id))
+    .where(eq(enrollments.courseId, courseId))
+    .orderBy(desc(enrollments.enrolledAt));
+
+  const certRows = await db
+    .select({
+      id: certificates.id,
+      userId: certificates.userId,
+      certificateNumber: certificates.certificateNumber,
+      issuedAt: certificates.issuedAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(certificates)
+    .innerJoin(users, eq(certificates.userId, users.id))
+    .where(eq(certificates.courseId, courseId))
+    .orderBy(desc(certificates.issuedAt));
+
+  const knownUserIds = new Set<string>();
+  for (const row of enrollmentRows) knownUserIds.add(row.user.id);
+  for (const row of certRows) knownUserIds.add(row.userId);
+  const userIds = [...knownUserIds];
+
+  const progressRows =
+    lessonIds.length > 0 && userIds.length > 0
+      ? await db
+          .select()
+          .from(lessonProgress)
+          .where(and(inArray(lessonProgress.userId, userIds), inArray(lessonProgress.lessonId, lessonIds)))
+      : [];
+
+  const certsByUser = new Map<string, typeof certRows>();
+  for (const cert of certRows) {
+    const list = certsByUser.get(cert.userId) ?? [];
+    list.push(cert);
+    certsByUser.set(cert.userId, list);
+  }
+
+  const rows = userIds.map((userId) => {
+    const enrollment = enrollmentRows.find((r) => r.user.id === userId)?.enrollment ?? null;
+    const user =
+      enrollmentRows.find((r) => r.user.id === userId)?.user ??
+      ({
+        id: userId,
+        name: certsByUser.get(userId)?.[0]?.userName ?? 'User',
+        email: certsByUser.get(userId)?.[0]?.userEmail ?? '',
+      } as { id: string; name: string; email: string });
+    const userProgress = progressRows.filter((p) => p.userId === userId);
+    const completedActivities = userProgress.filter((p) => p.isComplete).length;
+    const totalActivities = courseLessons.length;
+    const progressPercent = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
+    const started = progressPercent > 0;
+    const certs = certsByUser.get(userId) ?? [];
+
+    return {
+      user,
+      enrollment,
+      progress: {
+        totalActivities,
+        completedActivities,
+        progressPercent,
+        started,
+      },
+      completions: certs.map((cert) => ({
+        id: cert.id,
+        certificateNumber: cert.certificateNumber,
+        issuedAt: cert.issuedAt.toISOString(),
+      })),
+    };
+  });
+
+  rows.sort((a, b) => {
+    const aActive = a.enrollment?.status === 'active' ? 1 : 0;
+    const bActive = b.enrollment?.status === 'active' ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+    return a.user.name.localeCompare(b.user.name);
+  });
+
+  return c.json(rows);
+});
+
+courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin', 'instructor'), async (c) => {
+  const actor = c.get('user') as AuthUser;
+  const courseId = c.req.param('id');
+  const userId = c.req.param('userId');
+
+  const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+  if (!course) return c.json({ error: 'Course not found' }, 404);
+
+  const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
+  const moduleIds = modules.map((m) => m.id);
+  const allLessons =
+    moduleIds.length > 0
+      ? await db.select().from(lessons).where(inArray(lessons.moduleId, moduleIds))
+      : [];
+  const lessonIds = allLessons.filter((l) => l.type !== 'text').map((l) => l.id);
+
+  if (lessonIds.length > 0) {
+    await db
+      .delete(lessonProgress)
+      .where(and(eq(lessonProgress.userId, userId), inArray(lessonProgress.lessonId, lessonIds)));
+  }
+
+  const [existingEnrollment] = await db
+    .select()
+    .from(enrollments)
+    .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)))
+    .limit(1);
+
+  let updatedEnrollment = existingEnrollment;
+  if (existingEnrollment) {
+    [updatedEnrollment] = await db
+      .update(enrollments)
+      .set({
+        status: 'active',
+        completedAt: null,
+        enrolledAt: new Date(),
+      })
+      .where(eq(enrollments.id, existingEnrollment.id))
+      .returning();
+  }
+
+  const [student] = await db
+    .select({ name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const updateMessage = {
+    type: WS_EVENTS.PROGRESS_UPDATED,
+    payload: { userId, courseId, reset: true },
+    timestamp: new Date().toISOString(),
+  };
+  broadcastToCourse(courseId, updateMessage);
+  broadcastToAdmin(updateMessage);
+  broadcastToUser(userId, updateMessage);
+
+  const courseTitle = await getCourseTitle(courseId);
+  void recordUserActivity(actor.id, 'enrollment.progress_reset', {
+    courseId,
+    payload: {
+      studentId: userId,
+      studentName: student?.name,
+      studentEmail: student?.email,
+      courseTitle,
+      courseId,
+    },
+  });
+
+  return c.json({
+    ok: true,
+    enrollment: updatedEnrollment ?? null,
+    resetLessonCount: lessonIds.length,
+  });
 });
 
 courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), async (c) => {

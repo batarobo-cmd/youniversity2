@@ -11,6 +11,14 @@
   import type { PageData } from './$types';
   import '$lib/styles/courses.css';
 
+  declare global {
+    interface Window {
+      YT?: any;
+      onYouTubeIframeAPIReady?: () => void;
+      Vimeo?: { Player: new (element: HTMLIFrameElement) => any };
+    }
+  }
+
   let { data }: { data: PageData } = $props();
 
   let course = $state<Record<string, unknown> | null>(data.course);
@@ -18,6 +26,18 @@
   let activeLesson = $state<Record<string, unknown> | null>(null);
   let activeModuleId = $state<string | null>(null);
   let loading = $state(false);
+  let videoElement = $state<HTMLVideoElement | null>(null);
+  let videoIframe = $state<HTMLIFrameElement | null>(null);
+  let videoSeekGuard = $state(false);
+  let maxAllowedTime = $state(0);
+  let syncingVideoProgress = $state(false);
+  let lastVideoSyncAt = $state(0);
+  let trackedWatchSeconds = $state(0);
+  let lastObservedPlayerTime = $state<number | null>(null);
+  let watchTickTimer = $state<number | null>(null);
+  let currentVideoProvider = $state<'native' | 'youtube' | 'vimeo' | null>(null);
+  let youtubePlayer: any = null;
+  let vimeoPlayer: any = null;
 
   const courseId = $derived($page.params.id);
 
@@ -52,6 +72,9 @@
     });
 
     return () => {
+      clearWatchTicking();
+      youtubePlayer?.destroy?.();
+      vimeoPlayer?.destroy?.();
       unsubAuth();
       unsubWs();
     };
@@ -70,6 +93,251 @@
     return progress.find((p) => p.lessonId === lessonId);
   }
 
+  function videoCompletionMode(config: Record<string, unknown>) {
+    if (config.videoCompletionMode === 'watch_to_end') return 'watch_to_end';
+    if (config.videoCompletionMode === 'min_watch_time') return 'min_watch_time';
+    return 'manual_confirm';
+  }
+
+  function isWatchToEndMode(config: Record<string, unknown>) {
+    return videoCompletionMode(config) === 'watch_to_end';
+  }
+
+  function requiredWatchSeconds(config: Record<string, unknown>) {
+    const raw = Number(config.videoRequiredWatchSeconds ?? 0);
+    return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : 0;
+  }
+
+  function effectiveVideoUrl(config: Record<string, unknown>) {
+    if (typeof config.videoUrl === 'string' && config.videoUrl.trim()) return config.videoUrl as string;
+    if (typeof config.embedUrl === 'string' && config.embedUrl.trim()) return config.embedUrl as string;
+    return null;
+  }
+
+  function videoProvider(config: Record<string, unknown>) {
+    if (typeof config.videoUrl === 'string' && config.videoUrl.trim()) return 'native' as const;
+    const embed = typeof config.embedUrl === 'string' ? (config.embedUrl as string) : '';
+    if (!embed) return null;
+    if (embed.includes('youtube.com/embed/') || embed.includes('youtu.be/')) return 'youtube' as const;
+    if (embed.includes('player.vimeo.com/video/')) return 'vimeo' as const;
+    return null;
+  }
+
+  function embedUrlWithTracking(config: Record<string, unknown>) {
+    const raw = typeof config.embedUrl === 'string' ? (config.embedUrl as string) : '';
+    if (!raw) return raw;
+    try {
+      const url = new URL(raw);
+      const host = url.hostname.replace(/^www\./, '');
+      if (host.includes('youtube.com')) {
+        url.searchParams.set('enablejsapi', '1');
+        url.searchParams.set('playsinline', '1');
+        url.searchParams.set('rel', '0');
+      } else if (host.includes('vimeo.com')) {
+        url.searchParams.set('api', '1');
+        url.searchParams.set('dnt', '1');
+      }
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  }
+
+  function canEnforceWatchToEnd(config: Record<string, unknown>) {
+    return Boolean(typeof config.videoUrl === 'string' && config.videoUrl.trim());
+  }
+
+  function shouldShowManualVideoComplete(config: Record<string, unknown>) {
+    return !shouldAutoCompleteByWatchTime(config);
+  }
+
+  function canTrackWatchTime(config: Record<string, unknown>) {
+    const provider = videoProvider(config);
+    return provider === 'native' || provider === 'youtube' || provider === 'vimeo';
+  }
+
+  function shouldAutoCompleteByWatchTime(config: Record<string, unknown>) {
+    const required = requiredWatchSeconds(config);
+    if (videoCompletionMode(config) === 'min_watch_time') return required > 0 && canTrackWatchTime(config);
+    return isWatchToEndMode(config) && canEnforceWatchToEnd(config);
+  }
+
+  async function ensureYouTubeApi() {
+    if (window.YT?.Player) return;
+    await new Promise<void>((resolve) => {
+      const existing = document.querySelector('script[data-yo2-yt]');
+      if (existing) {
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+          prev?.();
+          resolve();
+        };
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      script.dataset.yo2Yt = '1';
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        prev?.();
+        resolve();
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  async function ensureVimeoApi() {
+    if (window.Vimeo?.Player) return;
+    await new Promise<void>((resolve) => {
+      const existing = document.querySelector('script[data-yo2-vimeo]');
+      if (existing) {
+        const check = window.setInterval(() => {
+          if (window.Vimeo?.Player) {
+            window.clearInterval(check);
+            resolve();
+          }
+        }, 100);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://player.vimeo.com/api/player.js';
+      script.async = true;
+      script.dataset.yo2Vimeo = '1';
+      script.onload = () => resolve();
+      document.head.appendChild(script);
+    });
+  }
+
+  function clearWatchTicking() {
+    if (watchTickTimer !== null) {
+      window.clearInterval(watchTickTimer);
+      watchTickTimer = null;
+    }
+    lastObservedPlayerTime = null;
+  }
+
+  async function getPlayerCurrentTime() {
+    if (currentVideoProvider === 'native') return Number(videoElement?.currentTime ?? 0);
+    if (currentVideoProvider === 'youtube' && youtubePlayer?.getCurrentTime) {
+      return Number(youtubePlayer.getCurrentTime() ?? 0);
+    }
+    if (currentVideoProvider === 'vimeo' && vimeoPlayer?.getCurrentTime) {
+      return Number(await vimeoPlayer.getCurrentTime());
+    }
+    return 0;
+  }
+
+  async function getPlayerDuration() {
+    if (currentVideoProvider === 'native') return Number(videoElement?.duration ?? 0);
+    if (currentVideoProvider === 'youtube' && youtubePlayer?.getDuration) {
+      return Number(youtubePlayer.getDuration() ?? 0);
+    }
+    if (currentVideoProvider === 'vimeo' && vimeoPlayer?.getDuration) {
+      return Number(await vimeoPlayer.getDuration());
+    }
+    return 0;
+  }
+
+  function requiredWatchTarget(config: Record<string, unknown>, duration: number) {
+    const explicit = requiredWatchSeconds(config);
+    if (videoCompletionMode(config) === 'min_watch_time') return explicit > 0 ? explicit : 0;
+    if (isWatchToEndMode(config) && duration > 0) return Math.round(duration);
+    return 0;
+  }
+
+  function restoreWatchCounterFromProgress(config: Record<string, unknown>, prog?: Record<string, unknown>) {
+    const percent = Number(prog?.percentComplete ?? 0);
+    if (!Number.isFinite(percent) || percent <= 0) {
+      trackedWatchSeconds = 0;
+      return;
+    }
+    const duration = Number(videoElement?.duration ?? 0);
+    const target = requiredWatchTarget(config, duration);
+    if (target > 0) {
+      trackedWatchSeconds = Math.round((Math.max(0, Math.min(100, percent)) / 100) * target);
+      return;
+    }
+    trackedWatchSeconds = 0;
+  }
+
+  async function syncWatchState(lessonId: string, config: Record<string, unknown>) {
+    const duration = await getPlayerDuration();
+    const target = requiredWatchTarget(config, duration);
+    if (!target) return;
+    const normalized = Math.max(0, Math.min(trackedWatchSeconds, target));
+    const percentComplete = Math.min(100, Math.round((normalized / target) * 100));
+    await syncVideoProgress(lessonId, {
+      percentComplete,
+      isComplete: percentComplete >= 100,
+    });
+    await invalidate('student:course');
+  }
+
+  function startWatchTicking(lessonId: string, config: Record<string, unknown>) {
+    if (!shouldAutoCompleteByWatchTime(config) || watchTickTimer !== null) return;
+    watchTickTimer = window.setInterval(async () => {
+      const nowPos = await getPlayerCurrentTime();
+      if (!Number.isFinite(nowPos)) return;
+      if (lastObservedPlayerTime === null) {
+        lastObservedPlayerTime = nowPos;
+        return;
+      }
+      const delta = nowPos - lastObservedPlayerTime;
+      lastObservedPlayerTime = nowPos;
+      if (delta > 0 && delta <= 2.5) trackedWatchSeconds += delta;
+
+      const now = Date.now();
+      if (now - lastVideoSyncAt < 5000 || syncingVideoProgress) return;
+      lastVideoSyncAt = now;
+      await syncWatchState(lessonId, config);
+      const target = requiredWatchTarget(config, await getPlayerDuration());
+      if (target > 0 && trackedWatchSeconds >= target) {
+        clearWatchTicking();
+        trackActivity('lesson.completed', courseId, lessonId);
+      }
+    }, 1000);
+  }
+
+  async function bindEmbedPlayer(
+    iframe: HTMLIFrameElement,
+    lessonId: string,
+    config: Record<string, unknown>,
+    prog?: Record<string, unknown>,
+  ) {
+    currentVideoProvider = videoProvider(config);
+    if (currentVideoProvider === 'youtube') {
+      await ensureYouTubeApi();
+      youtubePlayer?.destroy?.();
+      youtubePlayer = new window.YT.Player(iframe, {
+        events: {
+          onReady: async () => {
+            restoreWatchCounterFromProgress(config, prog);
+            await syncWatchState(lessonId, config);
+          },
+          onStateChange: (event: { data: number }) => {
+            if (event.data === 1) startWatchTicking(lessonId, config);
+            if (event.data === 2 || event.data === 0) clearWatchTicking();
+            if (event.data === 0) void syncWatchState(lessonId, config);
+          },
+        },
+      });
+      return;
+    }
+    if (currentVideoProvider === 'vimeo') {
+      await ensureVimeoApi();
+      vimeoPlayer?.destroy?.();
+      vimeoPlayer = new window.Vimeo.Player(iframe);
+      restoreWatchCounterFromProgress(config, prog);
+      vimeoPlayer.on('play', () => startWatchTicking(lessonId, config));
+      vimeoPlayer.on('pause', () => clearWatchTicking());
+      vimeoPlayer.on('ended', async () => {
+        clearWatchTicking();
+        await syncWatchState(lessonId, config);
+      });
+    }
+  }
+
   function activityType(lesson: Record<string, unknown>) {
     return normalizeActivityType(lesson.type as string);
   }
@@ -85,6 +353,31 @@
       (a, b) => (a.sortOrder as number) - (b.sortOrder as number),
     );
   }
+
+  function selectableActivities(mod: Record<string, unknown>) {
+    return sortedModuleActivities(mod).filter((item) => activityType(item) !== 'text');
+  }
+
+  function isLessonComplete(lessonId: string) {
+    return Boolean(getLessonProgress(lessonId)?.isComplete);
+  }
+
+  function moduleCompletion(mod: Record<string, unknown>) {
+    const activities = selectableActivities(mod);
+    const total = activities.length;
+    const completed = activities.filter((a) => isLessonComplete(a.id as string)).length;
+    return { total, completed, done: total > 0 && completed === total };
+  }
+
+  function courseCompletion() {
+    const allActivities = sortedModules().flatMap((mod) => selectableActivities(mod));
+    const total = allActivities.length;
+    const completed = allActivities.filter((a) => isLessonComplete(a.id as string)).length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, percent, done: total > 0 && completed === total };
+  }
+
+  const sidebarCourseState = $derived(courseCompletion());
 
   function moduleTextBlocks(mod: Record<string, unknown>) {
     return sortedModuleActivities(mod).filter((item) => activityType(item) === 'text');
@@ -118,12 +411,37 @@
     activeModuleId = mod.id as string;
     activeLesson = null;
     trackActivity('module.opened', courseId, mod.id as string);
+    videoElement = null;
+    videoIframe = null;
+    clearWatchTicking();
+    youtubePlayer?.destroy?.();
+    vimeoPlayer?.destroy?.();
+    youtubePlayer = null;
+    vimeoPlayer = null;
+    currentVideoProvider = null;
+    trackedWatchSeconds = 0;
+    maxAllowedTime = 0;
+    videoSeekGuard = false;
+    lastVideoSyncAt = 0;
   }
 
   async function openLesson(lesson: Record<string, unknown>) {
+    if (activeLesson?.id === lesson.id) return;
     activeLesson = lesson;
     activeModuleId = null;
     trackActivity('lesson.opened', courseId, lesson.id as string, { type: lesson.type });
+    videoElement = null;
+    videoIframe = null;
+    clearWatchTicking();
+    youtubePlayer?.destroy?.();
+    vimeoPlayer?.destroy?.();
+    youtubePlayer = null;
+    vimeoPlayer = null;
+    currentVideoProvider = null;
+    trackedWatchSeconds = 0;
+    maxAllowedTime = 0;
+    videoSeekGuard = false;
+    lastVideoSyncAt = 0;
   }
 
   async function markComplete(lessonId: string) {
@@ -132,6 +450,111 @@
       isComplete: true,
       percentComplete: 100,
     });
+    trackActivity('lesson.completed', courseId, lessonId);
+    await invalidate('student:course');
+  }
+
+  async function syncVideoProgress(lessonId: string, payload: { percentComplete: number; isComplete?: boolean }) {
+    if (syncingVideoProgress) return;
+    syncingVideoProgress = true;
+    try {
+      await serverMutate('apiMutation', '/api/progress', 'POST', {
+        lessonId,
+        percentComplete: payload.percentComplete,
+        ...(payload.isComplete !== undefined ? { isComplete: payload.isComplete } : {}),
+      });
+    } finally {
+      syncingVideoProgress = false;
+    }
+  }
+
+  function bindVideoElement(node: HTMLVideoElement) {
+    videoElement = node;
+    currentVideoProvider = 'native';
+    return {
+      destroy() {
+        if (videoElement === node) videoElement = null;
+      },
+    };
+  }
+
+  function bindVideoIframe(
+    node: HTMLIFrameElement,
+    param: {
+      lessonId: string;
+      config: Record<string, unknown>;
+      prog?: Record<string, unknown>;
+    },
+  ) {
+    videoIframe = node;
+    void bindEmbedPlayer(node, param.lessonId, param.config, param.prog);
+    return {
+      destroy() {
+        if (videoIframe === node) videoIframe = null;
+      },
+    };
+  }
+
+  function restoreVideoPosition(lessonId: string, prog?: Record<string, unknown>) {
+    if (!videoElement || !activeLesson || activeLesson.id !== lessonId) return;
+    const duration = Number(videoElement.duration || 0);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const fromProgress = Number(prog?.percentComplete ?? 0);
+    const resumePercent = Math.max(0, Math.min(99, fromProgress));
+    const resumeTime = (resumePercent / 100) * duration;
+    if (resumeTime > 0 && Math.abs(videoElement.currentTime - resumeTime) > 2) {
+      videoElement.currentTime = resumeTime;
+    }
+    maxAllowedTime = Math.max(maxAllowedTime, videoElement.currentTime);
+  }
+
+  async function handleVideoTimeUpdate(lessonId: string, config: Record<string, unknown>) {
+    if (videoSeekGuard || !videoElement) return;
+    const duration = Number(videoElement.duration || 0);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    maxAllowedTime = Math.max(maxAllowedTime, videoElement.currentTime);
+    const target = requiredWatchTarget(config, duration);
+    if (target > 0) {
+      const watchedForTarget = isWatchToEndMode(config) ? maxAllowedTime : trackedWatchSeconds;
+      const percentComplete = Math.min(100, Math.max(0, Math.round((watchedForTarget / target) * 100)));
+      const now = Date.now();
+      if (now - lastVideoSyncAt < 5000 || syncingVideoProgress) return;
+      lastVideoSyncAt = now;
+      await syncVideoProgress(lessonId, {
+        percentComplete,
+        isComplete: percentComplete >= 100,
+      });
+      await invalidate('student:course');
+      return;
+    }
+    const percentComplete = Math.min(100, Math.max(0, Math.round((maxAllowedTime / duration) * 100)));
+    const now = Date.now();
+    if (now - lastVideoSyncAt < 5000 || syncingVideoProgress) return;
+    lastVideoSyncAt = now;
+    await syncVideoProgress(lessonId, {
+      percentComplete,
+      isComplete: isWatchToEndMode(config) && percentComplete >= 100,
+    });
+    await invalidate('student:course');
+  }
+
+  function handleVideoSeeking(config: Record<string, unknown>) {
+    if (!videoElement || !isWatchToEndMode(config) || !canEnforceWatchToEnd(config)) return;
+    const target = videoElement.currentTime;
+    if (target > maxAllowedTime + 0.8) {
+      videoSeekGuard = true;
+      videoElement.currentTime = maxAllowedTime;
+      queueMicrotask(() => {
+        videoSeekGuard = false;
+      });
+      return;
+    }
+    maxAllowedTime = Math.max(maxAllowedTime, target);
+  }
+
+  async function handleVideoEnded(lessonId: string) {
+    maxAllowedTime = Number(videoElement?.duration ?? maxAllowedTime);
+    await syncVideoProgress(lessonId, { percentComplete: 100, isComplete: true });
     trackActivity('lesson.completed', courseId, lessonId);
     await invalidate('student:course');
   }
@@ -163,6 +586,18 @@
       <div class="course-sidebar-header">
         <h1>{course.title as string}</h1>
         <p>{course.description as string}</p>
+        <div class="course-inline-progress">
+          <div class="course-inline-progress__label">
+            <span>{t('course.progress', $locale)}</span>
+            <span>{sidebarCourseState.completed}/{sidebarCourseState.total} ({sidebarCourseState.percent}%)</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-bar-fill" style="width: {sidebarCourseState.percent}%"></div>
+          </div>
+          {#if sidebarCourseState.done}
+            <span class="course-complete-chip">✓ {t('courses.statusCompleted', $locale)}</span>
+          {/if}
+        </div>
       </div>
 
       {#if $isAdmin}
@@ -192,13 +627,21 @@
           </button>
         {:else}
           <div class="module-block">
-            <h3>{mod.title as string}</h3>
+            <h3 class="module-title-row">
+              <span>{mod.title as string}</span>
+              {#if moduleCompletion(mod).done}
+                <span class="module-complete-chip">✓</span>
+              {:else if moduleCompletion(mod).total > 0}
+                <span class="module-progress-chip">{moduleCompletion(mod).completed}/{moduleCompletion(mod).total}</span>
+              {/if}
+            </h3>
             {#each sortedModuleActivities(mod) as lesson}
               {@const prog = getLessonProgress(lesson.id as string)}
               {@const type = activityType(lesson)}
               {#if type !== 'text'}
                 <button
                   class="lesson-btn"
+                  class:lesson-btn--done={prog?.isComplete}
                   class:active={activeLesson?.id === lesson.id}
                   onclick={() => openLesson(lesson)}
                 >
@@ -243,24 +686,61 @@
         {/if}
 
         {#if type === 'video'}
-          {#if config.embedUrl || config.videoUrl}
+          {@const lessonProgress = getLessonProgress(activeLesson.id as string)}
+          {@const videoUrl = effectiveVideoUrl(config)}
+          {@const requiresWatchToEnd = isWatchToEndMode(config)}
+          {@const strictWatchMode = requiresWatchToEnd && canEnforceWatchToEnd(config)}
+          {#if videoUrl}
             <div class="video-wrap">
-              {#if config.embedUrl}
-                <iframe
-                  src={config.embedUrl as string}
-                  title={activeLesson.title as string}
-                  allowfullscreen
-                ></iframe>
-              {:else}
-                <video src={config.videoUrl as string} controls class="course-native-video">
+              {#if typeof config.videoUrl === 'string' && config.videoUrl}
+                <video
+                  src={config.videoUrl as string}
+                  controls
+                  class="course-native-video"
+                  use:bindVideoElement
+                  controlsList={strictWatchMode ? 'nodownload noplaybackrate noremoteplayback' : undefined}
+                  onloadedmetadata={() => {
+                    restoreVideoPosition(activeLesson.id as string, lessonProgress);
+                    restoreWatchCounterFromProgress(config, lessonProgress);
+                  }}
+                  onplay={() => startWatchTicking(activeLesson.id as string, config)}
+                  ontimeupdate={() => handleVideoTimeUpdate(activeLesson.id as string, config)}
+                  onpause={() => {
+                    clearWatchTicking();
+                    handleVideoTimeUpdate(activeLesson.id as string, config);
+                  }}
+                  onseeking={() => handleVideoSeeking(config)}
+                  onended={() => handleVideoEnded(activeLesson.id as string)}
+                >
                   <track kind="captions" />
                 </video>
+              {:else if config.embedUrl}
+                <iframe
+                  src={embedUrlWithTracking(config)}
+                  title={activeLesson.title as string}
+                  use:bindVideoIframe={{
+                    lessonId: activeLesson.id as string,
+                    config,
+                    prog: lessonProgress,
+                  }}
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowfullscreen
+                ></iframe>
               {/if}
             </div>
           {:else}
             <p class="empty-hint">Video zatiaľ nemá nastavenú URL.</p>
           {/if}
-          <button onclick={() => markComplete(activeLesson!.id as string)}>Označiť ako dokončené</button>
+          {#if requiresWatchToEnd && !strictWatchMode}
+            <p class="video-rule-warning">{t('admin.videoWatchNativeOnly', $locale)}</p>
+          {/if}
+          {#if shouldShowManualVideoComplete(config)}
+            <button onclick={() => markComplete(activeLesson!.id as string)}>
+              {t('course.videoManualConfirm', $locale)}
+            </button>
+          {:else}
+            <p class="video-rule-note">{t('course.videoWatchToEndStudentHint', $locale)}</p>
+          {/if}
         {:else if type === 'audio'}
           {#if config.audioUrl}
             <audio src={config.audioUrl as string} controls class="course-audio-player"></audio>

@@ -32,6 +32,11 @@
 <article class="course-card" class:course-card--future={variant === 'future'} class:course-card--past={variant === 'past'}>
   <div class="course-card-info">
     <h3><a href="/courses/{course.id}">{course.title}</a></h3>
+    {#if course.enrollmentStatus === 'completed'}
+      <span class="status-chip status-chip--done">{t('courses.statusCompleted', $locale)}</span>
+    {:else if course.enrollmentStatus === 'active'}
+      <span class="status-chip">{t('courses.statusActive', $locale)}</span>
+    {/if}
     {#if course.description}
       <p>{course.description}</p>
     {/if}

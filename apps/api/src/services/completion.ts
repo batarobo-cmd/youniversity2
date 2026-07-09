@@ -12,7 +12,6 @@ import { broadcastToCourse, broadcastToUser } from '../realtime/hub';
 
 export async function evaluateCourseCompletion(userId: string, courseId: string) {
   const rules = await db.select().from(completionRules).where(eq(completionRules.courseId, courseId));
-  if (rules.length === 0) return null;
 
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
   const moduleIds = modules.map((m) => m.id);
@@ -34,7 +33,18 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
 
   let passed = true;
 
-  for (const rule of rules.filter((r) => r.isRequired)) {
+  const requiredRules =
+    rules.filter((r) => r.isRequired).length > 0
+      ? rules.filter((r) => r.isRequired)
+      : [
+          {
+            type: 'all_lessons_complete' as const,
+            config: {},
+            isRequired: true,
+          },
+        ];
+
+  for (const rule of requiredRules) {
     switch (rule.type) {
       case 'all_lessons_complete': {
         const allDone = requiredLessons.every((l) =>
@@ -83,7 +93,7 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
     .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)))
     .limit(1);
 
-  if (!enrollment || enrollment.status === 'completed' || enrollment.status === 'failed') {
+  if (!enrollment || ['completed', 'failed', 'suspended', 'revoked'].includes(enrollment.status)) {
     return { passed, enrollment };
   }
 

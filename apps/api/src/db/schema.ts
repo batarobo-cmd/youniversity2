@@ -29,6 +29,7 @@ export const enrollmentStatusEnum = pgEnum('enrollment_status', [
   'failed',
   'expired',
   'revoked',
+  'suspended',
 ]);
 export const completionRuleTypeEnum = pgEnum('completion_rule_type', [
   'all_lessons_complete',
