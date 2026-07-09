@@ -181,6 +181,22 @@
     editing = null;
   }
 
+  function profilePayload(): Record<string, string | null> {
+    return {
+      givenName: formGivenName.trim() || null,
+      familyName: formFamilyName.trim() || null,
+      jobTitle: formJobTitle.trim() || null,
+      department: formDepartment.trim() || null,
+      employeeId: formEmployeeId.trim() || null,
+      companyName: formCompanyName.trim() || null,
+      officeLocation: formOfficeLocation.trim() || null,
+      mobilePhone: formMobilePhone.trim() || null,
+      businessPhone: formBusinessPhone.trim() || null,
+      city: formCity.trim() || null,
+      country: formCountry.trim() || null,
+    };
+  }
+
   async function saveUser(e: Event) {
     e.preventDefault();
     saving = true;
@@ -193,17 +209,7 @@
           email: formEmail.trim(),
           role: formRole,
           preferredLocale: formLocale,
-          givenName: formGivenName.trim() || null,
-          familyName: formFamilyName.trim() || null,
-          jobTitle: formJobTitle.trim() || null,
-          department: formDepartment.trim() || null,
-          employeeId: formEmployeeId.trim() || null,
-          companyName: formCompanyName.trim() || null,
-          officeLocation: formOfficeLocation.trim() || null,
-          mobilePhone: formMobilePhone.trim() || null,
-          businessPhone: formBusinessPhone.trim() || null,
-          city: formCity.trim() || null,
-          country: formCountry.trim() || null,
+          ...profilePayload(),
         };
         if (formPassword.trim()) payload.password = formPassword;
         const ok = await runMutation('saveUser', {
@@ -226,6 +232,7 @@
             password: formPassword,
             role: formRole,
             preferredLocale: formLocale,
+            ...profilePayload(),
           }),
         });
         if (ok) closeModal();
@@ -505,9 +512,8 @@
           />
         </div>
 
-        {#if editing}
-          <div class="users-modal-divider">{t('profile.work', $locale)}</div>
-          <div class="users-modal-grid">
+        <div class="users-modal-divider">{t('profile.work', $locale)}</div>
+        <div class="users-modal-grid">
             <div>
               <label for="u-given">{t('profile.givenName', $locale)}</label>
               <input id="u-given" bind:value={formGivenName} />
@@ -553,7 +559,6 @@
               <input id="u-country" bind:value={formCountry} />
             </div>
           </div>
-        {/if}
 
         <div class="users-modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" onclick={closeModal}>

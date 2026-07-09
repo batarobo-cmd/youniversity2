@@ -222,6 +222,17 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
       password: z.string().min(8),
       role: z.enum(USER_ROLES).default('student'),
       preferredLocale: z.enum(SUPPORTED_LOCALES).default('sk'),
+      givenName: z.string().max(255).optional().nullable(),
+      familyName: z.string().max(255).optional().nullable(),
+      jobTitle: z.string().max(255).optional().nullable(),
+      department: z.string().max(255).optional().nullable(),
+      employeeId: z.string().max(64).optional().nullable(),
+      companyName: z.string().max(255).optional().nullable(),
+      officeLocation: z.string().max(255).optional().nullable(),
+      mobilePhone: z.string().max(64).optional().nullable(),
+      businessPhone: z.string().max(64).optional().nullable(),
+      city: z.string().max(128).optional().nullable(),
+      country: z.string().max(128).optional().nullable(),
     })
     .safeParse(await c.req.json());
 
@@ -233,16 +244,34 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
   }
 
   const passwordHash = await bcrypt.hash(body.data.password, 12);
-  const [created] = await db
-    .insert(users)
-    .values({
-      email: body.data.email,
-      name: body.data.name,
-      passwordHash,
-      role: body.data.role,
-      preferredLocale: body.data.preferredLocale,
-    })
-    .returning();
+  const profileFields = [
+    'givenName',
+    'familyName',
+    'jobTitle',
+    'department',
+    'employeeId',
+    'companyName',
+    'officeLocation',
+    'mobilePhone',
+    'businessPhone',
+    'city',
+    'country',
+  ] as const;
+
+  const values: typeof users.$inferInsert = {
+    email: body.data.email,
+    name: body.data.name,
+    passwordHash,
+    role: body.data.role,
+    preferredLocale: body.data.preferredLocale,
+  };
+  for (const field of profileFields) {
+    if (body.data[field] !== undefined) {
+      values[field] = body.data[field] || null;
+    }
+  }
+
+  const [created] = await db.insert(users).values(values).returning();
 
   const authUser = c.get('user') as AuthUser;
   void recordUserActivity(authUser.id, 'user.created', {

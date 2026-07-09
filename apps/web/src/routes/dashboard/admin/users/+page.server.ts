@@ -1,10 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import {
-  isActionFailure,
-  platformAdminOrFail,
-  sessionTokenOrFail,
-} from '$lib/server/actions';
+import { actionPlatformAdminOrFail, isActionFailure } from '$lib/server/actions';
 import { requireAuthToken, requirePlatformAdmin, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
 
@@ -23,13 +19,10 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
 };
 
 export const actions = {
-  saveUser: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = platformAdminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  saveUser: async ({ request, cookies, fetch }) => {
+    const auth = await actionPlatformAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const fd = await request.formData();
     const mode = fd.get('mode')?.toString();
@@ -63,19 +56,13 @@ export const actions = {
 
     if (isActionFailure(mutation)) return mutation;
 
-    const list = await serverApiJson<unknown[]>(fetch, token, '/api/admin/users');
-    if (list.error) return fail(503, { error: list.error });
-
-    return { success: true, users: list.data ?? [] };
+    return { success: true };
   },
 
-  deleteUser: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = platformAdminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  deleteUser: async ({ request, cookies, fetch }) => {
+    const auth = await actionPlatformAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const id = (await request.formData()).get('id')?.toString();
     if (!id) return fail(400, { error: 'Chýba ID používateľa.' });
@@ -85,9 +72,6 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    const list = await serverApiJson<unknown[]>(fetch, token, '/api/admin/users');
-    if (list.error) return fail(503, { error: list.error });
-
-    return { success: true, users: list.data ?? [] };
+    return { success: true };
   },
 };

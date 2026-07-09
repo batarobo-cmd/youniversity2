@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { isActionFailure, platformAdminOrFail, sessionTokenOrFail } from '$lib/server/actions';
+import { actionPlatformAdminOrFail, isActionFailure } from '$lib/server/actions';
 import { requireAuthToken, requirePlatformAdmin, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
 
@@ -19,13 +19,10 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
 };
 
 export const actions = {
-  saveSettings: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = platformAdminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  saveSettings: async ({ request, cookies, fetch }) => {
+    const auth = await actionPlatformAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const payloadRaw = (await request.formData()).get('payload')?.toString();
     if (!payloadRaw) return fail(400, { error: 'Neplatné údaje.' });
@@ -44,9 +41,6 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    const refreshed = await serverApiJson<Record<string, unknown>>(fetch, token, '/api/admin/auth-settings');
-    if (refreshed.error) return fail(503, { error: refreshed.error });
-
-    return { success: true, authSettings: refreshed.data };
+    return { success: true };
   },
 };

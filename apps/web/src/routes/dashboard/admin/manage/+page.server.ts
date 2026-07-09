@@ -1,28 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { adminOrFail, isActionFailure, sessionTokenOrFail } from '$lib/server/actions';
+import { actionAdminOrFail, isActionFailure } from '$lib/server/actions';
 import { requireAdmin, requireAuthToken, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
-
-async function loadManageData(
-  fetch: typeof globalThis.fetch,
-  token: string,
-  locale: string,
-) {
-  const [cats, courses] = await Promise.all([
-    serverApiJson<unknown[]>(fetch, token, '/api/categories'),
-    serverApiJson<unknown[]>(fetch, token, `/api/courses?locale=${locale}`),
-  ]);
-
-  const loadError = cats.error ?? courses.error;
-  if (loadError) return fail(503, { error: loadError });
-
-  return {
-    success: true as const,
-    categories: cats.data ?? [],
-    courses: courses.data ?? [],
-  };
-}
 
 export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
   depends('admin:manage');
@@ -47,13 +27,10 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
 };
 
 export const actions = {
-  createCategory: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = adminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  createCategory: async ({ request, cookies, fetch }) => {
+    const auth = await actionAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const fd = await request.formData();
     const name = fd.get('name')?.toString().trim() ?? '';
@@ -68,16 +45,13 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
+    return { success: true };
   },
 
-  updateCategory: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = adminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  updateCategory: async ({ request, cookies, fetch }) => {
+    const auth = await actionAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const fd = await request.formData();
     const id = fd.get('id')?.toString();
@@ -92,16 +66,13 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
+    return { success: true };
   },
 
-  deleteCategory: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = adminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  deleteCategory: async ({ request, cookies, fetch }) => {
+    const auth = await actionAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const id = (await request.formData()).get('id')?.toString();
     if (!id) return fail(400, { error: 'Chýba ID kategórie.' });
@@ -111,16 +82,13 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
+    return { success: true };
   },
 
-  createCourse: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = adminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  createCourse: async ({ request, cookies, fetch }) => {
+    const auth = await actionAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const fd = await request.formData();
     const slug = fd.get('slug')?.toString().trim() ?? '';
@@ -137,16 +105,13 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
+    return { success: true };
   },
 
-  publishCourse: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = adminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  publishCourse: async ({ request, cookies, fetch }) => {
+    const auth = await actionAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const fd = await request.formData();
     const id = fd.get('id')?.toString();
@@ -160,16 +125,13 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
+    return { success: true };
   },
 
-  deleteCourse: async ({ request, cookies, fetch, parent }) => {
-    const { user } = await parent();
-    const denied = adminOrFail(user);
-    if (denied) return denied;
-
-    const token = sessionTokenOrFail(cookies);
-    if (isActionFailure(token)) return token;
+  deleteCourse: async ({ request, cookies, fetch }) => {
+    const auth = await actionAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
 
     const id = (await request.formData()).get('id')?.toString();
     if (!id) return fail(400, { error: 'Chýba ID kurzu.' });
@@ -179,6 +141,6 @@ export const actions = {
     });
     if (isActionFailure(mutation)) return mutation;
 
-    return loadManageData(fetch, token, user?.preferredLocale ?? 'sk');
+    return { success: true };
   },
 };
