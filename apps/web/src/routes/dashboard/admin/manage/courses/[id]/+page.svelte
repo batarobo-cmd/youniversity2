@@ -713,7 +713,7 @@
                     <th>{t('admin.studentName', $locale)}</th>
                     <th>{t('admin.reportingAssignmentStatus', $locale)}</th>
                     <th>{t('course.progress', $locale)}</th>
-                    <th>{t('admin.reportingProgressEvaluation', $locale)}</th>
+                    <th class="reporting-progress-col">{t('admin.reportingProgressEvaluation', $locale)}</th>
                     <th>{t('admin.issuedCertificates', $locale)}</th>
                     <th></th>
                   </tr>
@@ -745,8 +745,8 @@
                           {/if}
                         </div>
                       </td>
-                      <td>
-                        <span class="users-role-badge reporting-state--{reportingProgressStateClass(row)}">
+                      <td class="reporting-progress-col">
+                        <span class="users-role-badge reporting-progress-badge reporting-state--{reportingProgressStateClass(row)}">
                           {reportingProgressStateLabel(row)}
                         </span>
                       </td>

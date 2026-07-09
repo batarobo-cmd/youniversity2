@@ -392,6 +392,19 @@
   color: var(--color-success);
 }
 
+.course-edit-table .reporting-progress-col {
+  min-width: 10.5rem;
+  white-space: nowrap;
+}
+
+.course-edit-table .reporting-progress-badge {
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
 .reporting-state--inactive {
   background: var(--color-surface-hover);
   color: var(--color-muted);
