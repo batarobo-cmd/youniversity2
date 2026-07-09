@@ -379,24 +379,34 @@
     return key ? t(key, $locale) : status;
   }
 
-  function reportingStateLabel(row: ReportingRow) {
-    if (row.enrollment?.status === 'suspended') return t('admin.reportingStateSuspended', $locale);
-    if (row.enrollment?.status === 'revoked') return t('admin.reportingStateRevoked', $locale);
-    if (row.enrollment?.status !== 'active') return t('admin.reportingStateInactive', $locale);
-    if (row.progress.progressPercent >= 100) return t('admin.reportingStateCompleted', $locale);
-    if (row.progress.progressPercent > 0) return t('admin.reportingStateStarted', $locale);
-    return t('admin.reportingStateNotStarted', $locale);
+  function assignmentStatusLabel(row: ReportingRow) {
+    if (!row.enrollment) return t('admin.reportingNoEnrollment', $locale);
+    const status = row.enrollment.status;
+    if (status === 'revoked') return t('admin.assignmentRemoved', $locale);
+    if (status === 'suspended') return t('admin.enrollmentSuspended', $locale);
+    if (status === 'active') return t('admin.enrollmentActive', $locale);
+    return enrollmentStatusLabel(status);
+  }
+
+  function assignmentStatusClass(row: ReportingRow) {
+    if (!row.enrollment) return 'revoked';
+    return row.enrollment.status;
+  }
+
+  function reportingProgressStateLabel(row: ReportingRow) {
+    if (row.progress.progressPercent >= 100 || row.enrollment?.status === 'completed') {
+      return t('admin.reportingProgressCompleted', $locale);
+    }
+    if (row.progress.progressPercent > 0) return t('admin.reportingProgressStarted', $locale);
+    return t('admin.reportingProgressNotStarted', $locale);
   }
 
   function isActiveEnrollment(row: ReportingRow) {
     return row.enrollment?.status === 'active';
   }
 
-  function reportingStateClass(row: ReportingRow) {
-    if (row.enrollment?.status === 'suspended') return 'suspended';
-    if (row.enrollment?.status === 'revoked') return 'revoked';
-    if (!isActiveEnrollment(row)) return 'inactive';
-    if (row.progress.progressPercent >= 100) return 'completed';
+  function reportingProgressStateClass(row: ReportingRow) {
+    if (row.progress.progressPercent >= 100 || row.enrollment?.status === 'completed') return 'completed';
     if (row.progress.progressPercent > 0) return 'started';
     return 'idle';
   }
@@ -701,9 +711,9 @@
                 <thead>
                   <tr>
                     <th>{t('admin.studentName', $locale)}</th>
-                    <th>{t('admin.enrollmentStatus', $locale)}</th>
+                    <th>{t('admin.reportingAssignmentStatus', $locale)}</th>
                     <th>{t('course.progress', $locale)}</th>
-                    <th>{t('dash.status', $locale)}</th>
+                    <th>{t('admin.reportingProgressEvaluation', $locale)}</th>
                     <th>{t('admin.issuedCertificates', $locale)}</th>
                     <th></th>
                   </tr>
@@ -716,13 +726,9 @@
                         <span class="course-edit-sub">{row.user.email}</span>
                       </td>
                       <td>
-                        {#if row.enrollment}
-                          <span class="users-role-badge enrollment-status--{row.enrollment.status}">
-                            {enrollmentStatusLabel(row.enrollment.status)}
-                          </span>
-                        {:else}
-                          <span class="users-role-badge enrollment-status--revoked">{t('admin.reportingNoEnrollment', $locale)}</span>
-                        {/if}
+                        <span class="users-role-badge enrollment-status--{assignmentStatusClass(row)}">
+                          {assignmentStatusLabel(row)}
+                        </span>
                       </td>
                       <td>
                         <div class="reporting-progress-cell">
@@ -740,8 +746,8 @@
                         </div>
                       </td>
                       <td>
-                        <span class="users-role-badge reporting-state--{reportingStateClass(row)}">
-                          {reportingStateLabel(row)}
+                        <span class="users-role-badge reporting-state--{reportingProgressStateClass(row)}">
+                          {reportingProgressStateLabel(row)}
                         </span>
                       </td>
                       <td>
