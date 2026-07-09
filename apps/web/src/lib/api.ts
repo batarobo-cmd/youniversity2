@@ -24,7 +24,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       credentials: 'include',
       headers: authHeaders(options.headers as Record<string, string>),
     });
-  } catch {
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.error('API fetch failed:', `${API_BASE}${path}`, e);
+    }
     throw new Error('Nepodarilo sa spojiť so serverom. Spustite API (bun run dev) a Docker.');
   }
 
