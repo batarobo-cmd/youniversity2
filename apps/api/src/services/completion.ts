@@ -14,6 +14,7 @@ import {
   isProgressFullyComplete,
 } from './course-completion';
 import { allocateCertificateNumber } from './certificate-number';
+import { ensureCertificatePdf } from './certificate-document';
 
 async function isCourseCertificateEnabled(
   courseId: string,
@@ -47,11 +48,22 @@ async function hasCertificateForCurrentAttempt(
 
 async function issueCourseCertificate(userId: string, courseId: string) {
   const certNumber = await allocateCertificateNumber();
-  await db.insert(certificates).values({
-    userId,
-    courseId,
-    certificateNumber: certNumber,
-  });
+  const [certificate] = await db
+    .insert(certificates)
+    .values({
+      userId,
+      courseId,
+      certificateNumber: certNumber,
+    })
+    .returning();
+
+  try {
+    await ensureCertificatePdf(certificate.id);
+  } catch (error) {
+    console.error('Certificate PDF generation failed:', error);
+  }
+
+  return certificate;
 }
 
 export async function evaluateCourseCompletion(userId: string, courseId: string) {

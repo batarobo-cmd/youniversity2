@@ -20,6 +20,9 @@ export default defineConfig({
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(resolveAppVersion()),
   },
   plugins: [sveltekit()],
+  optimizeDeps: {
+    exclude: ['pdfjs-dist'],
+  },
   server: {
     port: 5173,
     proxy: {

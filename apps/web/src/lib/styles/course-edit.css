@@ -479,11 +479,49 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.5rem 0.625rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface-hover);
   font-size: 0.8125rem;
+}
+
+.reporting-modal-cert-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.reporting-modal-cert-id {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.reporting-modal-cert-badge {
+  align-self: flex-start;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.reporting-modal-cert-date {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.reporting-modal-cert-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 .reporting-cert-delete-btn {
@@ -616,7 +654,32 @@
 }
 
 .reporting-col-certs {
-  width: 11rem;
+  width: 9.5rem;
+}
+
+.reporting-cert-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.reporting-cert-latest {
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reporting-col-certs .reporting-cert-history-btn {
+  flex-shrink: 0;
 }
 
 .reporting-col-actions {
@@ -864,6 +927,30 @@
   transform: translateX(20px);
 }
 
+.evaluation-switch input:disabled {
+  cursor: not-allowed;
+}
+
+.evaluation-switch input:disabled + .evaluation-switch-slider {
+  opacity: 0.55;
+}
+
+.presentation-download-row {
+  width: 100%;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-elevated, #fff);
+}
+
+.presentation-download-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
 .evaluation-form-actions {
   display: flex;
   justify-content: flex-start;
@@ -1059,13 +1146,53 @@
   margin-top: 0.75rem;
 }
 
+.activity-editor-add-form-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.activity-editor-add-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.activity-editor-add-form--media {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.activity-editor-add-form--media .activity-editor-add-form-body {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.activity-editor-add-form--media .activity-editor-add-form-actions {
+  align-self: center;
+  flex-shrink: 0;
+}
+
 .activity-editor-add-form input,
-.activity-editor-add-form select {
+.activity-editor-add-form select,
+.activity-editor-add-form-body input,
+.activity-editor-add-form-body select {
   font-size: 0.875rem;
   min-width: 140px;
 }
 
-.activity-editor-add-form textarea {
+.activity-editor-add-form textarea,
+.activity-editor-add-form-body textarea {
   width: 100%;
   font-size: 0.875rem;
   resize: none;
@@ -1158,4 +1285,14 @@
   font-size: 0.75rem;
   color: var(--color-muted);
   line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .activity-editor-add-form--media {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-editor-add-form--media .activity-editor-add-form-actions {
+    justify-content: flex-start;
+  }
 }

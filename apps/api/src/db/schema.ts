@@ -228,6 +228,7 @@ export const lessonProgress = pgTable(
     isComplete: boolean('is_complete').notNull().default(false),
     score: integer('score'),
     attempts: integer('attempts').notNull().default(0),
+    progressState: jsonb('progress_state').$type<Record<string, unknown>>().notNull().default({}),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('user_lesson_idx').on(t.userId, t.lessonId)],

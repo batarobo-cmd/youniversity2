@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
   import '$lib/styles/dashboard.css';
 
   type CourseItem = {
@@ -11,7 +12,7 @@
     startsAt?: string;
     endsAt?: string;
     completedAt?: string;
-    certificate?: { certificateNumber: string; issuedAt: string } | null;
+    certificate?: { id: string; certificateNumber: string; issuedAt: string } | null;
     enrollmentStatus?: string;
     canOpenCourse?: boolean;
   };
@@ -88,8 +89,17 @@
     {/if}
 
     {#if course.certificate}
-      <span class="cert-badge">🏆 #{course.certificate.certificateNumber}</span>
-      <span class="course-card-meta">{formatDate(course.certificate.issuedAt)}</span>
+      <div class="course-card-cert-inline">
+        <span class="cert-badge">🏆 #{course.certificate.certificateNumber}</span>
+        <span class="course-card-meta">{formatCertificateIssuedAt(course.certificate.issuedAt, $locale)}</span>
+        <a
+          class="btn btn-ghost btn-sm completed-course-cert-download"
+          href={certificateDownloadUrl(course.certificate.id)}
+          download={certificateDownloadFileName(course.certificate.certificateNumber)}
+        >
+          {t('dash.downloadCertificate', $locale)}
+        </a>
+      </div>
     {/if}
 
     {#if !canOpen && variant !== 'future'}

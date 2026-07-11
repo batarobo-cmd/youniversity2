@@ -4,6 +4,7 @@
   import StudentCourseCard from './StudentCourseCard.svelte';
   import StudentCompletedCourseTile from './StudentCompletedCourseTile.svelte';
   import CalendarWidget from './CalendarWidget.svelte';
+  import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
   import '$lib/styles/dashboard.css';
 
   interface Props {
@@ -147,7 +148,14 @@
         {#each certHistoryModal.certificates as cert}
           <div class="dash-cert-modal-row">
             <span>#{cert.certificateNumber}</span>
-            <span>{new Date(cert.issuedAt).toLocaleDateString($locale)}</span>
+            <span>{formatCertificateIssuedAt(cert.issuedAt, $locale)}</span>
+            <a
+              class="btn btn-ghost btn-sm"
+              href={certificateDownloadUrl(cert.id)}
+              download={certificateDownloadFileName(cert.certificateNumber)}
+            >
+              {t('dash.downloadCertificate', $locale)}
+            </a>
           </div>
         {/each}
       </div>

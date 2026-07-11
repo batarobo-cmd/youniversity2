@@ -119,3 +119,7 @@ export async function resolveWebSocketSession(token: string): Promise<AuthUser |
   if (!jwtUser) return null;
   return rejectSuspendedUser(jwtUser, token);
 }
+
+export async function resolveRequestUser(c: Context): Promise<AuthUser | null> {
+  return resolveUser(c, false);
+}

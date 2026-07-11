@@ -7,6 +7,7 @@
   import { lastMessage } from '$lib/stores/realtime';
   import StudentCourseCard from '$lib/components/StudentCourseCard.svelte';
   import StudentCompletedCourseTile from '$lib/components/StudentCompletedCourseTile.svelte';
+  import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
   import type { PageData } from './$types';
   import '$lib/styles/courses.css';
   import '$lib/styles/dashboard.css';
@@ -150,7 +151,14 @@
         {#each certHistoryModal.certificates as cert}
           <div class="dash-cert-modal-row">
             <span>#{cert.certificateNumber}</span>
-            <span>{new Date(cert.issuedAt).toLocaleDateString($locale)}</span>
+            <span>{formatCertificateIssuedAt(cert.issuedAt, $locale)}</span>
+            <a
+              class="btn btn-ghost btn-sm"
+              href={certificateDownloadUrl(cert.id)}
+              download={certificateDownloadFileName(cert.certificateNumber)}
+            >
+              {t('dash.downloadCertificate', $locale)}
+            </a>
           </div>
         {/each}
       </div>

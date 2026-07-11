@@ -340,6 +340,46 @@
   border: none;
 }
 
+.presentation-wrap {
+  position: relative;
+  padding-bottom: 75%;
+  height: 0;
+  margin-bottom: 1.25rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-bg-elevated);
+}
+
+.presentation-viewers {
+  margin-bottom: 1.25rem;
+}
+
+.presentation-wrap--pdf {
+  padding-bottom: 120%;
+}
+
+.presentation-wrap iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.presentation-pdf-link {
+  margin: -0.75rem 0 1.25rem;
+  font-size: 0.875rem;
+}
+
+.presentation-pdf-link a {
+  color: var(--color-primary);
+}
+
+.presentation-download-panel {
+  margin-bottom: 1.25rem;
+}
+
 .video-rule-note {
   margin: 0 0 1rem;
   font-size: 0.875rem;

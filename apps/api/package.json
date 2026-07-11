@@ -13,17 +13,21 @@
     "db:seed": "bun run src/db/seed.ts",
     "db:ensure-demo": "bun run src/db/ensure-demo-users.ts",
     "db:migrate-cert-numbers": "bun run src/db/migrate-certificate-numbers.ts",
+    "db:generate-cert-pdfs": "bun run src/db/migrate-certificate-pdfs.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
+    "@fontsource/inter": "^5.2.8",
     "@hono/node-server": "^1.14.1",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@youniversity2/shared": "workspace:*",
     "bcryptjs": "^3.0.2",
     "drizzle-orm": "^0.44.2",
     "hono": "^4.7.10",
     "ioredis": "^5.6.1",
     "jose": "^6.0.11",
+    "pdf-lib": "^1.17.1",
     "postgres": "^3.4.7",
     "zod": "^3.25.28"
   },

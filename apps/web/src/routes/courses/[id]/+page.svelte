@@ -9,6 +9,18 @@
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
   import { WS_EVENTS } from '@youniversity2/shared';
   import { moduleActivities, normalizeActivityType, countsForCourseCompletion, isProgressFullyComplete } from '$lib/activity-types';
+  import {
+    buildPresentationView,
+    isLegacyPptPresentation,
+    isOdpPresentation,
+    presentationCompletionMode,
+    presentationProgressFromRecord,
+    presentationSlideMinSeconds,
+    presentationSlideMinOverrides,
+    type PresentationViewMode,
+  } from '$lib/presentation-config';
+  import PresentationPptxViewer from '$lib/components/PresentationPptxViewer.svelte';
+  import PresentationPdfViewer from '$lib/components/PresentationPdfViewer.svelte';
   import type { PageData } from './$types';
   import '$lib/styles/courses.css';
 
@@ -39,6 +51,23 @@
   let currentVideoProvider = $state<'native' | 'youtube' | 'vimeo' | null>(null);
   let youtubePlayer: any = null;
   let vimeoPlayer: any = null;
+  let presentationIframeSrc = $state<string | null>(null);
+  let presentationViewMode = $state<PresentationViewMode | null>(null);
+  let syncingPresentationProgress = $state(false);
+  let pendingPresentationSync = $state<{
+    lessonId: string;
+    payload: {
+      slideIndex: number;
+      maxSlideIndex: number;
+      slideCount: number;
+      percentComplete: number;
+      isComplete?: boolean;
+    };
+  } | null>(null);
+  let presentationSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  let mountedPresentationIds = $state<Set<string>>(new Set());
+
+  const PRESENTATION_PROGRESS_SYNC_MS = 800;
 
   const VIDEO_PROGRESS_SYNC_MS = 1000;
   const WATCH_COMPLETE_TOLERANCE_S = 0.35;
@@ -72,6 +101,14 @@
 
       if (
         msg.type === WS_EVENTS.COMPLETION_EVALUATED &&
+        selfId &&
+        payload?.userId === selfId
+      ) {
+        return;
+      }
+
+      if (
+        msg.type === WS_EVENTS.PROGRESS_UPDATED &&
         selfId &&
         payload?.userId === selfId
       ) {
@@ -376,6 +413,27 @@
     return normalizeActivityType(lesson.type as string);
   }
 
+  function loadPresentationView(lesson: Record<string, unknown> | null) {
+    presentationIframeSrc = null;
+    presentationViewMode = null;
+
+    if (!lesson || activityType(lesson) !== 'presentation') return;
+
+    const config = (lesson.config as Record<string, unknown>) ?? {};
+    const spec = buildPresentationView(config);
+    if (!spec.mode) return;
+
+    presentationViewMode = spec.mode;
+
+    if (spec.mode === 'embed') {
+      presentationIframeSrc = spec.iframeSrc ?? null;
+    }
+  }
+
+  $effect(() => {
+    loadPresentationView(activeLesson);
+  });
+
   function sortedModuleActivities(mod: Record<string, unknown>) {
     return [...moduleActivities(mod)].sort(
       (a, b) => (a.sortOrder as number) - (b.sortOrder as number),
@@ -442,7 +500,12 @@
     if (!course || loading || activeLesson || activeModuleId) return;
     const first = firstSelectable();
     if (first?.kind === 'module') activeModuleId = first.mod.id as string;
-    else if (first?.kind === 'lesson') activeLesson = first.lesson;
+    else if (first?.kind === 'lesson') {
+      if (activityType(first.lesson) === 'presentation') {
+        markPresentationMounted(first.lesson.id as string);
+      }
+      activeLesson = first.lesson;
+    }
   });
 
   async function openModule(mod: Record<string, unknown>) {
@@ -463,10 +526,35 @@
     lastVideoSyncAt = 0;
   }
 
-  async function openLesson(lesson: Record<string, unknown>) {
-    if (activeLesson?.id === lesson.id) return;
-    activeLesson = lesson;
+  function presentationActivities() {
+    return sortedModules().flatMap((mod) =>
+      sortedModuleActivities(mod).filter((item) => activityType(item) === 'presentation'),
+    );
+  }
+
+  function markPresentationMounted(lessonId: string) {
+    if (mountedPresentationIds.has(lessonId)) return;
+    mountedPresentationIds = new Set([...mountedPresentationIds, lessonId]);
+  }
+
+  function lessonById(lessonId: string): Record<string, unknown> | null {
+    for (const mod of sortedModules()) {
+      const match = sortedModuleActivities(mod).find((item) => item.id === lessonId);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  function openLesson(lesson: Record<string, unknown>) {
+    const lessonId = lesson.id as string;
+    if (activeLesson?.id === lessonId) return;
+    activeLesson = lessonById(lessonId) ?? lesson;
     activeModuleId = null;
+    if (activityType(activeLesson) === 'presentation') {
+      markPresentationMounted(lessonId);
+    }
+    loadPresentationView(lesson);
+    void flushPresentationProgressSync();
     trackActivity('lesson.opened', courseId, lesson.id as string, { type: lesson.type });
     videoElement = null;
     videoIframe = null;
@@ -480,6 +568,171 @@
     maxAllowedTime = 0;
     videoSeekGuard = false;
     lastVideoSyncAt = 0;
+  }
+
+  function patchLessonProgress(
+    lessonId: string,
+    patch: Record<string, unknown>,
+    progressState?: Record<string, unknown>,
+  ) {
+    const existing = progress.find((p) => p.lessonId === lessonId);
+    if (existing) {
+      progress = progress.map((p) =>
+        p.lessonId === lessonId
+          ? {
+              ...p,
+              ...patch,
+              progressState: progressState
+                ? { ...((p.progressState as Record<string, unknown> | undefined) ?? {}), ...progressState }
+                : p.progressState,
+            }
+          : p,
+      );
+      return;
+    }
+
+    progress = [
+      ...progress,
+      {
+        lessonId,
+        percentComplete: 0,
+        isComplete: false,
+        ...patch,
+        progressState: progressState ?? {},
+      },
+    ];
+  }
+
+  async function syncPresentationProgressNow(
+    lessonId: string,
+    payload: {
+      slideIndex: number;
+      maxSlideIndex: number;
+      slideCount: number;
+      percentComplete: number;
+      isComplete?: boolean;
+    },
+  ) {
+    if (syncingPresentationProgress) return;
+    syncingPresentationProgress = true;
+    try {
+      await serverMutate('apiMutation', '/api/progress', 'POST', {
+        lessonId,
+        percentComplete: payload.percentComplete,
+        ...(payload.isComplete !== undefined ? { isComplete: payload.isComplete } : {}),
+        state: {
+          slideIndex: payload.slideIndex,
+          maxSlideIndex: payload.maxSlideIndex,
+          slideCount: payload.slideCount,
+        },
+      });
+      patchLessonProgress(
+        lessonId,
+        {
+          percentComplete: payload.percentComplete,
+          ...(payload.isComplete !== undefined ? { isComplete: payload.isComplete } : {}),
+        },
+        {
+          slideIndex: payload.slideIndex,
+          maxSlideIndex: payload.maxSlideIndex,
+          slideCount: payload.slideCount,
+        },
+      );
+    } finally {
+      syncingPresentationProgress = false;
+    }
+  }
+
+  function queuePresentationProgressSync(
+    lessonId: string,
+    payload: {
+      slideIndex: number;
+      maxSlideIndex: number;
+      slideCount: number;
+      percentComplete: number;
+      isComplete?: boolean;
+    },
+  ) {
+    pendingPresentationSync = { lessonId, payload };
+    if (presentationSyncTimer) return;
+
+    presentationSyncTimer = setTimeout(() => {
+      presentationSyncTimer = null;
+      const job = pendingPresentationSync;
+      pendingPresentationSync = null;
+      if (!job) return;
+
+      void syncPresentationProgressNow(job.lessonId, job.payload).finally(() => {
+        if (pendingPresentationSync) {
+          queuePresentationProgressSync(
+            pendingPresentationSync.lessonId,
+            pendingPresentationSync.payload,
+          );
+        }
+      });
+    }, PRESENTATION_PROGRESS_SYNC_MS);
+  }
+
+  async function flushPresentationProgressSync() {
+    if (presentationSyncTimer) {
+      clearTimeout(presentationSyncTimer);
+      presentationSyncTimer = null;
+    }
+    const job = pendingPresentationSync;
+    pendingPresentationSync = null;
+    if (!job) return;
+    await syncPresentationProgressNow(job.lessonId, job.payload);
+  }
+
+  async function syncPresentationProgress(
+    lessonId: string,
+    payload: {
+      slideIndex: number;
+      maxSlideIndex: number;
+      slideCount: number;
+      percentComplete: number;
+      isComplete?: boolean;
+    },
+  ) {
+    queuePresentationProgressSync(lessonId, payload);
+  }
+
+  async function handlePresentationAllSlidesViewed(
+    lessonId: string,
+    payload: { slideIndex: number; maxSlideIndex: number; slideCount: number },
+  ) {
+    await flushPresentationProgressSync();
+    await serverMutate('apiMutation', '/api/progress', 'POST', {
+      lessonId,
+      isComplete: true,
+      percentComplete: 100,
+      state: {
+        slideIndex: payload.slideIndex,
+        maxSlideIndex: payload.maxSlideIndex,
+        slideCount: payload.slideCount,
+        completedBy: 'view_all_slides',
+      },
+    });
+    patchLessonProgress(
+      lessonId,
+      { isComplete: true, percentComplete: 100 },
+      {
+        slideIndex: payload.slideIndex,
+        maxSlideIndex: payload.maxSlideIndex,
+        slideCount: payload.slideCount,
+        completedBy: 'view_all_slides',
+      },
+    );
+    trackActivity('lesson.completed', courseId, lessonId);
+  }
+
+  function shouldShowManualPresentationComplete(config: Record<string, unknown>, prog?: Record<string, unknown>) {
+    if (presentationCompletionMode(config) !== 'manual_confirm') return false;
+    return !prog?.isComplete;
+  }
+
+  function isPresentationComplete(prog?: Record<string, unknown>) {
+    return Boolean(prog?.isComplete);
   }
 
   async function markComplete(lessonId: string) {
@@ -658,7 +911,7 @@
                 <span class="module-progress-chip">{moduleCompletion(mod).completed}/{moduleCompletion(mod).total}</span>
               {/if}
             </h3>
-            {#each sortedModuleActivities(mod) as lesson}
+            {#each sortedModuleActivities(mod) as lesson (lesson.id)}
               {@const prog = getLessonProgress(lesson.id as string)}
               {@const type = activityType(lesson)}
               {#if type !== 'text'}
@@ -699,6 +952,7 @@
           {/each}
         {/if}
       {:else if activeLesson}
+        {#key activeLesson.id}
         {@const type = activityType(activeLesson)}
         {@const config = (activeLesson.config as Record<string, unknown>) ?? {}}
 
@@ -707,6 +961,64 @@
         {#if type !== 'certificate' && activeLesson.content}
           <div class="lesson-text-content activity-description">{activeLesson.content as string}</div>
         {/if}
+        {/key}
+
+        {#if mountedPresentationIds.size > 0}
+          <div class="presentation-viewers">
+            {#each presentationActivities() as presLesson (presLesson.id)}
+              {@const presConfig = (presLesson.config as Record<string, unknown>) ?? {}}
+              {@const presSpec = buildPresentationView(presConfig)}
+              {@const presProgress = getLessonProgress(presLesson.id as string)}
+              {@const savedPresentationProgress = presentationProgressFromRecord(presProgress)}
+              {@const isActivePresentation = activeLesson.id === presLesson.id}
+              {#if mountedPresentationIds.has(presLesson.id as string) && (presSpec.mode === 'pptx' || presSpec.mode === 'pdf') && presSpec.relativeUrl}
+                {#if presSpec.mode === 'pptx'}
+                  <PresentationPptxViewer
+                    active={isActivePresentation}
+                    url={presSpec.relativeUrl}
+                    locale={$locale}
+                    completionMode={presentationCompletionMode(presConfig)}
+                    slideMinSeconds={presentationSlideMinSeconds(presConfig)}
+                    slideMinOverrides={presentationSlideMinOverrides(presConfig)}
+                    initialProgress={savedPresentationProgress}
+                    alreadyComplete={isPresentationComplete(presProgress)}
+                    onProgressChange={(payload) => {
+                      if (isPresentationComplete(getLessonProgress(presLesson.id as string))) return;
+                      void syncPresentationProgress(presLesson.id as string, payload);
+                    }}
+                    onAllSlidesViewed={async (payload) => {
+                      if (isPresentationComplete(getLessonProgress(presLesson.id as string))) return;
+                      await handlePresentationAllSlidesViewed(presLesson.id as string, payload);
+                    }}
+                  />
+                {:else}
+                  <PresentationPdfViewer
+                    active={isActivePresentation}
+                    url={presSpec.relativeUrl}
+                    locale={$locale}
+                    completionMode={presentationCompletionMode(presConfig)}
+                    slideMinSeconds={presentationSlideMinSeconds(presConfig)}
+                    slideMinOverrides={presentationSlideMinOverrides(presConfig)}
+                    initialProgress={savedPresentationProgress}
+                    alreadyComplete={isPresentationComplete(presProgress)}
+                    onProgressChange={(payload) => {
+                      if (isPresentationComplete(getLessonProgress(presLesson.id as string))) return;
+                      void syncPresentationProgress(presLesson.id as string, payload);
+                    }}
+                    onAllSlidesViewed={async (payload) => {
+                      if (isPresentationComplete(getLessonProgress(presLesson.id as string))) return;
+                      await handlePresentationAllSlidesViewed(presLesson.id as string, payload);
+                    }}
+                  />
+                {/if}
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        {#key activeLesson.id}
+        {@const type = activityType(activeLesson)}
+        {@const config = (activeLesson.config as Record<string, unknown>) ?? {}}
 
         {#if type === 'video'}
           {@const lessonProgress = getLessonProgress(activeLesson.id as string)}
@@ -772,14 +1084,56 @@
           {/if}
           <button onclick={() => markComplete(activeLesson!.id as string)}>Označiť ako dokončené</button>
         {:else if type === 'presentation'}
-          {#if config.presentationUrl}
-            <p>
-              <a href={config.presentationUrl as string} target="_blank" rel="noopener noreferrer">
-                Otvoriť prezentáciu
+          {@const config = (activeLesson.config as Record<string, unknown>) ?? {}}
+          {@const presentationSpec = buildPresentationView(config)}
+          {@const lessonProgress = getLessonProgress(activeLesson.id as string)}
+          {#if presentationSpec.mode === 'embed' && presentationSpec.iframeSrc}
+            <div class="presentation-wrap">
+              <iframe
+                src={presentationSpec.iframeSrc}
+                title={activeLesson.title as string}
+                allow="fullscreen"
+                allowfullscreen
+              ></iframe>
+            </div>
+          {/if}
+          {#if presentationSpec.downloadUrl && presentationSpec.mode !== 'download'}
+            <p class="presentation-pdf-link">
+              <a href={presentationSpec.downloadUrl} download={(config.fileName as string) || undefined}>
+                {t('course.presentationDownload', $locale)}
               </a>
             </p>
           {/if}
-          <button onclick={() => markComplete(activeLesson!.id as string)}>Označiť ako prečítané</button>
+          {#if presentationSpec.mode === 'download' && presentationSpec.downloadUrl}
+            <div class="presentation-download-panel">
+              <a
+                class="btn btn-sm"
+                href={presentationSpec.downloadUrl}
+                download={(config.fileName as string) || undefined}
+              >
+                {t('course.presentationDownload', $locale)}
+              </a>
+            </div>
+            {#if isLegacyPptPresentation(config.fileName as string | undefined, config.fileContentType as string | undefined)}
+              <p class="video-rule-note">{t('course.presentationLegacyPptHint', $locale)}</p>
+            {:else if isOdpPresentation(config.fileName as string | undefined, config.fileContentType as string | undefined)}
+              <p class="video-rule-note">{t('course.presentationOdpHint', $locale)}</p>
+            {/if}
+          {:else if !presentationSpec.mode}
+            <p class="empty-hint">{t('course.presentationEmpty', $locale)}</p>
+          {/if}
+          {#if isPresentationComplete(lessonProgress)}
+            <p class="video-rule-note">{t('course.presentationCompleted', $locale)}</p>
+          {:else if shouldShowManualPresentationComplete(config, lessonProgress)}
+            <button onclick={() => markComplete(activeLesson!.id as string)}>
+              {t('course.presentationMarkRead', $locale)}
+            </button>
+          {:else if presentationCompletionMode(config) === 'view_all_slides' && presentationSpec.mode === 'embed'}
+            <p class="video-rule-note">{t('course.presentationViewAllEmbedOnly', $locale)}</p>
+            <button onclick={() => markComplete(activeLesson!.id as string)}>
+              {t('course.presentationMarkRead', $locale)}
+            </button>
+          {/if}
         {:else if type === 'test'}
           <p style="margin-bottom: 1.25rem; color: var(--color-text-secondary); font-size: 0.9375rem;">
             Test — MVP verzia. Kliknite pre simuláciu úspešného testu (skóre 85 %).
@@ -796,6 +1150,7 @@
           </div>
           <button onclick={() => markComplete(activeLesson!.id as string)}>Označiť ako prečítané</button>
         {/if}
+        {/key}
       {:else}
         <p class="empty-hint">Vyberte aktivitu zo zoznamu vľavo.</p>
       {/if}

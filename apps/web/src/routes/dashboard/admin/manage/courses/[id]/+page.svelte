@@ -9,7 +9,7 @@
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
   import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
   import { moduleActivities, normalizeActivityType, isEvaluableActivity } from '$lib/activity-types';
-  import { splitCertificatesByAttempt } from '$lib/certificate-attempts';
+  import { certificateDownloadFileName, certificateDownloadUrl } from '$lib/certificate-download';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
@@ -684,16 +684,14 @@
     return 'idle';
   }
 
-  function certificateSplit(row: ReportingRow) {
-    return splitCertificatesByAttempt(row.completions, row.enrollment?.enrolledAt);
+  function sortedCertificates(row: ReportingRow) {
+    return [...row.completions].sort(
+      (a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime(),
+    );
   }
 
-  function currentAttemptCertificate(row: ReportingRow) {
-    return certificateSplit(row).current;
-  }
-
-  function historicalCertificates(row: ReportingRow) {
-    return certificateSplit(row).historical;
+  function latestCertificate(row: ReportingRow) {
+    return sortedCertificates(row)[0] ?? null;
   }
 
   async function resetStudentProgress(userId: string) {
@@ -715,7 +713,7 @@
     certHistoryModal = {
       userName: row.user.name,
       userId: row.user.id,
-      completions: historicalCertificates(row),
+      completions: sortedCertificates(row),
     };
   }
 
@@ -1041,6 +1039,7 @@
                     <th>#</th>
                     <th>{t('admin.studentName', $locale)}</th>
                     <th>{t('admin.usersCreated', $locale)}</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1049,6 +1048,15 @@
                       <td>{cert.certificateNumber}</td>
                       <td>{cert.userName}<br /><span class="course-edit-sub">{cert.userEmail}</span></td>
                       <td>{formatCertificateIssuedAt(cert.issuedAt)}</td>
+                      <td>
+                        <a
+                          class="btn btn-ghost btn-sm"
+                          href={certificateDownloadUrl(cert.id)}
+                          download={certificateDownloadFileName(cert.certificateNumber)}
+                        >
+                          {t('admin.downloadCertificate', $locale)}
+                        </a>
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -1156,47 +1164,31 @@
                         </span>
                       </td>
                       <td class="reporting-col-certs">
-                        <div class="reporting-cert-list">
-                          <div class="reporting-cert-inline">
-                            {#if currentAttemptCertificate(row)}
-                              {@const currentCert = currentAttemptCertificate(row)!}
-                              <span class="reporting-cert-current">
-                                #{currentCert.certificateNumber} · {formatCertificateDate(currentCert.issuedAt)}
-                              </span>
-                              <button
-                                type="button"
-                                class="reporting-cert-delete-btn"
-                                title={t('admin.deleteCertificate', $locale)}
-                                aria-label={t('admin.deleteCertificate', $locale)}
-                                disabled={saving}
-                                onclick={() =>
-                                  deleteCertificate(row.user.id, currentCert.id, currentCert.certificateNumber)}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                  <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-                                  <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
-                                </svg>
-                              </button>
-                            {:else}
-                              <span class="course-edit-sub reporting-cert-empty">—</span>
-                            {/if}
-                            {#if historicalCertificates(row).length > 0}
-                              <button
-                                type="button"
-                                class="reporting-cert-history-btn"
-                                title="{t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})"
-                                aria-label="{t('admin.reportingOlderCertificates', $locale)} ({historicalCertificates(row).length})"
-                                onclick={() => openCertHistory(row)}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                  <path d="M12 3 2 8l10 5 10-5-10-5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
-                                  <path d="M6 11v4.5c0 1.8 2.7 3 6 3s6-1.2 6-3V11" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-                                  <path d="M22 8v5.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-                                </svg>
-                                <span class="reporting-cert-history-count">{historicalCertificates(row).length}</span>
-                              </button>
-                            {/if}
-                          </div>
+                        <div class="reporting-cert-cell">
+                          {#if latestCertificate(row)}
+                            {@const latestCert = latestCertificate(row)!}
+                            <span class="reporting-cert-latest" title="#{latestCert.certificateNumber}">
+                              #{latestCert.certificateNumber}
+                            </span>
+                          {:else}
+                            <span class="course-edit-sub reporting-cert-empty">—</span>
+                          {/if}
+                          {#if row.completions.length > 0}
+                            <button
+                              type="button"
+                              class="reporting-cert-history-btn"
+                              title="{t('admin.reportingCertificateHistory', $locale)} ({row.completions.length})"
+                              aria-label="{t('admin.reportingCertificateHistory', $locale)} ({row.completions.length})"
+                              onclick={() => openCertHistory(row)}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 3 2 8l10 5 10-5-10-5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+                                <path d="M6 11v4.5c0 1.8 2.7 3 6 3s6-1.2 6-3V11" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                                <path d="M22 8v5.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                              </svg>
+                              <span class="reporting-cert-history-count">{row.completions.length}</span>
+                            </button>
+                          {/if}
                         </div>
                       </td>
                       <td class="reporting-col-actions">
@@ -1231,28 +1223,42 @@
         <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>{t('admin.cancel', $locale)}</button>
       </div>
       <div class="reporting-modal-list">
-        {#each certHistoryModal.completions as completion}
+        {#each certHistoryModal.completions as completion, index}
           <div class="reporting-modal-row">
-            <span>#{completion.certificateNumber}</span>
-            <span>{formatCertificateDate(completion.issuedAt)}</span>
-            <button
-              type="button"
-              class="reporting-cert-delete-btn"
-              title={t('admin.deleteCertificate', $locale)}
-              aria-label={t('admin.deleteCertificate', $locale)}
-              disabled={saving}
-              onclick={() =>
-                deleteCertificate(
-                  certHistoryModal!.userId,
-                  completion.id,
-                  completion.certificateNumber,
-                )}
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-                <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
-              </svg>
-            </button>
+            <div class="reporting-modal-cert-meta">
+              <span class="reporting-modal-cert-id">#{completion.certificateNumber}</span>
+              {#if index === 0}
+                <span class="reporting-modal-cert-badge">{t('admin.reportingCertLatest', $locale)}</span>
+              {/if}
+              <span class="reporting-modal-cert-date">{formatCertificateIssuedAt(completion.issuedAt)}</span>
+            </div>
+            <div class="reporting-modal-cert-actions">
+              <a
+                class="btn btn-ghost btn-sm"
+                href={certificateDownloadUrl(completion.id)}
+                download={certificateDownloadFileName(completion.certificateNumber)}
+              >
+                {t('admin.downloadCertificate', $locale)}
+              </a>
+              <button
+                type="button"
+                class="reporting-cert-delete-btn"
+                title={t('admin.deleteCertificate', $locale)}
+                aria-label={t('admin.deleteCertificate', $locale)}
+                disabled={saving}
+                onclick={() =>
+                  deleteCertificate(
+                    certHistoryModal!.userId,
+                    completion.id,
+                    completion.certificateNumber,
+                  )}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                  <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
           </div>
         {/each}
       </div>

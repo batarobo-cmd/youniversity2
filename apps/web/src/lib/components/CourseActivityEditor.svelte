@@ -4,6 +4,7 @@
   import { t } from '$lib/i18n';
   import { normalizeActivityType } from '$lib/activity-types';
   import VideoActivityFields from '$lib/components/VideoActivityFields.svelte';
+  import PresentationActivityFields from '$lib/components/PresentationActivityFields.svelte';
   import {
     configFromVideoForm,
     emptyVideoForm,
@@ -11,6 +12,14 @@
     videoFormFromConfig,
     type VideoFormState,
   } from '$lib/video-config';
+  import {
+    configFromPresentationForm,
+    emptyPresentationForm,
+    presentationFormFromConfig,
+    presentationSourceSummary as presentationSummary,
+    validatePresentationForm,
+    type PresentationFormState,
+  } from '$lib/presentation-config';
   import type { Locale } from '@youniversity2/shared';
 
   type ActivityRow = {
@@ -57,6 +66,8 @@
   let newActivityDescription = $state('');
   let newVideoForm = $state<VideoFormState>(emptyVideoForm());
   let editVideoForm = $state<VideoFormState>(emptyVideoForm());
+  let newPresentationForm = $state<PresentationFormState>(emptyPresentationForm());
+  let editPresentationForm = $state<PresentationFormState>(emptyPresentationForm());
   let dragModuleId = $state<string | null>(null);
   let dragActivity = $state<{ id: string; moduleId: string } | null>(null);
   let dropTargetModuleId = $state<string | null>(null);
@@ -115,6 +126,10 @@
     return normalizeActivityType(type) === 'video';
   }
 
+  function isPresentationType(type: string) {
+    return normalizeActivityType(type) === 'presentation';
+  }
+
   function videoValidationMessages() {
     return {
       uploadRequired: t('admin.videoUploadRequired', locale),
@@ -122,6 +137,15 @@
       embedInvalid: t('admin.videoEmbedInvalid', locale),
       watchToEndNeedsNative: t('admin.videoWatchNativeOnly', locale),
       watchDurationNeedsTrackable: t('admin.videoWatchDurationTrackableOnly', locale),
+    };
+  }
+
+  function presentationValidationMessages() {
+    return {
+      uploadRequired: t('admin.presentationUploadRequired', locale),
+      embedRequired: t('admin.presentationEmbedRequired', locale),
+      embedInvalid: t('admin.presentationEmbedInvalid', locale),
+      slideMinRequired: t('admin.presentationSlideMinRequired', locale),
     };
   }
 
@@ -135,6 +159,15 @@
     return 'YouTube';
   }
 
+  function presentationSourceSummary(config?: Record<string, unknown>) {
+    return presentationSummary(config, {
+      upload: t('admin.presentationModeUpload', locale),
+      googleSlides: t('admin.presentationProvider.google_slides', locale),
+      onedrive: t('admin.presentationProvider.onedrive', locale),
+      external: t('admin.presentationProvider.external', locale),
+    });
+  }
+
   function getNewActivityValidationError(): string | null {
     if (isTextType(newActivityType)) return null;
 
@@ -144,6 +177,10 @@
 
     if (isVideoType(newActivityType)) {
       return validateVideoForm(newVideoForm, videoValidationMessages());
+    }
+
+    if (isPresentationType(newActivityType)) {
+      return validatePresentationForm(newPresentationForm, presentationValidationMessages());
     }
 
     return null;
@@ -233,6 +270,7 @@
     newActivityTitle = '';
     newActivityDescription = '';
     newVideoForm = emptyVideoForm();
+    newPresentationForm = emptyPresentationForm();
   }
 
   async function addActivity(moduleId: string) {
@@ -256,7 +294,11 @@
       return;
     }
 
-    const config = isVideoType(newActivityType) ? configFromVideoForm(newVideoForm) : undefined;
+    const config = isVideoType(newActivityType)
+      ? configFromVideoForm(newVideoForm)
+      : isPresentationType(newActivityType)
+        ? configFromPresentationForm(newPresentationForm)
+        : undefined;
 
     await run(async () => {
       await serverMutate('apiMutation', `/api/modules/${moduleId}/activities`, 'POST', {
@@ -269,6 +311,7 @@
       newActivityTitle = '';
       newActivityDescription = '';
       newVideoForm = emptyVideoForm();
+      newPresentationForm = emptyPresentationForm();
     });
   }
 
@@ -279,27 +322,31 @@
     const cfg = activity.config ?? {};
     if (isVideoType(activity.type)) {
       editVideoForm = videoFormFromConfig(cfg);
+      editPresentationForm = emptyPresentationForm();
+      editConfigUrl = '';
+      return;
+    }
+    if (isPresentationType(activity.type)) {
+      editPresentationForm = presentationFormFromConfig(cfg);
+      editVideoForm = emptyVideoForm();
       editConfigUrl = '';
       return;
     }
     editVideoForm = emptyVideoForm();
-    editConfigUrl =
-      (cfg.audioUrl as string) ||
-      (cfg.presentationUrl as string) ||
-      '';
+    editPresentationForm = emptyPresentationForm();
+    editConfigUrl = (cfg.audioUrl as string) || '';
   }
 
   function configForType(type: string, url: string): Record<string, unknown> | undefined {
     const normalized = normalizeActivityType(type);
     if (!url.trim()) return undefined;
     if (normalized === 'audio') return { audioUrl: url.trim() };
-    if (normalized === 'presentation') return { presentationUrl: url.trim() };
     return undefined;
   }
 
   function showUrlField(type: string) {
     const normalized = normalizeActivityType(type);
-    return normalized === 'audio' || normalized === 'presentation';
+    return normalized === 'audio';
   }
 
   async function saveActivity(activity: ActivityRow) {
@@ -313,6 +360,16 @@
         return;
       }
       config = configFromVideoForm(editVideoForm);
+    } else if (isPresentationType(activity.type)) {
+      const presentationError = validatePresentationForm(
+        editPresentationForm,
+        presentationValidationMessages(),
+      );
+      if (presentationError) {
+        error = presentationError;
+        return;
+      }
+      config = configFromPresentationForm(editPresentationForm);
     } else {
       config = configForType(activity.type, editConfigUrl);
     }
@@ -567,6 +624,9 @@
                     {#if isVideoType(activity.type)}
                       <span class="activity-video-source">{videoSourceSummary(activity.config)}</span>
                     {/if}
+                    {#if isPresentationType(activity.type)}
+                      <span class="activity-video-source">{presentationSourceSummary(activity.config)}</span>
+                    {/if}
                     {#if activity.content}
                       <span class="activity-description-preview">{activity.content}</span>
                     {/if}
@@ -599,6 +659,8 @@
                   </label>
                   {#if isVideoType(activity.type)}
                     <VideoActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editVideoForm} />
+                  {:else if isPresentationType(activity.type)}
+                    <PresentationActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editPresentationForm} />
                   {:else if showUrlField(activity.type)}
                     <label>
                       <span>{t('admin.activityMediaUrl', locale)}</span>
@@ -635,52 +697,68 @@
         {/if}
 
         {#if addingToModule === mod.id && canAddActivity(mod)}
-          <div class="activity-editor-add-form">
-            <select bind:value={newActivityType} disabled={saving}>
-              {#each allowedActivityTypes(mod) as type}
-                <option value={type}>{t(`activity.type.${type}`, locale)}</option>
-              {/each}
-            </select>
-            {#if isTextType(newActivityType)}
-              <textarea
-                class="activity-description-input"
-                rows="4"
-                placeholder={t('admin.textFieldContentPlaceholder', locale)}
-                bind:value={newActivityDescription}
-                disabled={saving}
-              ></textarea>
-            {:else}
-              <input
-                type="text"
-                placeholder={t('admin.activityTitlePlaceholder', locale)}
-                bind:value={newActivityTitle}
-                oninput={() => {
-                  if (error) error = '';
-                }}
-                disabled={saving}
-              />
-              <textarea
-                class="activity-description-input"
-                rows="3"
-                placeholder={t('admin.activityDescriptionPlaceholder', locale)}
-                bind:value={newActivityDescription}
-                disabled={saving}
-              ></textarea>
-              {#if isVideoType(newActivityType)}
-                <VideoActivityFields courseId={courseId} {locale} disabled={saving} bind:form={newVideoForm} />
+          <div
+            class="activity-editor-add-form"
+            class:activity-editor-add-form--media={
+              isVideoType(newActivityType) || isPresentationType(newActivityType)
+            }
+          >
+            <div class="activity-editor-add-form-body">
+              <select bind:value={newActivityType} disabled={saving}>
+                {#each allowedActivityTypes(mod) as type}
+                  <option value={type}>{t(`activity.type.${type}`, locale)}</option>
+                {/each}
+              </select>
+              {#if isTextType(newActivityType)}
+                <textarea
+                  class="activity-description-input"
+                  rows="4"
+                  placeholder={t('admin.textFieldContentPlaceholder', locale)}
+                  bind:value={newActivityDescription}
+                  disabled={saving}
+                ></textarea>
+              {:else}
+                <input
+                  type="text"
+                  placeholder={t('admin.activityTitlePlaceholder', locale)}
+                  bind:value={newActivityTitle}
+                  oninput={() => {
+                    if (error) error = '';
+                  }}
+                  disabled={saving}
+                />
+                <textarea
+                  class="activity-description-input"
+                  rows="3"
+                  placeholder={t('admin.activityDescriptionPlaceholder', locale)}
+                  bind:value={newActivityDescription}
+                  disabled={saving}
+                ></textarea>
+                {#if isVideoType(newActivityType)}
+                  <VideoActivityFields courseId={courseId} {locale} disabled={saving} bind:form={newVideoForm} />
+                {:else if isPresentationType(newActivityType)}
+                  <PresentationActivityFields
+                    courseId={courseId}
+                    {locale}
+                    disabled={saving}
+                    bind:form={newPresentationForm}
+                  />
+                {/if}
               {/if}
-            {/if}
-            <button
-              type="button"
-              class="btn btn-sm"
-              disabled={saving}
-              onclick={() => addActivity(mod.id)}
-            >
-              {t('admin.addActivity', locale)}
-            </button>
-            <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => (addingToModule = null)}>
-              {t('admin.cancel', locale)}
-            </button>
+            </div>
+            <div class="activity-editor-add-form-actions">
+              <button
+                type="button"
+                class="btn btn-sm"
+                disabled={saving}
+                onclick={() => addActivity(mod.id)}
+              >
+                {t('admin.addActivity', locale)}
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => (addingToModule = null)}>
+                {t('admin.cancel', locale)}
+              </button>
+            </div>
           </div>
         {:else if canAddActivity(mod)}
           <button type="button" class="btn btn-ghost btn-sm activity-add-btn" disabled={saving} onclick={() => startAddActivity(mod)}>

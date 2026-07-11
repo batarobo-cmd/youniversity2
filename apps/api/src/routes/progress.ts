@@ -17,6 +17,7 @@ const updateProgressSchema = z.object({
   percentComplete: z.number().min(0).max(100).optional(),
   isComplete: z.boolean().optional(),
   score: z.number().min(0).max(100).optional(),
+  state: z.record(z.unknown()).optional(),
 });
 
 progressRoutes.get('/course/:courseId', async (c) => {
@@ -59,7 +60,7 @@ progressRoutes.post('/', async (c) => {
   const body = updateProgressSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 
-  const { lessonId, percentComplete, isComplete, score } = body.data;
+  const { lessonId, percentComplete, isComplete, score, state } = body.data;
 
   const [lesson] = await db.select().from(lessons).where(eq(lessons.id, lessonId)).limit(1);
   if (!lesson) return c.json({ error: 'Lesson not found' }, 404);
@@ -92,6 +93,7 @@ progressRoutes.post('/', async (c) => {
         isComplete: nextIsComplete,
         score: score ?? existing.score,
         attempts: score !== undefined ? existing.attempts + 1 : existing.attempts,
+        progressState: state ? { ...(existing.progressState ?? {}), ...state } : existing.progressState,
         lastActivityAt: new Date(),
       })
       .where(eq(lessonProgress.id, existing.id))
@@ -106,6 +108,7 @@ progressRoutes.post('/', async (c) => {
         isComplete: isComplete ?? false,
         score,
         attempts: score !== undefined ? 1 : 0,
+        progressState: state ?? {},
       })
       .returning();
   }

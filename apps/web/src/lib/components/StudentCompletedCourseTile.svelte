@@ -2,6 +2,7 @@
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { splitCertificatesByAttempt } from '$lib/certificate-attempts';
+  import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
 
   type CertificateItem = {
     id: string;
@@ -66,8 +67,15 @@
     {#if currentCertificate}
       <div class="completed-course-cert-inline">
         <span class="completed-course-cert-current">
-          #{currentCertificate.certificateNumber} · {formatDate(currentCertificate.issuedAt)}
+          #{currentCertificate.certificateNumber} · {formatCertificateIssuedAt(currentCertificate.issuedAt, $locale)}
         </span>
+        <a
+          class="btn btn-ghost btn-sm completed-course-cert-download"
+          href={certificateDownloadUrl(currentCertificate.id)}
+          download={certificateDownloadFileName(currentCertificate.certificateNumber)}
+        >
+          {t('dash.downloadCertificate', $locale)}
+        </a>
         {#if historicalCertificates.length > 0 && onOpenHistory}
           <button
             type="button"
