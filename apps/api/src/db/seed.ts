@@ -12,19 +12,22 @@ import {
   enrollments,
   completionRules,
 } from './schema';
+import { getDemoUserCredentials } from '../services/demo-users';
 
 async function seed() {
   console.log('Seeding database...');
 
-  const passwordHash = await bcrypt.hash('admin123', 12);
+  const demoUsers = getDemoUserCredentials();
+  const adminCreds = demoUsers.admin;
+  const studentCreds = demoUsers.student;
 
   const [admin] = await db
     .insert(users)
     .values({
-      email: 'admin@youniversity2.sk',
-      passwordHash,
-      name: 'Admin',
-      role: 'admin',
+      email: adminCreds.email,
+      passwordHash: await bcrypt.hash(adminCreds.password, 12),
+      name: adminCreds.name,
+      role: adminCreds.role,
       preferredLocale: 'sk',
     })
     .onConflictDoNothing()
@@ -33,10 +36,10 @@ async function seed() {
   const [student] = await db
     .insert(users)
     .values({
-      email: 'student@youniversity2.sk',
-      passwordHash: await bcrypt.hash('student123', 12),
-      name: 'Ján Študent',
-      role: 'student',
+      email: studentCreds.email,
+      passwordHash: await bcrypt.hash(studentCreds.password, 12),
+      name: studentCreds.name,
+      role: studentCreds.role,
       preferredLocale: 'sk',
     })
     .onConflictDoNothing()
@@ -156,8 +159,13 @@ async function seed() {
   }
 
   console.log('Seed complete!');
-  console.log('  Admin:   admin@youniversity2.sk / admin123');
-  console.log('  Student: student@youniversity2.sk / student123');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('  Admin:   admin / admin');
+    console.log('  Student: student / student');
+  } else {
+    console.log(`  Admin:   ${adminCreds.email} / ${adminCreds.password}`);
+    console.log(`  Student: ${studentCreds.email} / ${studentCreds.password}`);
+  }
   process.exit(0);
 }
 

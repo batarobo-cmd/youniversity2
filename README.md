@@ -60,10 +60,12 @@ bun run dev
 
 ### Demo účty (po seed)
 
-| Rola | E-mail | Heslo |
-|------|--------|-------|
-| Admin | admin@youniversity2.sk | admin123 |
-| Študent | student@youniversity2.sk | student123 |
+| Rola | Lokálny dev | Produkčný trial (AWS) |
+|------|-------------|------------------------|
+| Admin | `admin` / `admin` | admin@youniversity2.sk / admin123 |
+| Študent | `student` / `student` | student@youniversity2.sk / student123 |
+
+Pri existujúcej lokálnej DB spustite `bun run db:ensure-demo`, aby sa účty aktualizovali.
 
 ## Štruktúra projektu
 

@@ -14,6 +14,7 @@ import {
   getAuthSettings,
   isEmailDomainAllowed,
 } from '../services/auth-settings';
+import { resolveLoginIdentifier, useLocalDevCredentials } from '../services/demo-users';
 import { SUPPORTED_LOCALES } from '@youniversity2/shared';
 import {
   getAuthorizationUrl,
@@ -29,10 +30,15 @@ const registerSchema = z.object({
   preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
 });
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
-});
+const loginSchema = useLocalDevCredentials()
+  ? z.object({
+      email: z.string().min(1),
+      password: z.string(),
+    })
+  : z.object({
+      email: z.string().email(),
+      password: z.string(),
+    });
 
 export const authRoutes = new Hono();
 
@@ -177,7 +183,8 @@ authRoutes.post('/login', async (c) => {
     return c.json({ error: 'Invalid input' }, 400);
   }
 
-  const { email, password } = body.data;
+  const email = resolveLoginIdentifier(body.data.email);
+  const { password } = body.data;
 
   if (!isEmailDomainAllowed(email, settings.allowedLoginDomains)) {
     return c.json({ error: 'Email domain is not allowed', code: 'domain_not_allowed' }, 403);

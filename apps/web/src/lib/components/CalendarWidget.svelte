@@ -36,7 +36,13 @@
   let viewMonth = $state(now.getMonth());
   let tooltip = $state<{ lines: string[]; x: number; y: number } | null>(null);
 
-  const periodColorMap = $derived(new Map(periods.map((period, index) => [period.id, index % 5])));
+  const periodColorMap = $derived(
+    new Map(
+      [...new Set([...periods.map((period) => period.courseId), ...events.map((event) => event.courseId)])].map(
+        (courseId, index) => [courseId, index % 5],
+      ),
+    ),
+  );
 
   const dayNames = $derived(
     $locale === 'en' ? ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] : ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'],
@@ -58,14 +64,37 @@
     return periods
       .filter((period) => {
         const startKey = period.startsAt.slice(0, 10);
-        const endKey = period.endsAt?.slice(0, 10) ?? '9999-12-31';
+        if (!period.endsAt) return false;
+        const endKey = period.endsAt.slice(0, 10);
         return key >= startKey && key <= endKey;
       })
       .map((period) => ({
         ...period,
-        colorIndex: periodColorMap.get(period.id) ?? 0,
+        colorIndex: periodColorMap.get(period.courseId) ?? 0,
         isStart: period.startsAt.slice(0, 10) === key,
         isEnd: period.endsAt?.slice(0, 10) === key,
+      }))
+      .sort((a, b) => a.colorIndex - b.colorIndex);
+  }
+
+  function eventMarkersForDay(
+    dateKey: string,
+    dayPeriods: PeriodOnDay[],
+    dayEvents: CalendarEvent[],
+  ) {
+    return dayEvents
+      .filter((event) => event.type === 'start' || event.type === 'end')
+      .filter((event) => {
+        const coveredByPeriod = dayPeriods.some(
+          (period) =>
+            period.courseId === event.courseId &&
+            ((event.type === 'start' && period.isStart) || (event.type === 'end' && period.isEnd)),
+        );
+        return !coveredByPeriod;
+      })
+      .map((event) => ({
+        ...event,
+        colorIndex: periodColorMap.get(event.courseId) ?? 0,
       }))
       .sort((a, b) => a.colorIndex - b.colorIndex);
   }
@@ -81,19 +110,23 @@
       dateKey: string;
       events: CalendarEvent[];
       periods: PeriodOnDay[];
+      eventMarkers: ReturnType<typeof eventMarkersForDay>;
     }> = [];
 
     for (let i = 0; i < startDay; i++) {
-      days.push({ day: null, dateKey: '', events: [], periods: [] });
+      days.push({ day: null, dateKey: '', events: [], periods: [], eventMarkers: [] });
     }
 
     for (let d = 1; d <= last.getDate(); d++) {
       const dateStr = dayKey(viewYear, viewMonth, d);
+      const dayPeriods = periodsForDay(viewYear, viewMonth, d);
+      const dayEvents = events.filter((event) => event.date.slice(0, 10) === dateStr);
       days.push({
         day: d,
         dateKey: dateStr,
-        events: events.filter((event) => event.date.slice(0, 10) === dateStr),
-        periods: periodsForDay(viewYear, viewMonth, d),
+        events: dayEvents,
+        periods: dayPeriods,
+        eventMarkers: eventMarkersForDay(dateStr, dayPeriods, dayEvents),
       });
     }
 
@@ -204,7 +237,7 @@
         <div
           class="calendar-day"
           class:today={isToday(cell.day)}
-          class:has-courses={cell.periods.length > 0}
+          class:has-courses={cell.periods.length > 0 || cell.eventMarkers.length > 0}
           role="gridcell"
           aria-current={isToday(cell.day) ? 'date' : undefined}
           onmouseenter={(event) => showTooltip(event, lines)}
@@ -217,7 +250,7 @@
             {/if}
           </div>
 
-          {#if cell.periods.length > 0}
+          {#if cell.periods.length > 0 || cell.eventMarkers.length > 0}
             <div class="calendar-day-bars" aria-hidden="true">
               {#each cell.periods.slice(0, 5) as period (period.id)}
                 <span
@@ -236,8 +269,25 @@
                   {/if}
                 </span>
               {/each}
-              {#if cell.periods.length > 5}
-                <span class="calendar-day-bar-more">+{cell.periods.length - 5}</span>
+              {#each cell.eventMarkers.slice(0, Math.max(0, 5 - cell.periods.length)) as marker (marker.id)}
+                <span
+                  class="calendar-day-bar calendar-day-bar--event-only"
+                  class:calendar-day-bar--start={marker.type === 'start'}
+                  class:calendar-day-bar--end={marker.type === 'end'}
+                  data-color={marker.colorIndex}
+                  title={marker.type === 'start'
+                    ? t('dash.courseStarts', $locale).replace('{title}', marker.title)
+                    : t('dash.courseEnds', $locale).replace('{title}', marker.title)}
+                >
+                  {#if marker.type === 'start'}
+                    <span class="calendar-bar-cap calendar-bar-cap--start" aria-hidden="true"></span>
+                  {:else}
+                    <span class="calendar-bar-cap calendar-bar-cap--end" aria-hidden="true"></span>
+                  {/if}
+                </span>
+              {/each}
+              {#if cell.periods.length + cell.eventMarkers.length > 5}
+                <span class="calendar-day-bar-more">+{cell.periods.length + cell.eventMarkers.length - 5}</span>
               {/if}
             </div>
           {/if}

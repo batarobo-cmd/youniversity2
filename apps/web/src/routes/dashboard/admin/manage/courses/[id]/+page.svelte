@@ -831,7 +831,10 @@
                 <input id="publish-start" type="datetime-local" bind:value={publishStartsAt} required />
               </div>
               <div class="cat-tree-field">
-                <label for="publish-end">{t('admin.publishEndsAt', $locale)}</label>
+                <label for="publish-end">
+                  {t('admin.publishEndsAt', $locale)}
+                  <span class="course-edit-optional">({t('admin.publishEndsAtOptional', $locale)})</span>
+                </label>
                 <input id="publish-end" type="datetime-local" bind:value={publishEndsAt} />
               </div>
               <p class="course-edit-hint">{t('admin.publishScheduleHint', $locale)}</p>

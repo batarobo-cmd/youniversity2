@@ -47,6 +47,8 @@ export type StudentCourseView = {
   expiresAt?: string;
   startsAt?: string;
   endsAt?: string;
+  publishStartsAt?: string;
+  publishEndsAt?: string;
   completedAt?: string;
   enrollmentStatus: string;
   certificate: {
@@ -263,6 +265,8 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
       expiresAt: enrollment?.expiresAt?.toISOString(),
       startsAt: startDate?.toISOString(),
       endsAt: endDate?.toISOString(),
+      publishStartsAt: course.startsAt?.toISOString(),
+      publishEndsAt: course.endsAt?.toISOString(),
       completedAt,
       enrollmentStatus: enrollment
         ? isOngoingEnrollment
@@ -366,31 +370,33 @@ export async function getStudentDashboard(userId: string, locale: string) {
   }> = [];
 
   for (const course of [...overview.futureCourses, ...overview.activeCourses]) {
-    if (course.startsAt) {
-      calendarEvents.push({
-        id: `${course.id}-start`,
-        courseId: course.id,
-        title: course.title,
-        date: course.startsAt,
-        type: 'start',
-      });
+    if (!course.publishStartsAt) continue;
+
+    calendarEvents.push({
+      id: `${course.id}-start`,
+      courseId: course.id,
+      title: course.title,
+      date: course.publishStartsAt,
+      type: 'start',
+    });
+
+    if (course.publishEndsAt) {
       calendarPeriods.push({
         id: course.id,
         courseId: course.id,
         title: course.title,
-        startsAt: course.startsAt,
-        endsAt: course.endsAt ?? null,
+        startsAt: course.publishStartsAt,
+        endsAt: course.publishEndsAt,
       });
-    }
-    if (course.endsAt) {
       calendarEvents.push({
         id: `${course.id}-end`,
         courseId: course.id,
         title: course.title,
-        date: course.endsAt,
+        date: course.publishEndsAt,
         type: 'end',
       });
     }
+
     if (course.expiresAt) {
       const daysLeft = Math.ceil(
         (new Date(course.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),

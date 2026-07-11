@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dev } from '$app/environment';
   import { page } from '$app/state';
   import { locale } from '$lib/stores/auth';
   import { authErrorMessage, t } from '$lib/i18n';
@@ -118,13 +119,14 @@
             {:else}
               <form class="manual-form" method="POST" action="?/login">
                 <div class="form-field">
-                  <label for="email">{t('auth.email', $locale)}</label>
+                  <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
                   <input
                     id="email"
                     name="email"
-                    type="email"
+                    type={dev ? 'text' : 'email'}
                     value={form?.email ?? ''}
-                    autocomplete="email"
+                    autocomplete="username"
+                    placeholder={dev ? 'admin' : ''}
                     required
                   />
                 </div>
@@ -135,6 +137,7 @@
                     name="password"
                     type="password"
                     autocomplete="current-password"
+                    placeholder={dev ? 'admin' : ''}
                     required
                   />
                 </div>
@@ -167,13 +170,14 @@
         {:else}
           <form class="manual-form" method="POST" action="?/login">
             <div class="form-field">
-              <label for="email">{t('auth.email', $locale)}</label>
+              <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
               <input
                 id="email"
                 name="email"
-                type="email"
+                type={dev ? 'text' : 'email'}
                 value={form?.email ?? ''}
-                autocomplete="email"
+                autocomplete="username"
+                placeholder={dev ? 'admin' : ''}
                 required
               />
             </div>
@@ -184,6 +188,7 @@
                 name="password"
                 type="password"
                 autocomplete="current-password"
+                placeholder={dev ? 'admin' : ''}
                 required
               />
             </div>

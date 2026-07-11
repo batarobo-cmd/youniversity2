@@ -16,6 +16,7 @@ import {
   createWebSocketHandlers,
   authenticateWebSocket,
 } from './realtime/hub';
+import { startPublicationScheduler } from './services/publication-scheduler';
 
 const app = new Hono();
 
@@ -43,6 +44,7 @@ app.route('/api/progress', progressRoutes);
 app.route('/api/media', mediaRoutes);
 
 await initRealtimeHub();
+startPublicationScheduler();
 
 const wsHandlers = createWebSocketHandlers();
 

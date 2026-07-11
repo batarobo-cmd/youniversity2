@@ -4,6 +4,7 @@
   import AdminDashboard from '$lib/components/AdminDashboard.svelte';
   import { invalidate } from '$app/navigation';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
+  import { scheduleNextPublicationRefresh } from '$lib/publication-refresh';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -15,6 +16,14 @@
   $effect(() => {
     dashboard = data.dashboard;
     dashboardError = data.dashboardError;
+  });
+
+  $effect(() => {
+    if (!dashboard || dashboard.role !== 'student') return;
+
+    return scheduleNextPublicationRefresh(dashboard, () => {
+      void refreshDashboard();
+    });
   });
 
   onMount(() => {
