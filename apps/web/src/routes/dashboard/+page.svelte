@@ -1,20 +1,22 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import { invalidate } from '$app/navigation';
+  import { get } from 'svelte/store';
   import StudentDashboard from '$lib/components/StudentDashboard.svelte';
   import AdminDashboard from '$lib/components/AdminDashboard.svelte';
-  import { invalidate } from '$app/navigation';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
   import { scheduleNextPublicationRefresh } from '$lib/publication-refresh';
+  import { user as authUser } from '$lib/stores/auth';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
 
-  let dashboard = $state(data.dashboard);
-  let dashboardError = $state(data.dashboardError);
+  let dashboardError = $state<string | null>(data.dashboardError);
   let refreshing = $state(false);
 
+  const dashboard = $derived(data.dashboard);
+
   $effect(() => {
-    dashboard = data.dashboard;
     dashboardError = data.dashboardError;
   });
 
@@ -26,10 +28,12 @@
     });
   });
 
-  onMount(() => {
+  $effect(() => {
+    if (!browser) return;
+
     return subscribeDashboardRefresh(() => {
       void refreshDashboard();
-    });
+    }, () => get(authUser)?.id);
   });
 
   async function refreshDashboard() {

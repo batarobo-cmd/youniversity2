@@ -66,6 +66,14 @@ export type StudentCourseView = {
 
 type CourseBucket = 'future' | 'active' | 'past';
 
+function currentAttemptCertificates<T extends { issuedAt: string }>(
+  certItems: T[],
+  enrolledAt: Date,
+): T[] {
+  const enrolledAtMs = enrolledAt.getTime();
+  return certItems.filter((cert) => new Date(cert.issuedAt).getTime() >= enrolledAtMs);
+}
+
 function hasCourseAchievement(
   enrollment: { status: string; completedAt: Date | null },
   certCount: number,
@@ -131,6 +139,9 @@ function resolveCourseBucket(
 }
 
 function isCourseCompletedForStudent(course: StudentCourseView): boolean {
+  if (course.enrollmentStatus === 'active') {
+    return course.progressPercent >= 100;
+  }
   return (
     course.enrollmentStatus === 'completed' ||
     course.certificates.length > 0 ||
@@ -212,7 +223,15 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     const startDate = course.startsAt ?? enrollment?.enrolledAt ?? null;
     const endDate = course.endsAt ?? enrollment?.expiresAt ?? null;
     const courseCerts = certsByCourse.get(courseId) ?? [];
+    const attemptCerts = enrollment
+      ? currentAttemptCertificates(courseCerts, enrollment.enrolledAt)
+      : courseCerts;
     const certItems = courseCerts.map((cert) => ({
+      id: cert.id,
+      certificateNumber: cert.certificateNumber,
+      issuedAt: cert.issuedAt.toISOString(),
+    }));
+    const attemptCertItems = attemptCerts.map((cert) => ({
       id: cert.id,
       certificateNumber: cert.certificateNumber,
       issuedAt: cert.issuedAt.toISOString(),
@@ -223,7 +242,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
       enrolledAt: courseCerts[0]?.issuedAt ?? now,
       expiresAt: null,
     };
-    const hasAchievement = hasCourseAchievement(enrollmentLike, certItems.length, progressPercent);
+    const hasAchievement = hasCourseAchievement(enrollmentLike, attemptCertItems.length, progressPercent);
 
     if (enrollment) {
       if (!shouldListEnrollmentForStudent(enrollment.status, hasAchievement)) {
@@ -243,16 +262,15 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
       : hasAchievement
         ? Math.max(progressPercent, 100)
         : progressPercent;
-    const visibleCerts = isOngoingEnrollment ? [] : certItems;
+    const visibleCerts = isOngoingEnrollment ? [] : attemptCertItems;
     const enrolledAtMs = enrollment?.enrolledAt?.getTime() ?? 0;
-    const currentAttemptCert = certItems
-      .filter((cert) => new Date(cert.issuedAt).getTime() >= enrolledAtMs)
+    const currentAttemptCert = attemptCertItems
       .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime())[0];
 
     const completedAt =
       enrollment?.completedAt?.toISOString() ??
       currentAttemptCert?.issuedAt ??
-      certItems[0]?.issuedAt ??
+      (isOngoingEnrollment ? undefined : attemptCertItems[0]?.issuedAt) ??
       undefined;
 
     return {
@@ -271,7 +289,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
       enrollmentStatus: enrollment
         ? isOngoingEnrollment
           ? enrollment.status
-          : displayEnrollmentStatus(enrollment, certItems.length, progressPercent)
+          : displayEnrollmentStatus(enrollment, attemptCertItems.length, progressPercent)
         : 'completed',
       certificates: visibleCerts,
       certificate: visibleCerts[0] ?? null,
@@ -284,16 +302,17 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     if (!item) continue;
 
     const courseCerts = certsByCourse.get(enrollment.courseId) ?? [];
+    const attemptCerts = currentAttemptCertificates(courseCerts, enrollment.enrolledAt);
     const rawProgressPercent =
       enrollment.status === 'completed'
         ? 100
         : await getCourseProgressPercent(userId, enrollment.courseId);
-    const hasAchievement = hasCourseAchievement(enrollment, courseCerts.length, rawProgressPercent);
+    const hasAchievement = hasCourseAchievement(enrollment, attemptCerts.length, rawProgressPercent);
     const bucket = resolveCourseBucket(
       enrollment,
       courseMap.get(enrollment.courseId)!,
       now,
-      courseCerts.length,
+      attemptCerts.length,
       rawProgressPercent,
     );
 

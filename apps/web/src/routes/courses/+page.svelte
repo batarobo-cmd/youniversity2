@@ -3,8 +3,10 @@
   import { goto, invalidate } from '$app/navigation';
   import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { WS_EVENTS } from '@youniversity2/shared';
   import { lastMessage } from '$lib/stores/realtime';
+  import { shouldRefreshDashboard } from '$lib/live-dashboard';
+  import { user as authUser } from '$lib/stores/auth';
+  import { get } from 'svelte/store';
   import StudentCourseCard from '$lib/components/StudentCourseCard.svelte';
   import StudentCompletedCourseTile from '$lib/components/StudentCompletedCourseTile.svelte';
   import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
@@ -63,7 +65,7 @@
     });
 
     const unsubWs = lastMessage.subscribe((msg) => {
-      if (msg?.type === WS_EVENTS.ENROLLMENT_CHANGED || msg?.type === WS_EVENTS.COURSE_UPDATED) {
+      if (shouldRefreshDashboard(msg, get(authUser)?.id)) {
         void refreshCourses();
       }
     });

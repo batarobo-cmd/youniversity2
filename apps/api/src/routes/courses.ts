@@ -710,9 +710,24 @@ courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin', 
     payload: { userId, courseId, reset: true },
     timestamp: new Date().toISOString(),
   };
+  const enrollmentMessage = {
+    type: WS_EVENTS.ENROLLMENT_CHANGED,
+    payload: {
+      userId,
+      courseId,
+      action: 'progress_reset',
+      enrollment: updatedEnrollment ?? null,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
   broadcastToCourse(courseId, updateMessage);
   broadcastToAdmin(updateMessage);
   broadcastToUser(userId, updateMessage);
+  broadcastToUser(userId, enrollmentMessage);
+  broadcastToAdmin(enrollmentMessage);
+  await broadcastToCourseEnrollees(courseId, updateMessage);
+  await broadcastToCourseEnrollees(courseId, enrollmentMessage);
 
   const courseTitle = await getCourseTitle(courseId);
   void recordUserActivity(actor.id, 'enrollment.progress_reset', {
