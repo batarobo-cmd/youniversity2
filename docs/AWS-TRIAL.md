@@ -85,8 +85,22 @@ Na **serveri** (SSH):
 
 ```bash
 cd ~/youniversity2
-git pull
+git fetch origin --tags
+git pull --ff-only origin main
 ./deploy/aws-trial-update.sh
+```
+
+**Pomalý alebo „zamrznutý“ build?** Na 1 GB Lightsail je normálne, že krok `web build` + `exporting layers` trvá niekoľko minút. Skript teraz používa Docker cache (rýchlejšie opakované deploye). Čistý rebuild len keď treba:
+
+```bash
+FULL_REBUILD=1 ./deploy/aws-trial-update.sh
+```
+
+Odporúčaná veľkosť inštancie: **2 GB RAM** ($20/mes.). Pri 1 GB pridaj swap:
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
 Alebo manuálne:

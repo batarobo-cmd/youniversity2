@@ -16,13 +16,15 @@ ARG VITE_APP_VERSION=dev
 ENV API_URL=http://api:3001
 ENV VITE_API_URL=
 ENV VITE_APP_VERSION=${VITE_APP_VERSION}
+# Lightsail 1 GB inštancie — obmedzená heap pre Vite/SvelteKit build
+ENV NODE_OPTIONS=--max-old-space-size=768
 RUN bun run --filter @youniversity2/web build
 
 FROM oven/bun:1.2-alpine AS runner
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
+# adapter-node build je zabalený — netreba celé monorepo node_modules
 COPY --from=builder /app/apps/web/build ./
 
 ENV PORT=3000

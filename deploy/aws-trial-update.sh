@@ -14,8 +14,23 @@ git pull --ff-only origin main
 export VITE_APP_VERSION="$(git rev-parse --short HEAD)"
 echo "==> Verzia buildu: ${VITE_APP_VERSION}"
 
-echo "==> Rebuild a reštart kontajnerov..."
-docker compose -f docker-compose.prod.yml build --no-cache web api
+BUILD_FLAGS=()
+if [ "${FULL_REBUILD:-0}" = "1" ]; then
+  echo "==> FULL_REBUILD=1 — rebuild bez Docker cache"
+  BUILD_FLAGS+=(--no-cache)
+else
+  echo "==> Inkrementálny rebuild (Docker cache). Pre čistý rebuild: FULL_REBUILD=1 ./deploy/aws-trial-update.sh"
+fi
+
+export DOCKER_BUILDKIT=1
+export COMPOSE_PARALLEL_LIMIT=1
+
+echo "==> Rebuild kontajnerov (postupne — menej RAM na malých inštanciách)..."
+echo "    Tip: na 1 GB Lightsail môže web build trvať 3–8 min; 'exporting layers' nie je zamrznutie."
+docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" api
+docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" web
+
+echo "==> Reštart kontajnerov..."
 docker compose -f docker-compose.prod.yml up -d --force-recreate web api nginx
 
 echo "==> Stav kontajnerov..."
