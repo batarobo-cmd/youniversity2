@@ -15,7 +15,7 @@ import {
 import type { AuthUser } from '../middleware/auth';
 import { isCourseVisibleToStudents, isCoursePublishedForStudents, getCoursePublicationDisplayStatus } from './course-visibility';
 import { countsForCourseCompletion, isProgressFullyComplete } from './course-completion';
-import { canStudentOpenCourse } from './course-access';
+import { canStudentOpenEnrollment } from './course-access';
 import { evaluateCourseCompletion } from './completion';
 
 async function getCourseProgressPercent(userId: string, courseId: string): Promise<number> {
@@ -66,25 +66,28 @@ export type StudentCourseView = {
 
 type CourseBucket = 'future' | 'active' | 'past';
 
-function currentAttemptCertificates<T extends { issuedAt: string }>(
-  certItems: T[],
-  enrolledAt: Date,
-): T[] {
-  const enrolledAtMs = enrolledAt.getTime();
-  return certItems.filter((cert) => new Date(cert.issuedAt).getTime() >= enrolledAtMs);
+const ROLLING_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+function sortCertificatesNewestFirst<T extends { issuedAt: string }>(certItems: T[]): T[] {
+  return [...certItems].sort(
+    (a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime(),
+  );
+}
+
+function courseCompletionTimestamp(course: StudentCourseView): number {
+  const certTs = sortCertificatesNewestFirst(course.certificates)[0]?.issuedAt;
+  if (certTs) return new Date(certTs).getTime();
+  if (course.completedAt) return new Date(course.completedAt).getTime();
+  if (course.certificate?.issuedAt) return new Date(course.certificate.issuedAt).getTime();
+  return 0;
 }
 
 function hasCourseAchievement(
-  enrollment: { status: string; completedAt: Date | null },
+  _enrollment: { status: string; completedAt: Date | null },
   certCount: number,
-  progressPercent: number,
+  _progressPercent: number,
 ): boolean {
-  return (
-    enrollment.status === 'completed' ||
-    enrollment.completedAt != null ||
-    certCount > 0 ||
-    progressPercent >= 100
-  );
+  return certCount > 0;
 }
 
 function shouldListEnrollmentForStudent(status: string, hasAchievement: boolean): boolean {
@@ -139,14 +142,7 @@ function resolveCourseBucket(
 }
 
 function isCourseCompletedForStudent(course: StudentCourseView): boolean {
-  if (course.enrollmentStatus === 'active') {
-    return course.progressPercent >= 100;
-  }
-  return (
-    course.enrollmentStatus === 'completed' ||
-    course.certificates.length > 0 ||
-    course.progressPercent >= 100
-  );
+  return course.certificates.length > 0;
 }
 
 export async function getStudentCourseOverview(userId: string, locale: string) {
@@ -223,26 +219,20 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     const startDate = course.startsAt ?? enrollment?.enrolledAt ?? null;
     const endDate = course.endsAt ?? enrollment?.expiresAt ?? null;
     const courseCerts = certsByCourse.get(courseId) ?? [];
-    const attemptCerts = enrollment
-      ? currentAttemptCertificates(courseCerts, enrollment.enrolledAt)
-      : courseCerts;
-    const certItems = courseCerts.map((cert) => ({
-      id: cert.id,
-      certificateNumber: cert.certificateNumber,
-      issuedAt: cert.issuedAt.toISOString(),
-    }));
-    const attemptCertItems = attemptCerts.map((cert) => ({
-      id: cert.id,
-      certificateNumber: cert.certificateNumber,
-      issuedAt: cert.issuedAt.toISOString(),
-    }));
+    const certItems = sortCertificatesNewestFirst(
+      courseCerts.map((cert) => ({
+        id: cert.id,
+        certificateNumber: cert.certificateNumber,
+        issuedAt: cert.issuedAt.toISOString(),
+      })),
+    );
     const enrollmentLike = enrollment ?? {
       status: 'revoked' as const,
       completedAt: null,
       enrolledAt: courseCerts[0]?.issuedAt ?? now,
       expiresAt: null,
     };
-    const hasAchievement = hasCourseAchievement(enrollmentLike, attemptCertItems.length, progressPercent);
+    const hasAchievement = hasCourseAchievement(enrollmentLike, certItems.length, progressPercent);
 
     if (enrollment) {
       if (!shouldListEnrollmentForStudent(enrollment.status, hasAchievement)) {
@@ -254,23 +244,20 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
 
     const isCurrentlyOpen =
       Boolean(enrollment) &&
-      canStudentOpenCourse(enrollment!.status) &&
-      isCourseVisibleToStudents(course, now);
+      isCourseVisibleToStudents(course, now) &&
+      canStudentOpenEnrollment(enrollment!.status, certItems.length > 0);
 
     const displayProgressPercent = isOngoingEnrollment
       ? progressPercent
       : hasAchievement
         ? Math.max(progressPercent, 100)
         : progressPercent;
-    const visibleCerts = isOngoingEnrollment ? [] : attemptCertItems;
-    const enrolledAtMs = enrollment?.enrolledAt?.getTime() ?? 0;
-    const currentAttemptCert = attemptCertItems
-      .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime())[0];
+    const visibleCerts = isOngoingEnrollment ? [] : certItems;
+    const latestCert = certItems[0];
 
     const completedAt =
+      latestCert?.issuedAt ??
       enrollment?.completedAt?.toISOString() ??
-      currentAttemptCert?.issuedAt ??
-      (isOngoingEnrollment ? undefined : attemptCertItems[0]?.issuedAt) ??
       undefined;
 
     return {
@@ -289,7 +276,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
       enrollmentStatus: enrollment
         ? isOngoingEnrollment
           ? enrollment.status
-          : displayEnrollmentStatus(enrollment, attemptCertItems.length, progressPercent)
+          : displayEnrollmentStatus(enrollment, certItems.length, progressPercent)
         : 'completed',
       certificates: visibleCerts,
       certificate: visibleCerts[0] ?? null,
@@ -302,17 +289,16 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
     if (!item) continue;
 
     const courseCerts = certsByCourse.get(enrollment.courseId) ?? [];
-    const attemptCerts = currentAttemptCertificates(courseCerts, enrollment.enrolledAt);
     const rawProgressPercent =
       enrollment.status === 'completed'
         ? 100
         : await getCourseProgressPercent(userId, enrollment.courseId);
-    const hasAchievement = hasCourseAchievement(enrollment, attemptCerts.length, rawProgressPercent);
+    const hasAchievement = hasCourseAchievement(enrollment, courseCerts.length, rawProgressPercent);
     const bucket = resolveCourseBucket(
       enrollment,
       courseMap.get(enrollment.courseId)!,
       now,
-      attemptCerts.length,
+      courseCerts.length,
       rawProgressPercent,
     );
 
@@ -323,10 +309,7 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
       totalProgress += item.progressPercent;
     } else pastCourses.push(item);
 
-    if (
-      enrollment.status === 'completed' ||
-      (['revoked', 'suspended'].includes(enrollment.status) && hasAchievement)
-    ) {
+    if (courseCerts.length > 0) {
       completedCount++;
     }
   }
@@ -358,14 +341,15 @@ export async function getStudentCourseOverview(userId: string, locale: string) {
 
 export async function getStudentDashboard(userId: string, locale: string) {
   const overview = await getStudentCourseOverview(userId, locale);
-  const currentYear = new Date().getFullYear();
+  const cutoff = Date.now() - ROLLING_YEAR_MS;
 
-  const completedThisYear = overview.pastCourses.filter((course) => {
-    if (!isCourseCompletedForStudent(course)) return false;
-    const doneAt = course.completedAt ?? course.certificates[0]?.issuedAt ?? course.certificate?.issuedAt;
-    if (!doneAt) return false;
-    return new Date(doneAt).getFullYear() === currentYear;
-  });
+  const completedLastYear = overview.pastCourses
+    .filter((course) => {
+      if (!isCourseCompletedForStudent(course)) return false;
+      const completedAt = courseCompletionTimestamp(course);
+      return completedAt > 0 && completedAt >= cutoff;
+    })
+    .sort((a, b) => courseCompletionTimestamp(b) - courseCompletionTimestamp(a));
 
   const calendarEvents: Array<{
     id: string;
@@ -436,8 +420,7 @@ export async function getStudentDashboard(userId: string, locale: string) {
   return {
     stats: overview.stats,
     activeCourses: overview.activeCourses,
-    completedThisYear,
-    currentYear,
+    completedLastYear,
     calendarEvents,
     calendarPeriods,
     upcomingDeadlines,

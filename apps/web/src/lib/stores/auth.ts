@@ -35,9 +35,22 @@ function loadStudentViewMode(): boolean {
 
 function writeStudentViewCookie(enabled: boolean) {
   if (typeof document === 'undefined') return;
-  const maxAge = 60 * 60 * 24 * 30;
-  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-  document.cookie = `${STUDENT_VIEW_COOKIE}=${enabled ? '1' : '0'}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+  const base = `${STUDENT_VIEW_COOKIE}=; Path=/; SameSite=Lax`;
+  const expired = 'Thu, 01 Jan 1970 00:00:00 GMT';
+  if (enabled) {
+    const maxAge = 60 * 60 * 24 * 30;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${STUDENT_VIEW_COOKIE}=1; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+  } else {
+    for (const suffix of ['; Max-Age=0', `; Expires=${expired}`]) {
+      document.cookie = `${base}${suffix}`;
+      document.cookie = `${base}${suffix}; Secure`;
+    }
+  }
+}
+
+export function ensureStudentViewCookie() {
+  writeStudentViewCookie(get(studentViewMode));
 }
 
 /** Session ID (opaque token) — nie JWT */
@@ -66,6 +79,12 @@ if (typeof window !== 'undefined') {
     token.set(stored);
     authReady.set(true);
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      ensureStudentViewCookie();
+    }
+  });
 }
 
 export function setAuth(sessionId: string, authUser: User) {
@@ -100,12 +119,10 @@ export function setStudentViewMode(enabled: boolean) {
   studentViewMode.set(enabled);
 }
 
-export function syncStudentViewFromServer(enabled: boolean) {
-  if (typeof localStorage !== 'undefined') {
-    if (enabled) localStorage.setItem(STUDENT_VIEW_KEY, '1');
-    else localStorage.removeItem(STUDENT_VIEW_KEY);
-  }
-  studentViewMode.set(enabled);
+export function syncStudentViewFromServer(_enabled: boolean) {
+  const localEnabled =
+    typeof localStorage !== 'undefined' && localStorage.getItem(STUDENT_VIEW_KEY) === '1';
+  setStudentViewMode(localEnabled);
 }
 
 export function setLocale(newLocale: Locale) {

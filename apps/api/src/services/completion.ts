@@ -15,6 +15,7 @@ import {
 } from './course-completion';
 import { allocateCertificateNumber } from './certificate-number';
 import { ensureCertificatePdf } from './certificate-document';
+import { hasCertificateForCurrentAttempt } from './enrollment-achievement';
 
 async function isCourseCertificateEnabled(
   courseId: string,
@@ -31,19 +32,6 @@ async function isCourseCertificateEnabled(
     .where(eq(certificates.courseId, courseId));
 
   return Number(row?.total ?? 0) > 0;
-}
-
-async function hasCertificateForCurrentAttempt(
-  userId: string,
-  courseId: string,
-  enrolledAt: Date,
-): Promise<boolean> {
-  const rows = await db
-    .select({ issuedAt: certificates.issuedAt })
-    .from(certificates)
-    .where(and(eq(certificates.userId, userId), eq(certificates.courseId, courseId)));
-
-  return rows.some((row) => row.issuedAt >= enrolledAt);
 }
 
 async function issueCourseCertificate(userId: string, courseId: string) {

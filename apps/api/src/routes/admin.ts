@@ -57,14 +57,17 @@ adminRoutes.get('/students', requireRole('admin', 'instructor'), async (c) => {
     return c.json([]);
   }
 
-  const conditions = [eq(users.role, 'student'), eq(users.isSuspended, false)];
+  const conditions = [
+    inArray(users.role, ['student', 'admin', 'instructor']),
+    eq(users.isSuspended, false),
+  ];
   if (q) {
     const pattern = `%${q}%`;
     conditions.push(or(ilike(users.name, pattern), ilike(users.email, pattern))!);
   }
 
   const students = await db
-    .select({ id: users.id, name: users.name, email: users.email })
+    .select({ id: users.id, name: users.name, email: users.email, role: users.role })
     .from(users)
     .where(and(...conditions))
     .orderBy(users.name)

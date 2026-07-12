@@ -3,7 +3,7 @@
   import { t } from '$lib/i18n';
   import { queryApi } from '$lib/client/form-action';
 
-  type Student = { id: string; name: string; email: string };
+  type EnrollableUser = { id: string; name: string; email: string; role?: string };
 
   let {
     excludeIds = [],
@@ -12,15 +12,15 @@
   }: {
     excludeIds?: string[];
     disabled?: boolean;
-    onSelect: (user: Student | null) => void;
+    onSelect: (user: EnrollableUser | null) => void;
   } = $props();
 
   let query = $state('');
-  let allStudents = $state<Student[]>([]);
+  let allStudents = $state<EnrollableUser[]>([]);
   let open = $state(false);
   let loading = $state(false);
   let loaded = $state(false);
-  let selected = $state<Student | null>(null);
+  let selected = $state<EnrollableUser | null>(null);
 
   const results = $derived.by(() => {
     const term = query.trim().toLowerCase();
@@ -45,7 +45,7 @@
     if (loaded || loading) return;
     loading = true;
     try {
-      const result = await queryApi<Student[]>('apiQuery', '/api/admin/students');
+      const result = await queryApi<EnrollableUser[]>('apiQuery', '/api/admin/students');
       allStudents = result.data ?? [];
       loaded = true;
     } catch {
@@ -69,7 +69,7 @@
     void ensureLoaded();
   }
 
-  function pick(user: Student) {
+  function pick(user: EnrollableUser) {
     selected = user;
     query = `${user.name} (${user.email})`;
     open = false;
@@ -110,6 +110,9 @@
             <button type="button" role="option" onmousedown={(e) => e.preventDefault()} onclick={() => pick(user)}>
               <span class="student-search-name">{user.name}</span>
               <span class="student-search-email">{user.email}</span>
+              {#if user.role && user.role !== 'student'}
+                <span class="student-search-role">{user.role}</span>
+              {/if}
             </button>
           </li>
         {/each}

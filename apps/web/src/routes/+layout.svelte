@@ -19,11 +19,13 @@
   const authPage = $derived(isAuthRoute($page.url.pathname));
 
   let wsStarted = $state(false);
+  let studentViewHydrated = $state(false);
 
   $effect(() => {
     if (!browser || !authPage) return;
     clearAuth();
     wsStarted = false;
+    studentViewHydrated = false;
   });
 
   /** Sync auth hneď po načítaní layout dát (pred interakciou). */
@@ -33,7 +35,10 @@
     if (!sessionToken) return;
 
     syncSessionFromServer(sessionToken);
-    syncStudentViewFromServer(Boolean(data.studentViewMode));
+    if (!studentViewHydrated) {
+      syncStudentViewFromServer(Boolean(data.studentViewMode));
+      studentViewHydrated = true;
+    }
     if (data.user) {
       setAuth(sessionToken, data.user as User);
     }

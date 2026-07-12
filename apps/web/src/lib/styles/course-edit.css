@@ -249,6 +249,18 @@
   color: var(--color-muted);
 }
 
+.student-search-role {
+  margin-top: 0.1rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .enrollment-status--active {
   background: var(--color-success-muted);
   color: var(--color-success);

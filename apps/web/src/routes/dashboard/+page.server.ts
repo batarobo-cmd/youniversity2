@@ -3,11 +3,13 @@ import type { PageServerLoad } from './$types';
 import { handleApiQuery } from '$lib/server/api-action';
 import { STUDENT_VIEW_HEADER } from '@youniversity2/shared';
 import { readStudentViewCookie } from '$lib/server/api';
+import { STUDENT_VIEW_DEPENDS } from '$lib/student-view';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
 export const load: PageServerLoad = async ({ parent, fetch, depends, cookies }) => {
   depends('student:dashboard');
+  depends(STUDENT_VIEW_DEPENDS);
   const { token, user } = await parent();
 
   if (!token) {

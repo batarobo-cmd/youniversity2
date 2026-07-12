@@ -1,7 +1,6 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { splitCertificatesByAttempt } from '$lib/certificate-attempts';
   import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
 
   type CertificateItem = {
@@ -33,9 +32,13 @@
 
   const canOpen = $derived(course.canOpenCourse === true);
   const certificates = $derived(course.certificates ?? (course.certificate ? [course.certificate] : []));
-  const certificateSplit = $derived(splitCertificatesByAttempt(certificates, course.enrolledAt));
-  const currentCertificate = $derived(certificateSplit.current);
-  const historicalCertificates = $derived(certificateSplit.historical);
+  const sortedCertificates = $derived(
+    [...certificates].sort(
+      (a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime(),
+    ),
+  );
+  const latestCertificate = $derived(sortedCertificates[0] ?? null);
+  const olderCertificates = $derived(sortedCertificates.slice(1));
 
   function formatDate(iso?: string) {
     if (!iso) return '';
@@ -64,51 +67,51 @@
   {/if}
 
   <div class="completed-course-tile-cert">
-    {#if currentCertificate}
+    {#if latestCertificate}
       <div class="completed-course-cert-inline">
         <span class="completed-course-cert-current">
-          #{currentCertificate.certificateNumber} · {formatCertificateIssuedAt(currentCertificate.issuedAt, $locale)}
+          #{latestCertificate.certificateNumber} · {formatCertificateIssuedAt(latestCertificate.issuedAt, $locale)}
         </span>
         <a
           class="btn btn-ghost btn-sm completed-course-cert-download"
-          href={certificateDownloadUrl(currentCertificate.id)}
-          download={certificateDownloadFileName(currentCertificate.certificateNumber)}
+          href={certificateDownloadUrl(latestCertificate.id)}
+          download={certificateDownloadFileName(latestCertificate.certificateNumber)}
         >
           {t('dash.downloadCertificate', $locale)}
         </a>
-        {#if historicalCertificates.length > 0 && onOpenHistory}
+        {#if olderCertificates.length > 0 && onOpenHistory}
           <button
             type="button"
             class="completed-course-cert-history-btn"
-            title="{t('dash.olderCertificates', $locale)} ({historicalCertificates.length})"
-            aria-label="{t('dash.olderCertificates', $locale)} ({historicalCertificates.length})"
-            onclick={() => onOpenHistory(course.title, historicalCertificates)}
+            title="{t('dash.olderCertificates', $locale)} ({olderCertificates.length})"
+            aria-label="{t('dash.olderCertificates', $locale)} ({olderCertificates.length})"
+            onclick={() => onOpenHistory(course.title, olderCertificates)}
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 3 2 8l10 5 10-5-10-5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
               <path d="M6 11v4.5c0 1.8 2.7 3 6 3s6-1.2 6-3V11" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
               <path d="M22 8v5.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
             </svg>
-            <span class="completed-course-cert-history-count">{historicalCertificates.length}</span>
+            <span class="completed-course-cert-history-count">{olderCertificates.length}</span>
           </button>
         {/if}
       </div>
-    {:else if historicalCertificates.length > 0 && onOpenHistory}
+    {:else if olderCertificates.length > 0 && onOpenHistory}
       <div class="completed-course-cert-inline">
         <span class="completed-course-cert-empty">—</span>
         <button
           type="button"
           class="completed-course-cert-history-btn"
-          title="{t('dash.olderCertificates', $locale)} ({historicalCertificates.length})"
-          aria-label="{t('dash.olderCertificates', $locale)} ({historicalCertificates.length})"
-          onclick={() => onOpenHistory(course.title, historicalCertificates)}
+          title="{t('dash.olderCertificates', $locale)} ({olderCertificates.length})"
+          aria-label="{t('dash.olderCertificates', $locale)} ({olderCertificates.length})"
+          onclick={() => onOpenHistory(course.title, olderCertificates)}
         >
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3 2 8l10 5 10-5-10-5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
             <path d="M6 11v4.5c0 1.8 2.7 3 6 3s6-1.2 6-3V11" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
             <path d="M22 8v5.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
           </svg>
-          <span class="completed-course-cert-history-count">{historicalCertificates.length}</span>
+          <span class="completed-course-cert-history-count">{olderCertificates.length}</span>
         </button>
       </div>
     {:else}

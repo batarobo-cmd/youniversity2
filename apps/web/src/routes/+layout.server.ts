@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { SESSION_COOKIE } from '$lib/session';
 import { readStudentViewCookie } from '$lib/server/api';
+import { STUDENT_VIEW_DEPENDS } from '$lib/student-view';
 import { dev } from '$app/environment';
 import { execSync } from 'node:child_process';
 
@@ -42,7 +43,8 @@ async function fetchSessionUser(sessionId: string, fetch: typeof globalThis.fetc
   return null;
 }
 
-export const load: LayoutServerLoad = async ({ cookies, url, fetch }) => {
+export const load: LayoutServerLoad = async ({ cookies, url, fetch, depends }) => {
+  depends(STUDENT_VIEW_DEPENDS);
   const sessionId = cookies.get(SESSION_COOKIE) ?? null;
   const pathname = url.pathname;
 

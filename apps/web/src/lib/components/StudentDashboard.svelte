@@ -21,8 +21,7 @@
 
   const stats = $derived(data.stats as Record<string, number>);
   const activeCourses = $derived((data.activeCourses as Array<Record<string, unknown>>) ?? []);
-  const completedThisYear = $derived((data.completedThisYear as Array<Record<string, unknown>>) ?? []);
-  const currentYear = $derived((data.currentYear as number) ?? new Date().getFullYear());
+  const completedLastYear = $derived((data.completedLastYear as Array<Record<string, unknown>>) ?? []);
   const calendarEvents = $derived((data.calendarEvents as Array<Record<string, unknown>>) ?? []);
   const calendarPeriods = $derived((data.calendarPeriods as Array<Record<string, unknown>>) ?? []);
   const upcomingDeadlines = $derived((data.upcomingDeadlines as Array<Record<string, unknown>>) ?? []);
@@ -45,8 +44,8 @@
     <div class="stat-card-label">{t('dash.activeCourses', $locale)}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">{completedThisYear.length}</div>
-    <div class="stat-card-label">{t('dash.completedThisYear', $locale).replace('{year}', String(currentYear))}</div>
+    <div class="stat-card-value">{completedLastYear.length}</div>
+    <div class="stat-card-label">{t('dash.completedLastYear', $locale)}</div>
   </div>
   <div class="stat-card">
     <div class="stat-card-value">{stats.certificates}</div>
@@ -79,14 +78,14 @@
 
     <section class="panel">
       <div class="panel-header">
-        <h2>{t('dash.completedThisYear', $locale).replace('{year}', String(currentYear))}</h2>
+        <h2>{t('dash.completedLastYear', $locale)}</h2>
       </div>
       <div class="panel-body">
-        {#if completedThisYear.length === 0}
-          <div class="empty-state">{t('dash.noCompletedThisYear', $locale).replace('{year}', String(currentYear))}</div>
+        {#if completedLastYear.length === 0}
+          <div class="empty-state">{t('dash.noCompletedLastYear', $locale)}</div>
         {:else}
           <div class="completed-courses-grid">
-            {#each completedThisYear as course (course.id)}
+            {#each completedLastYear as course (course.id)}
               <StudentCompletedCourseTile {course} onOpenHistory={openCertHistory} />
             {/each}
           </div>

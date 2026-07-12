@@ -52,6 +52,7 @@
       progressPercent: number;
       started: boolean;
     };
+    progressEvaluation?: 'idle' | 'started' | 'completed';
     completions: Array<{ id: string; certificateNumber: string; issuedAt: string }>;
   };
 
@@ -623,6 +624,7 @@
     if (!row.enrollment) return t('admin.reportingNoEnrollment', $locale);
     const status = row.enrollment.status;
     if (status === 'revoked') return t('admin.assignmentRemoved', $locale);
+    if (status === 'completed') return t('admin.enrollmentCompleted', $locale);
     if (status === 'suspended') return t('admin.enrollmentSuspended', $locale);
     if (status === 'active') return t('admin.enrollmentActive', $locale);
     return enrollmentStatusLabel(status);
@@ -656,11 +658,19 @@
     return undefined;
   }
 
-  function reportingProgressStateLabel(row: ReportingRow) {
+  function reportingProgressState(row: ReportingRow): 'idle' | 'started' | 'completed' {
+    if (row.progressEvaluation) return row.progressEvaluation;
     if (row.progress.progressPercent >= 100 || row.enrollment?.status === 'completed') {
-      return t('admin.reportingProgressCompleted', $locale);
+      return 'completed';
     }
-    if (row.progress.progressPercent > 0) return t('admin.reportingProgressStarted', $locale);
+    if (row.progress.progressPercent > 0) return 'started';
+    return 'idle';
+  }
+
+  function reportingProgressStateLabel(row: ReportingRow) {
+    const state = reportingProgressState(row);
+    if (state === 'completed') return t('admin.reportingProgressCompleted', $locale);
+    if (state === 'started') return t('admin.reportingProgressStarted', $locale);
     return t('admin.reportingProgressNotStarted', $locale);
   }
 
@@ -669,9 +679,7 @@
   }
 
   function reportingProgressStateClass(row: ReportingRow) {
-    if (row.progress.progressPercent >= 100 || row.enrollment?.status === 'completed') return 'completed';
-    if (row.progress.progressPercent > 0) return 'started';
-    return 'idle';
+    return reportingProgressState(row);
   }
 
   function sortedCertificates(row: ReportingRow) {

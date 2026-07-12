@@ -25,6 +25,8 @@ import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 import { isCourseVisibleToStudents } from '../services/course-visibility';
 import { canStudentViewCourse, isEnrollmentListedForStudent } from '../services/course-access';
 import { effectiveRole } from '../services/student-view';
+import { getReportingProgressState } from '../services/enrollment-achievement';
+import { evaluateCourseCompletion } from '../services/completion';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
@@ -553,6 +555,13 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
     .where(eq(enrollments.courseId, courseId))
     .orderBy(desc(enrollments.enrolledAt));
 
+  for (const row of enrollmentRows) {
+    if (row.enrollment.status === 'active') {
+      const result = await evaluateCourseCompletion(row.user.id, courseId);
+      if (result.enrollment) row.enrollment = result.enrollment;
+    }
+  }
+
   const certRows = await db
     .select({
       id: certificates.id,
@@ -644,6 +653,11 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
         progressPercent,
         started,
       },
+      progressEvaluation: getReportingProgressState(
+        enrollment,
+        progressPercent,
+        certs.map((cert) => ({ issuedAt: cert.issuedAt })),
+      ),
       completions: certs.map((cert) => ({
         id: cert.id,
         certificateNumber: cert.certificateNumber,

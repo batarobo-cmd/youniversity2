@@ -8,6 +8,7 @@ import { broadcastToCourse, broadcastToUser, broadcastToAdmin } from '../realtim
 import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 import { clearCourseLessonProgress } from '../services/enrollment-progress';
+import { resolveEnrollmentStatusOnRestore } from '../services/enrollment-achievement';
 
 export const enrollmentRoutes = new Hono();
 
@@ -61,13 +62,23 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
       await clearCourseLessonProgress(body.data.userId, body.data.courseId);
     }
 
+    const restored =
+      prev.status === 'suspended' ? await resolveEnrollmentStatusOnRestore(prev) : null;
+
     const [enrollment] = await db
       .update(enrollments)
-      .set({
-        status: 'active',
-        enrolledAt: new Date(),
-        completedAt: null,
-      })
+      .set(
+        prev.status === 'revoked'
+          ? {
+              status: 'active',
+              enrolledAt: new Date(),
+              completedAt: null,
+            }
+          : {
+              status: restored!.status,
+              completedAt: restored!.completedAt,
+            },
+      )
       .where(eq(enrollments.id, prev.id))
       .returning();
 
@@ -268,9 +279,14 @@ enrollmentRoutes.post('/:id/unsuspend', requireRole('admin', 'instructor'), asyn
     return c.json({ error: 'Enrollment is not suspended' }, 400);
   }
 
+  const restored = await resolveEnrollmentStatusOnRestore(existing);
+
   const [enrollment] = await db
     .update(enrollments)
-    .set({ status: 'active' })
+    .set({
+      status: restored.status,
+      completedAt: restored.completedAt,
+    })
     .where(eq(enrollments.id, enrollmentId))
     .returning();
 
