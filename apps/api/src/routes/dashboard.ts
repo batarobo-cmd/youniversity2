@@ -4,6 +4,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { getStudentDashboard, getAdminDashboard, getStudentCourseOverview } from '../services/dashboard';
+import { effectiveRole } from '../services/student-view';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { serializeUser } from '../services/user-serializer';
@@ -36,21 +37,23 @@ dashboardRoutes.use('*', authMiddleware);
 dashboardRoutes.get('/', async (c) => {
   const user = c.get('user') as AuthUser;
   const locale = c.req.query('locale') ?? 'sk';
+  const role = effectiveRole(user, c);
 
-  if (user.role === 'admin' || user.role === 'instructor') {
-    const data = await getAdminDashboard(locale);
-    return c.json({ role: user.role, ...data });
+  if (role === 'student') {
+    const data = await getStudentDashboard(user.id, locale);
+    return c.json({ role: 'student', ...data });
   }
 
-  const data = await getStudentDashboard(user.id, locale);
-  return c.json({ role: 'student', ...data });
+  const data = await getAdminDashboard(locale);
+  return c.json({ role: user.role, ...data });
 });
 
 dashboardRoutes.get('/courses-overview', async (c) => {
   const user = c.get('user') as AuthUser;
   const locale = c.req.query('locale') ?? 'sk';
+  const role = effectiveRole(user, c);
 
-  if (user.role === 'admin' || user.role === 'instructor') {
+  if (role !== 'student') {
     return c.json({ error: 'Students only' }, 403);
   }
 

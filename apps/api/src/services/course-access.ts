@@ -1,9 +1,10 @@
+import type { Context } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { courses, enrollments } from '../db/schema';
 import type { AuthUser } from '../middleware/auth';
-
 import { isCourseVisibleToStudents } from './course-visibility';
+import { hasStaffPrivileges } from './student-view';
 
 export function isStaff(user: AuthUser) {
   return user.role === 'admin' || user.role === 'instructor';
@@ -41,8 +42,12 @@ export async function isCourseVisibleToStudent(courseId: string): Promise<boolea
   return isCourseVisibleToStudents(row);
 }
 
-export async function canStudentViewCourse(user: AuthUser, courseId: string): Promise<boolean> {
-  if (isStaff(user)) return true;
+export async function canStudentViewCourse(
+  user: AuthUser,
+  courseId: string,
+  c: Context,
+): Promise<boolean> {
+  if (hasStaffPrivileges(user, c)) return true;
   if (!(await isCourseVisibleToStudent(courseId))) return false;
 
   const enrollment = await getStudentEnrollment(user.id, courseId);
@@ -51,8 +56,12 @@ export async function canStudentViewCourse(user: AuthUser, courseId: string): Pr
   return canStudentOpenCourse(enrollment.status);
 }
 
-export async function canStudentUpdateProgress(user: AuthUser, courseId: string): Promise<boolean> {
-  if (isStaff(user)) return true;
+export async function canStudentUpdateProgress(
+  user: AuthUser,
+  courseId: string,
+  c: Context,
+): Promise<boolean> {
+  if (hasStaffPrivileges(user, c)) return true;
   if (!(await isCourseVisibleToStudent(courseId))) return false;
 
   const enrollment = await getStudentEnrollment(user.id, courseId);

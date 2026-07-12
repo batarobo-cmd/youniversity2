@@ -1,9 +1,16 @@
 import { Hono } from 'hono';
-import { eq, desc, or, ilike, and, gte, lte } from 'drizzle-orm';
+import { eq, desc, or, ilike, and, gte, lte, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { db } from '../db';
-import { users, loginEvents } from '../db/schema';
+import {
+  users,
+  loginEvents,
+  enrollments,
+  courses,
+  courseTranslations,
+  certificates,
+} from '../db/schema';
 import { getUserLogs } from '../services/user-logs';
 import { recordUserActivity } from '../services/activity-log';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
@@ -210,8 +217,105 @@ adminRoutes.get('/users/:id/logs', requireRole('admin'), async (c) => {
 });
 
 adminRoutes.get('/users', requireRole('admin'), async (c) => {
+  const locale = c.req.query('locale') ?? 'sk';
   const list = await db.select().from(users).orderBy(desc(users.createdAt));
-  return c.json(list.map(serializeAdminUser));
+
+  const userIds = list.map((u) => u.id);
+  const enrollmentMap = new Map<
+    string,
+    Array<{
+      courseId: string;
+      courseTitle: string;
+      status: string;
+      enrolledAt: string;
+    }>
+  >();
+
+  const certificateMap = new Map<
+    string,
+    Array<{
+      id: string;
+      certificateNumber: string;
+      issuedAt: string;
+      courseId: string;
+      courseTitle: string;
+    }>
+  >();
+
+  if (userIds.length > 0) {
+    const rows = await db
+      .select({
+        userId: enrollments.userId,
+        courseId: enrollments.courseId,
+        status: enrollments.status,
+        enrolledAt: enrollments.enrolledAt,
+        courseSlug: courses.slug,
+        courseTitle: courseTranslations.title,
+      })
+      .from(enrollments)
+      .innerJoin(courses, eq(enrollments.courseId, courses.id))
+      .leftJoin(
+        courseTranslations,
+        and(eq(courseTranslations.courseId, courses.id), eq(courseTranslations.locale, locale)),
+      )
+      .where(
+        and(
+          inArray(enrollments.userId, userIds),
+          inArray(enrollments.status, ['active', 'suspended']),
+        ),
+      )
+      .orderBy(desc(enrollments.enrolledAt));
+
+    for (const row of rows) {
+      const items = enrollmentMap.get(row.userId) ?? [];
+      items.push({
+        courseId: row.courseId,
+        courseTitle: row.courseTitle ?? row.courseSlug,
+        status: row.status,
+        enrolledAt: row.enrolledAt.toISOString(),
+      });
+      enrollmentMap.set(row.userId, items);
+    }
+
+    const certRows = await db
+      .select({
+        userId: certificates.userId,
+        id: certificates.id,
+        certificateNumber: certificates.certificateNumber,
+        issuedAt: certificates.issuedAt,
+        courseId: certificates.courseId,
+        courseSlug: courses.slug,
+        courseTitle: courseTranslations.title,
+      })
+      .from(certificates)
+      .innerJoin(courses, eq(certificates.courseId, courses.id))
+      .leftJoin(
+        courseTranslations,
+        and(eq(courseTranslations.courseId, courses.id), eq(courseTranslations.locale, locale)),
+      )
+      .where(inArray(certificates.userId, userIds))
+      .orderBy(desc(certificates.issuedAt));
+
+    for (const row of certRows) {
+      const items = certificateMap.get(row.userId) ?? [];
+      items.push({
+        id: row.id,
+        certificateNumber: row.certificateNumber,
+        issuedAt: row.issuedAt.toISOString(),
+        courseId: row.courseId,
+        courseTitle: row.courseTitle ?? row.courseSlug,
+      });
+      certificateMap.set(row.userId, items);
+    }
+  }
+
+  return c.json(
+    list.map((user) => ({
+      ...serializeAdminUser(user),
+      enrollments: enrollmentMap.get(user.id) ?? [],
+      certificates: certificateMap.get(user.id) ?? [],
+    })),
+  );
 });
 
 adminRoutes.post('/users', requireRole('admin'), async (c) => {

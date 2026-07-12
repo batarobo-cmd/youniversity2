@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { locale, isAdminUser, isPlatformAdminUser } from '$lib/stores/auth';
+  import { locale, isAdminUser, isPlatformAdminUser, isActingAsStudent } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { t } from '$lib/i18n';
   import type { User } from '@youniversity2/shared';
@@ -15,15 +15,17 @@
   const roleLabel = $derived(
     !user
       ? ''
-      : user.role === 'admin'
-        ? t('profile.roleAdmin', $locale)
-        : user.role === 'instructor'
-          ? t('admin.roleInstructor', $locale)
-          : t('profile.roleStudent', $locale),
+      : $isActingAsStudent
+        ? t('profile.roleStudent', $locale)
+        : user.role === 'admin'
+          ? t('profile.roleAdmin', $locale)
+          : user.role === 'instructor'
+            ? t('admin.roleInstructor', $locale)
+            : t('profile.roleStudent', $locale),
   );
 
-  const showAdminLinks = $derived(isAdminUser(user));
-  const showPlatformAdminLinks = $derived(isPlatformAdminUser(user));
+  const showAdminLinks = $derived(isAdminUser(user) && !$isActingAsStudent);
+  const showPlatformAdminLinks = $derived(isPlatformAdminUser(user) && !$isActingAsStudent);
 
   function toggle() {
     open = !open;

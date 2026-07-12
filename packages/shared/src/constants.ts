@@ -6,6 +6,10 @@ export const DEFAULT_LOCALE: Locale = 'sk';
 export const USER_ROLES = ['admin', 'instructor', 'student'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+/** Cookie / header for temporary admin student-view mode. */
+export const STUDENT_VIEW_COOKIE = 'yo2_student_view';
+export const STUDENT_VIEW_HEADER = 'X-Student-View-Mode';
+
 export const ACTIVITY_TYPES = [
   'presentation',
   'video',

@@ -408,6 +408,18 @@ const sk: Messages = {
   'admin.usersRole': 'Rola',
   'admin.usersCreated': 'Vytvorený',
   'admin.usersActions': 'Akcie',
+  'admin.usersCourses': 'Priradené kurzy',
+  'admin.usersNoCourses': 'Žiadne priradenie',
+  'admin.usersCoursesCount': '{count} kurzov',
+  'admin.usersCoursesShowAll': 'Zobraziť priradené kurzy',
+  'admin.usersCoursesPopover': 'Priradené kurzy',
+  'admin.usersCertificates': 'Certifikáty',
+  'admin.usersNoCertificates': 'Žiadny',
+  'admin.usersCertificatesCount': '{count} certifikátov',
+  'admin.usersCertificatesShowAll': 'Zobraziť všetky certifikáty',
+  'admin.usersCertificatesPopover': 'Získané certifikáty',
+  'admin.usersCertificatesSummary': '{courses} kurzov · {count} certifikátov',
+  'admin.usersCertificatesPerCourse': '{count} cert.',
   'admin.usersDelete': 'Zmazať',
   'admin.usersDeleteConfirm': 'Naozaj chcete odstrániť tohto používateľa?',
   'admin.usersSuspend': 'Pozastaviť',
@@ -541,6 +553,10 @@ const sk: Messages = {
   'profile.country': 'Krajina',
   'profile.oauthProvider': 'Prihlásenie cez',
   'profile.oauthManualHint': 'Pracovné údaje si doplníte sami v profile.',
+  'studentView.label': 'Študent',
+  'studentView.enter': 'Prepnúť do študentského režimu',
+  'studentView.exit': 'Ukončiť študentský režim',
+  'studentView.banner': 'Dočasný študentský režim — vidíte len kurzy, kde ste aktívne priradený, rovnako ako študent.',
 };
 
 const en: Messages = {
@@ -950,6 +966,18 @@ const en: Messages = {
   'admin.usersRole': 'Role',
   'admin.usersCreated': 'Created',
   'admin.usersActions': 'Actions',
+  'admin.usersCourses': 'Assigned courses',
+  'admin.usersNoCourses': 'No assignments',
+  'admin.usersCoursesCount': '{count} courses',
+  'admin.usersCoursesShowAll': 'Show assigned courses',
+  'admin.usersCoursesPopover': 'Assigned courses',
+  'admin.usersCertificates': 'Certificates',
+  'admin.usersNoCertificates': 'None',
+  'admin.usersCertificatesCount': '{count} certificates',
+  'admin.usersCertificatesShowAll': 'Show all certificates',
+  'admin.usersCertificatesPopover': 'Earned certificates',
+  'admin.usersCertificatesSummary': '{courses} courses · {count} certificates',
+  'admin.usersCertificatesPerCourse': '{count} cert.',
   'admin.usersDelete': 'Delete',
   'admin.usersDeleteConfirm': 'Are you sure you want to delete this user?',
   'admin.usersSuspend': 'Suspend',
@@ -1083,12 +1111,22 @@ const en: Messages = {
   'profile.country': 'Country',
   'profile.oauthProvider': 'Signed in via',
   'profile.oauthManualHint': 'You can fill in work details manually in your profile.',
+  'studentView.label': 'Student',
+  'studentView.enter': 'Switch to student mode',
+  'studentView.exit': 'Exit student mode',
+  'studentView.banner': 'Temporary student mode — you only see courses where you are actively enrolled, like a regular student.',
 };
 
 const catalogs: Record<Locale, Messages> = { sk, en, cs: sk, de: en, hu: sk };
 
-export function t(key: string, loc: Locale): string {
-  return catalogs[loc]?.[key] ?? catalogs.sk[key] ?? key;
+export function t(key: string, loc: Locale, vars?: Record<string, string | number>): string {
+  let text = catalogs[loc]?.[key] ?? catalogs.sk[key] ?? key;
+  if (vars) {
+    for (const [name, value] of Object.entries(vars)) {
+      text = text.replaceAll(`{${name}}`, String(value));
+    }
+  }
+  return text;
 }
 
 const AUTH_ERROR_KEYS: Record<string, string> = {

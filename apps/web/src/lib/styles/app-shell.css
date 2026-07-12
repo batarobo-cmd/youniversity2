@@ -105,6 +105,18 @@
   flex-shrink: 0;
 }
 
+.student-view-banner {
+  max-width: 1280px;
+  margin: 0 auto 0.75rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
 /* Icon buttons (logout, shared with LocaleMenu) */
 .icon-btn {
   display: inline-flex;

@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { handleApiQuery } from '$lib/server/api-action';
+import { handleApiQuery, handleApiMutation } from '$lib/server/api-action';
 import { actionPlatformAdminOrFail, isActionFailure } from '$lib/server/actions';
 import { requireAuthToken, requirePlatformAdmin, serverApiJson } from '$lib/server/api';
 import { runServerApiMutation } from '$lib/server/mutations';
@@ -11,7 +11,8 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
   requireAuthToken(token);
   requirePlatformAdmin(user);
 
-  const result = await serverApiJson<unknown[]>(fetch, token, '/api/admin/users');
+  const locale = user?.preferredLocale ?? 'sk';
+  const result = await serverApiJson<unknown[]>(fetch, token, `/api/admin/users?locale=${locale}`);
 
   return {
     users: result.data ?? [],
@@ -76,4 +77,7 @@ export const actions = {
 
   apiQuery: ({ cookies, fetch, request }) =>
     handleApiQuery(fetch, cookies, request, 'platformAdmin'),
+
+  apiMutation: ({ cookies, fetch, request }) =>
+    handleApiMutation(fetch, cookies, request, 'platformAdmin'),
 };

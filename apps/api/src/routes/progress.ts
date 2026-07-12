@@ -7,6 +7,7 @@ import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { evaluateCourseCompletion } from '../services/completion';
 import { broadcastToCourse } from '../realtime/hub';
 import { canStudentViewCourse, canStudentUpdateProgress, getStudentEnrollment } from '../services/course-access';
+import { effectiveRole } from '../services/student-view';
 
 export const progressRoutes = new Hono();
 
@@ -24,7 +25,7 @@ progressRoutes.get('/course/:courseId', async (c) => {
   const user = c.get('user') as AuthUser;
   const courseId = c.req.param('courseId');
 
-  if (!(await canStudentViewCourse(user, courseId))) {
+  if (!(await canStudentViewCourse(user, courseId, c))) {
     return c.json({ error: 'Course not found' }, 404);
   }
 
@@ -45,7 +46,7 @@ progressRoutes.get('/course/:courseId', async (c) => {
 
   const filtered = progress.filter((p) => lessonIds.includes(p.lessonId));
 
-  if (user.role === 'student') {
+  if (effectiveRole(user, c) === 'student') {
     const enrollment = await getStudentEnrollment(user.id, courseId);
     if (enrollment && ['active', 'completed'].includes(enrollment.status)) {
       await evaluateCourseCompletion(user.id, courseId);
@@ -68,7 +69,7 @@ progressRoutes.post('/', async (c) => {
   const [mod] = await db.select().from(courseModules).where(eq(courseModules.id, lesson.moduleId)).limit(1);
   if (!mod) return c.json({ error: 'Module not found' }, 404);
 
-  if (!(await canStudentUpdateProgress(user, mod.courseId))) {
+  if (!(await canStudentUpdateProgress(user, mod.courseId, c))) {
     return c.json({ error: 'Course not found' }, 404);
   }
 
@@ -126,7 +127,10 @@ progressRoutes.post('/', async (c) => {
     timestamp: new Date().toISOString(),
   });
 
-  const completion = await evaluateCourseCompletion(user.id, mod.courseId);
+  const completion =
+    effectiveRole(user, c) === 'student'
+      ? await evaluateCourseCompletion(user.id, mod.courseId)
+      : null;
 
   return c.json({ progress, completion });
 });
@@ -144,7 +148,7 @@ progressRoutes.post('/activity', async (c) => {
 
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 
-  if (body.data.courseId && !(await canStudentViewCourse(user, body.data.courseId))) {
+  if (body.data.courseId && !(await canStudentViewCourse(user, body.data.courseId, c))) {
     return c.json({ error: 'Course not found' }, 404);
   }
 

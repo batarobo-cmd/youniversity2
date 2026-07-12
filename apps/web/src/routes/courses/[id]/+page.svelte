@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { page } from '$app/stores';
   import { goto, invalidate } from '$app/navigation';
-  import { isAuthenticated, locale, isAdmin, user } from '$lib/stores/auth';
+  import { isAuthenticated, locale, showStaffNav, user } from '$lib/stores/auth';
   import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
@@ -876,7 +876,7 @@
         </div>
       </div>
 
-      {#if $isAdmin}
+      {#if $showStaffNav}
         <div class="course-admin-actions">
           <button class="btn btn-ghost btn-sm" onclick={() => translateCourse('en')}>
             {t('admin.translate', $locale)} → EN

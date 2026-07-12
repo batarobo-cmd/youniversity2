@@ -3,14 +3,14 @@ import { Hono } from 'hono';
 import { db } from '../db';
 import { certificates } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
-import { isStaff } from '../services/course-access';
+import { hasStaffPrivileges } from '../services/student-view';
 import { readCertificatePdfBytes } from '../services/certificate-document';
 
 export const certificateRoutes = new Hono();
 
 certificateRoutes.use('*', authMiddleware);
 
-async function canDownloadCertificate(user: AuthUser, certificateId: string) {
+async function canDownloadCertificate(user: AuthUser, certificateId: string, c: import('hono').Context) {
   const [certificate] = await db
     .select()
     .from(certificates)
@@ -18,14 +18,14 @@ async function canDownloadCertificate(user: AuthUser, certificateId: string) {
     .limit(1);
 
   if (!certificate) return null;
-  if (isStaff(user) || certificate.userId === user.id) return certificate;
+  if (hasStaffPrivileges(user, c) || certificate.userId === user.id) return certificate;
   return null;
 }
 
 certificateRoutes.get('/:certificateId/download', async (c) => {
   const user = c.get('user') as AuthUser;
   const certificateId = c.req.param('certificateId');
-  const certificate = await canDownloadCertificate(user, certificateId);
+  const certificate = await canDownloadCertificate(user, certificateId, c);
   if (!certificate) return c.json({ error: 'Certificate not found' }, 404);
 
   const file = await readCertificatePdfBytes(certificateId);

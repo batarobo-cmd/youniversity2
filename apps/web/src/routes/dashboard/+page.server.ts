@@ -1,10 +1,12 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { handleApiQuery } from '$lib/server/api-action';
+import { STUDENT_VIEW_HEADER } from '@youniversity2/shared';
+import { readStudentViewCookie } from '$lib/server/api';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
-export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
+export const load: PageServerLoad = async ({ parent, fetch, depends, cookies }) => {
   depends('student:dashboard');
   const { token, user } = await parent();
 
@@ -13,10 +15,14 @@ export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
   }
 
   const locale = user?.preferredLocale ?? 'sk';
+  const apiHeaders: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (readStudentViewCookie(cookies)) {
+    apiHeaders[STUDENT_VIEW_HEADER] = '1';
+  }
 
   try {
     const res = await fetch(`${API_URL}/api/dashboard?locale=${locale}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: apiHeaders,
     });
 
     if (!res.ok) {

@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
-import { token, locale, API_BASE } from './stores/auth';
+import { token, locale, studentViewMode, API_BASE } from './stores/auth';
 import { getTabSessionId } from './session';
+import { STUDENT_VIEW_HEADER } from '@youniversity2/shared';
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const t = get(token);
@@ -12,6 +13,9 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
     headers.Authorization = `Bearer ${t}`;
     const tabId = getTabSessionId();
     if (tabId) headers['X-Tab-Session'] = tabId;
+  }
+  if (get(studentViewMode)) {
+    headers[STUDENT_VIEW_HEADER] = '1';
   }
   return headers;
 }

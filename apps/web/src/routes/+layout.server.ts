@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { SESSION_COOKIE } from '$lib/session';
+import { readStudentViewCookie } from '$lib/server/api';
 import { dev } from '$app/environment';
 import { execSync } from 'node:child_process';
 
@@ -72,5 +73,11 @@ export const load: LayoutServerLoad = async ({ cookies, url, fetch }) => {
     }
   }
 
-  return { token: sessionId, user, isAuthPage: isAuthPath(pathname), appVersion: resolveAppVersion() };
+  return {
+    token: sessionId,
+    user,
+    isAuthPage: isAuthPath(pathname),
+    appVersion: resolveAppVersion(),
+    studentViewMode: readStudentViewCookie(cookies),
+  };
 };

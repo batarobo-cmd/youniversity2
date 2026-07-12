@@ -24,6 +24,7 @@ import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 import { isCourseVisibleToStudents } from '../services/course-visibility';
 import { canStudentViewCourse, isEnrollmentListedForStudent } from '../services/course-access';
+import { effectiveRole } from '../services/student-view';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
@@ -40,8 +41,9 @@ courseRoutes.use('*', authMiddleware);
 courseRoutes.get('/', async (c) => {
   const user = c.get('user') as AuthUser;
   const locale = c.req.query('locale') ?? 'sk';
+  const role = effectiveRole(user, c);
 
-  if (user.role === 'student') {
+  if (role === 'student') {
     const now = new Date();
     const result = await db
       .select({
@@ -138,11 +140,13 @@ courseRoutes.get('/:id', async (c) => {
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return c.json({ error: 'Course not found' }, 404);
 
-  if (user.role === 'student') {
+  const role = effectiveRole(user, c);
+
+  if (role === 'student') {
     if (!isCourseVisibleToStudents(course)) {
       return c.json({ error: 'Course not found' }, 404);
     }
-    if (!(await canStudentViewCourse(user, courseId))) {
+    if (!(await canStudentViewCourse(user, courseId, c))) {
       return c.json({ error: 'Course not found' }, 404);
     }
   }

@@ -2,7 +2,7 @@
   import '../app.css';
   import { browser } from '$app/environment';
   import { page } from '$app/stores';
-  import { token, setAuth, syncSessionFromServer, clearAuth, user as authUser } from '$lib/stores/auth';
+  import { token, setAuth, syncSessionFromServer, clearAuth, user as authUser, syncStudentViewFromServer } from '$lib/stores/auth';
   import { connectWebSocket, disconnectWebSocket, startHeartbeat, stopHeartbeat } from '$lib/stores/realtime';
   import { initActivityTracker, trackPageView } from '$lib/activity-tracker';
   import { api } from '$lib/api';
@@ -33,6 +33,7 @@
     if (!sessionToken) return;
 
     syncSessionFromServer(sessionToken);
+    syncStudentViewFromServer(Boolean(data.studentViewMode));
     if (data.user) {
       setAuth(sessionToken, data.user as User);
     }

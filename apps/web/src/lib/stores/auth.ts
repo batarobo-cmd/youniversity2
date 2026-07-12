@@ -1,9 +1,10 @@
 import { writable, derived, get } from 'svelte/store';
 import type { User } from '@youniversity2/shared';
-import { DEFAULT_LOCALE, type Locale } from '@youniversity2/shared';
+import { DEFAULT_LOCALE, STUDENT_VIEW_COOKIE, type Locale } from '@youniversity2/shared';
 import { SESSION_STORAGE_KEY } from '../session';
 
 const LOCALE_KEY = 'yo2_locale';
+const STUDENT_VIEW_KEY = 'yo2_student_view';
 
 /** V prehliadači vždy same-origin /api (nginx → web proxy → API). Na serveri len dev override. */
 export const API_BASE =
@@ -27,16 +28,37 @@ function loadLocale(): Locale {
   return (localStorage.getItem(LOCALE_KEY) as Locale) ?? DEFAULT_LOCALE;
 }
 
+function loadStudentViewMode(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(STUDENT_VIEW_KEY) === '1';
+}
+
+function writeStudentViewCookie(enabled: boolean) {
+  if (typeof document === 'undefined') return;
+  const maxAge = 60 * 60 * 24 * 30;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${STUDENT_VIEW_COOKIE}=${enabled ? '1' : '0'}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+}
+
 /** Session ID (opaque token) — nie JWT */
 export const token = writable<string | null>(null);
 export const user = writable<User | null>(null);
 export const locale = writable<Locale>(loadLocale());
+export const studentViewMode = writable<boolean>(loadStudentViewMode());
 export const authReady = writable(false);
 
 export const isAuthenticated = derived(token, ($token) => $token !== null);
 export const isAdmin = derived(user, ($user) => isAdminUser($user));
 /** Plný administrátor platformy (správa používateľov, systémové nastavenia). */
 export const isPlatformAdmin = derived(user, ($user) => isPlatformAdminUser($user));
+export const isActingAsStudent = derived(
+  [user, studentViewMode],
+  ([$user, $mode]) => Boolean($mode && isAdminUser($user)),
+);
+export const showStaffNav = derived(
+  [user, studentViewMode],
+  ([$user, $mode]) => isAdminUser($user) && !$mode,
+);
 
 if (typeof window !== 'undefined') {
   const stored = loadSessionId();
@@ -67,6 +89,23 @@ export function clearAuth() {
   token.set(null);
   user.set(null);
   authReady.set(true);
+}
+
+export function setStudentViewMode(enabled: boolean) {
+  if (typeof localStorage !== 'undefined') {
+    if (enabled) localStorage.setItem(STUDENT_VIEW_KEY, '1');
+    else localStorage.removeItem(STUDENT_VIEW_KEY);
+  }
+  writeStudentViewCookie(enabled);
+  studentViewMode.set(enabled);
+}
+
+export function syncStudentViewFromServer(enabled: boolean) {
+  if (typeof localStorage !== 'undefined') {
+    if (enabled) localStorage.setItem(STUDENT_VIEW_KEY, '1');
+    else localStorage.removeItem(STUDENT_VIEW_KEY);
+  }
+  studentViewMode.set(enabled);
 }
 
 export function setLocale(newLocale: Locale) {

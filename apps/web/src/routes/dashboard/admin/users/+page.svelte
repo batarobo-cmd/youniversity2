@@ -12,10 +12,27 @@
   import { USER_ROLES, SUPPORTED_LOCALES, type UserRole } from '@youniversity2/shared';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
   import UserLogsModal from '$lib/components/UserLogsModal.svelte';
+  import UserCoursesCell from '$lib/components/UserCoursesCell.svelte';
+  import UserCertificatesCell from '$lib/components/UserCertificatesCell.svelte';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
   import '$lib/styles/admin-users.css';
+
+  type UserEnrollment = {
+    courseId: string;
+    courseTitle: string;
+    status: 'active' | 'suspended';
+    enrolledAt: string;
+  };
+
+  type UserCertificate = {
+    id: string;
+    certificateNumber: string;
+    issuedAt: string;
+    courseId: string;
+    courseTitle: string;
+  };
 
   type ManagedUser = {
     id: string;
@@ -41,6 +58,8 @@
     country?: string;
     profileSyncedAt?: string;
     createdAt: string;
+    enrollments?: UserEnrollment[];
+    certificates?: UserCertificate[];
   };
 
   let { data }: { data: PageData } = $props();
@@ -316,6 +335,8 @@
         <tr>
           <th>{t('auth.name', $locale)}</th>
           <th>{t('admin.usersRole', $locale)}</th>
+          <th>{t('admin.usersCourses', $locale)}</th>
+          <th>{t('admin.usersCertificates', $locale)}</th>
           <th>{t('admin.usersCreated', $locale)}</th>
           <th style="text-align: right;">{t('admin.usersActions', $locale)}</th>
         </tr>
@@ -361,6 +382,12 @@
                   · {u.oauthProvider}
                 {/if}
               </div>
+            </td>
+            <td>
+              <UserCoursesCell enrollments={u.enrollments} userName={u.name} />
+            </td>
+            <td>
+              <UserCertificatesCell userId={u.id} certificates={u.certificates} userName={u.name} />
             </td>
             <td>{formatDate(u.createdAt)}</td>
             <td>
