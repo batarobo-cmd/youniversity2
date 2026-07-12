@@ -5,6 +5,7 @@
   import StudentCompletedCourseTile from './StudentCompletedCourseTile.svelte';
   import CalendarWidget from './CalendarWidget.svelte';
   import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
+  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
   import '$lib/styles/dashboard.css';
 
   interface Props {
@@ -27,6 +28,9 @@
   const upcomingDeadlines = $derived((data.upcomingDeadlines as Array<Record<string, unknown>>) ?? []);
 
   let certHistoryModal = $state<{ courseTitle: string; certificates: CertificateItem[] } | null>(null);
+  let viewportHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 720);
+
+  const certModalListHeight = $derived(Math.max(160, viewportHeight * 0.85 - 180));
 
   function openCertHistory(courseTitle: string, certificates: CertificateItem[]) {
     certHistoryModal = { courseTitle, certificates };
@@ -128,6 +132,12 @@
   </div>
 </div>
 
+<svelte:window
+  onresize={() => {
+    viewportHeight = window.innerHeight;
+  }}
+/>
+
 {#if certHistoryModal}
   <div class="dash-cert-modal-overlay" role="presentation" onclick={() => (certHistoryModal = null)}>
     <div
@@ -143,21 +153,30 @@
           {t('admin.cancel', $locale)}
         </button>
       </div>
-      <div class="dash-cert-modal-list">
-        {#each certHistoryModal.certificates as cert}
-          <div class="dash-cert-modal-row">
-            <span>#{cert.certificateNumber}</span>
-            <span>{formatCertificateIssuedAt(cert.issuedAt, $locale)}</span>
-            <a
-              class="btn btn-ghost btn-sm"
-              href={certificateDownloadUrl(cert.id)}
-              download={certificateDownloadFileName(cert.certificateNumber)}
-            >
-              {t('dash.downloadCertificate', $locale)}
-            </a>
+      <ViewportPaginator
+        items={certHistoryModal.certificates}
+        availableHeight={certModalListHeight}
+        rowHeight={52}
+        minPageSize={3}
+      >
+        {#snippet children(pageItems)}
+          <div class="dash-cert-modal-list">
+            {#each pageItems as cert}
+              <div class="dash-cert-modal-row">
+                <span>#{cert.certificateNumber}</span>
+                <span>{formatCertificateIssuedAt(cert.issuedAt, $locale)}</span>
+                <a
+                  class="btn btn-ghost btn-sm"
+                  href={certificateDownloadUrl(cert.id)}
+                  download={certificateDownloadFileName(cert.certificateNumber)}
+                >
+                  {t('dash.downloadCertificate', $locale)}
+                </a>
+              </div>
+            {/each}
           </div>
-        {/each}
-      </div>
+        {/snippet}
+      </ViewportPaginator>
     </div>
   </div>
 {/if}

@@ -11,7 +11,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
-export const userRoleEnum = pgEnum('user_role', ['admin', 'instructor', 'student']);
+export const userRoleEnum = pgEnum('user_role', ['system_admin', 'admin', 'instructor', 'student']);
 export const lessonTypeEnum = pgEnum('lesson_type', [
   'presentation',
   'video',
@@ -78,6 +78,8 @@ export const users = pgTable(
     country: varchar('country', { length: 128 }),
     profileSyncedAt: timestamp('profile_synced_at', { withTimezone: true }),
     isSuspended: boolean('is_suspended').notNull().default(false),
+    /** Password required to change role away from system_admin (or set when promoting to it). */
+    systemAdminPasswordHash: text('system_admin_password_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

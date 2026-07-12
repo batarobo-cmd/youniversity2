@@ -48,7 +48,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  heartbeat: () => request<{ ok: boolean }>('/api/auth/heartbeat', { method: 'POST' }),
+  heartbeat: () =>
+    request<{ ok: boolean; needsSystemAdminPassword?: boolean }>('/api/auth/heartbeat', {
+      method: 'POST',
+    }),
+
+  setSystemAdminPassword: (password: string, confirmPassword: string) =>
+    request<import('@youniversity2/shared').User>('/api/auth/system-admin-password', {
+      method: 'POST',
+      body: JSON.stringify({ password, confirmPassword }),
+    }),
 
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 

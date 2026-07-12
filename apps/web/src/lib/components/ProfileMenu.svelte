@@ -19,8 +19,8 @@
         ? t('profile.roleStudent', $locale)
         : user.role === 'admin'
           ? t('profile.roleAdmin', $locale)
-          : user.role === 'instructor'
-            ? t('admin.roleInstructor', $locale)
+          : user.role === 'system_admin'
+            ? t('admin.roleSystemAdmin', $locale)
             : t('profile.roleStudent', $locale),
   );
 

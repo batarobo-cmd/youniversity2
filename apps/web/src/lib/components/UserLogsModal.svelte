@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { queryApi } from '$lib/client/form-action';
   import { describeUserLog } from '$lib/user-log-labels';
+  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
 
   type ManagedUser = { id: string; name: string; email: string };
 
@@ -25,6 +26,9 @@
   let loading = $state(false);
   let error = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let viewportHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 720);
+
+  const modalListHeight = $derived(Math.max(180, viewportHeight * 0.85 - 260));
 
   function formatDateTime(iso: string) {
     return new Date(iso).toLocaleString($locale, { dateStyle: 'medium', timeStyle: 'short' });
@@ -89,7 +93,12 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && open && onClose()} />
+<svelte:window
+  onkeydown={(e) => e.key === 'Escape' && open && onClose()}
+  onresize={() => {
+    viewportHeight = window.innerHeight;
+  }}
+/>
 
 {#if open && user}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -136,24 +145,34 @@
           <p class="admin-history-empty">{t('admin.userLogsEmpty', $locale)}</p>
         {:else}
           <p class="admin-history-count">{total} {t('admin.userLogsEntries', $locale)}</p>
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>{t('admin.userLogsWhen', $locale)}</th>
-                <th>{t('admin.userLogsAction', $locale)}</th>
-                <th>{t('dash.courseName', $locale)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each items as row}
-                <tr>
-                  <td>{formatDateTime(row.occurredAt as string)}</td>
-                  <td>{eventLabel(row)}</td>
-                  <td>{(row.courseTitle as string) || '—'}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <ViewportPaginator
+            items={items}
+            resetKey="{query}|{dateFrom}|{dateTo}"
+            availableHeight={modalListHeight}
+            rowHeight={48}
+            minPageSize={4}
+          >
+            {#snippet children(pageItems)}
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>{t('admin.userLogsWhen', $locale)}</th>
+                    <th>{t('admin.userLogsAction', $locale)}</th>
+                    <th>{t('dash.courseName', $locale)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each pageItems as row}
+                    <tr>
+                      <td>{formatDateTime(row.occurredAt as string)}</td>
+                      <td>{eventLabel(row)}</td>
+                      <td>{(row.courseTitle as string) || '—'}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/snippet}
+          </ViewportPaginator>
         {/if}
       </div>
     </div>
@@ -249,8 +268,8 @@
   }
 
   .admin-history-body {
-    overflow: auto;
-    padding: 0;
+    overflow: visible;
+    padding: 0 0 0.75rem;
   }
 
   .admin-history-count {

@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { User } from '@youniversity2/shared';
-import { STUDENT_VIEW_COOKIE, STUDENT_VIEW_HEADER } from '@youniversity2/shared';
+import { STUDENT_VIEW_COOKIE, STUDENT_VIEW_HEADER, isStaffRole, isPlatformAdminRole } from '@youniversity2/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
@@ -19,11 +19,11 @@ export function requireAuthToken(token: string | null | undefined): asserts toke
 }
 
 export function requireAdmin(user: User | null | undefined) {
-  if (user?.role !== 'admin' && user?.role !== 'instructor') redirect(303, '/dashboard');
+  if (!isStaffRole(user?.role)) redirect(303, '/dashboard');
 }
 
 export function requirePlatformAdmin(user: User | null | undefined) {
-  if (user?.role !== 'admin') redirect(303, '/dashboard');
+  if (!isPlatformAdminRole(user?.role)) redirect(303, '/dashboard');
 }
 
 export async function serverApiFetch(

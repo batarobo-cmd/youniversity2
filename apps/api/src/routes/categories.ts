@@ -12,7 +12,7 @@ export const categoryRoutes = new Hono();
 
 categoryRoutes.use('*', authMiddleware);
 
-categoryRoutes.get('/', requireRole('admin', 'instructor'), async (c) => {
+categoryRoutes.get('/', requireRole('admin'), async (c) => {
   const list = await db
     .select()
     .from(courseCategories)
@@ -20,7 +20,7 @@ categoryRoutes.get('/', requireRole('admin', 'instructor'), async (c) => {
   return c.json(list);
 });
 
-categoryRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
+categoryRoutes.post('/', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const body = z
     .object({
@@ -65,7 +65,7 @@ categoryRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
   return c.json(category, 201);
 });
 
-categoryRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
+categoryRoutes.patch('/:id', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const id = c.req.param('id');
   const body = z
@@ -113,7 +113,7 @@ categoryRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
   return c.json(updated);
 });
 
-categoryRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+categoryRoutes.delete('/:id', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const id = c.req.param('id');
 

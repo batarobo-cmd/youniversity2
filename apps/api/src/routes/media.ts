@@ -18,7 +18,7 @@ import {
 
 export const mediaRoutes = new Hono();
 
-mediaRoutes.post('/videos', authMiddleware, requireRole('admin', 'instructor'), async (c) => {
+mediaRoutes.post('/videos', authMiddleware, requireRole('admin'), async (c) => {
   const form = await c.req.formData();
   const file = form.get('file');
   const courseId = form.get('courseId')?.toString().trim();
@@ -47,7 +47,7 @@ mediaRoutes.post('/videos', authMiddleware, requireRole('admin', 'instructor'), 
   return c.json(uploaded, 201);
 });
 
-mediaRoutes.post('/presentations', authMiddleware, requireRole('admin', 'instructor'), async (c) => {
+mediaRoutes.post('/presentations', authMiddleware, requireRole('admin'), async (c) => {
   const form = await c.req.formData();
   const file = form.get('file');
   const courseId = form.get('courseId')?.toString().trim();

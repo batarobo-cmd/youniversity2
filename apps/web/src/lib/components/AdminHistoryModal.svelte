@@ -2,6 +2,7 @@
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { queryApi } from '$lib/client/form-action';
+  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
 
   type HistoryKind = 'registrations' | 'logins';
 
@@ -22,6 +23,9 @@
   let loading = $state(false);
   let error = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let viewportHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 720);
+
+  const modalListHeight = $derived(Math.max(180, viewportHeight * 0.85 - 230));
 
   const title = $derived(
     kind === 'registrations' ? t('dash.registrationHistory', $locale) : t('dash.loginHistory', $locale),
@@ -83,7 +87,12 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && open && onClose()} />
+<svelte:window
+  onkeydown={(e) => e.key === 'Escape' && open && onClose()}
+  onresize={() => {
+    viewportHeight = window.innerHeight;
+  }}
+/>
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -123,45 +132,63 @@
         {:else if items.length === 0}
           <p class="admin-history-empty">{t('dash.historyNoResults', $locale)}</p>
         {:else if kind === 'registrations'}
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>{t('auth.name', $locale)}</th>
-                <th>{t('auth.email', $locale)}</th>
-                <th>{t('dash.registeredAt', $locale)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each items as row}
-                <tr>
-                  <td>{row.userName as string}</td>
-                  <td>{row.userEmail as string}</td>
-                  <td>{formatDateTime(row.registeredAt as string)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <ViewportPaginator
+            items={items}
+            availableHeight={modalListHeight}
+            rowHeight={44}
+            minPageSize={4}
+          >
+            {#snippet children(pageItems)}
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>{t('auth.name', $locale)}</th>
+                    <th>{t('auth.email', $locale)}</th>
+                    <th>{t('dash.registeredAt', $locale)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each pageItems as row}
+                    <tr>
+                      <td>{row.userName as string}</td>
+                      <td>{row.userEmail as string}</td>
+                      <td>{formatDateTime(row.registeredAt as string)}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/snippet}
+          </ViewportPaginator>
         {:else}
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>{t('auth.name', $locale)}</th>
-                <th>{t('auth.email', $locale)}</th>
-                <th>{t('dash.loggedInAt', $locale)}</th>
-                <th>{t('dash.loginMethod', $locale)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each items as row}
-                <tr>
-                  <td>{row.userName as string}</td>
-                  <td>{row.userEmail as string}</td>
-                  <td>{formatDateTime(row.loggedInAt as string)}</td>
-                  <td>{loginMethodLabel(row.method as string)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <ViewportPaginator
+            items={items}
+            availableHeight={modalListHeight}
+            rowHeight={44}
+            minPageSize={4}
+          >
+            {#snippet children(pageItems)}
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>{t('auth.name', $locale)}</th>
+                    <th>{t('auth.email', $locale)}</th>
+                    <th>{t('dash.loggedInAt', $locale)}</th>
+                    <th>{t('dash.loginMethod', $locale)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each pageItems as row}
+                    <tr>
+                      <td>{row.userName as string}</td>
+                      <td>{row.userEmail as string}</td>
+                      <td>{formatDateTime(row.loggedInAt as string)}</td>
+                      <td>{loginMethodLabel(row.method as string)}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/snippet}
+          </ViewportPaginator>
         {/if}
       </div>
     </div>
@@ -245,8 +272,8 @@
   }
 
   .admin-history-body {
-    overflow: auto;
-    padding: 0;
+    overflow: visible;
+    padding: 0 0 0.75rem;
   }
 
   .admin-history-empty,

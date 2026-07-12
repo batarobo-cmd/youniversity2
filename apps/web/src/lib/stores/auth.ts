@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import type { User } from '@youniversity2/shared';
-import { DEFAULT_LOCALE, STUDENT_VIEW_COOKIE, type Locale } from '@youniversity2/shared';
+import { DEFAULT_LOCALE, STUDENT_VIEW_COOKIE, type Locale, isStaffRole, isPlatformAdminRole, isSystemAdminRole } from '@youniversity2/shared';
 import { SESSION_STORAGE_KEY } from '../session';
 
 const LOCALE_KEY = 'yo2_locale';
@@ -11,11 +11,15 @@ export const API_BASE =
   typeof window !== 'undefined' ? '' : (import.meta.env.VITE_API_URL ?? '');
 
 export function isAdminUser(u: Pick<User, 'role'> | null | undefined): boolean {
-  return u?.role === 'admin' || u?.role === 'instructor';
+  return isStaffRole(u?.role);
 }
 
 export function isPlatformAdminUser(u: Pick<User, 'role'> | null | undefined): boolean {
-  return u?.role === 'admin';
+  return isPlatformAdminRole(u?.role);
+}
+
+export function isSystemAdminUser(u: Pick<User, 'role'> | null | undefined): boolean {
+  return isSystemAdminRole(u?.role);
 }
 
 function loadSessionId(): string | null {
@@ -64,6 +68,7 @@ export const isAuthenticated = derived(token, ($token) => $token !== null);
 export const isAdmin = derived(user, ($user) => isAdminUser($user));
 /** Plný administrátor platformy (správa používateľov, systémové nastavenia). */
 export const isPlatformAdmin = derived(user, ($user) => isPlatformAdminUser($user));
+export const isSystemAdmin = derived(user, ($user) => isSystemAdminUser($user));
 export const isActingAsStudent = derived(
   [user, studentViewMode],
   ([$user, $mode]) => Boolean($mode && isAdminUser($user)),

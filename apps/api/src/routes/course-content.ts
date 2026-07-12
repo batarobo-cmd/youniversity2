@@ -108,7 +108,7 @@ function serializeActivity(
   };
 }
 
-courseContentRoutes.post('/courses/:courseId/modules', requireRole('admin', 'instructor'), async (c) => {
+courseContentRoutes.post('/courses/:courseId/modules', requireRole('admin'), async (c) => {
   const courseId = c.req.param('courseId');
   const body = createModuleSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
@@ -140,7 +140,7 @@ courseContentRoutes.post('/courses/:courseId/modules', requireRole('admin', 'ins
   return c.json({ ...module, title: body.data.title, activities: [] }, 201);
 });
 
-courseContentRoutes.patch('/modules/:moduleId', requireRole('admin', 'instructor'), async (c) => {
+courseContentRoutes.patch('/modules/:moduleId', requireRole('admin'), async (c) => {
   const moduleId = c.req.param('moduleId');
   const body = updateModuleSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
@@ -188,7 +188,7 @@ courseContentRoutes.patch('/modules/:moduleId', requireRole('admin', 'instructor
   return c.json({ ...updated, title: trans?.title ?? body.data.title ?? 'Module' });
 });
 
-courseContentRoutes.delete('/modules/:moduleId', requireRole('admin', 'instructor'), async (c) => {
+courseContentRoutes.delete('/modules/:moduleId', requireRole('admin'), async (c) => {
   const moduleId = c.req.param('moduleId');
   const [existing] = await db.select().from(courseModules).where(eq(courseModules.id, moduleId)).limit(1);
   if (!existing) return c.json({ error: 'Module not found' }, 404);
@@ -200,7 +200,7 @@ courseContentRoutes.delete('/modules/:moduleId', requireRole('admin', 'instructo
 
 courseContentRoutes.post(
   '/modules/:moduleId/activities',
-  requireRole('admin', 'instructor'),
+  requireRole('admin'),
   async (c) => {
     const moduleId = c.req.param('moduleId');
     const body = createActivitySchema.safeParse(await c.req.json());
@@ -256,7 +256,7 @@ courseContentRoutes.post(
   },
 );
 
-courseContentRoutes.patch('/activities/:activityId', requireRole('admin', 'instructor'), async (c) => {
+courseContentRoutes.patch('/activities/:activityId', requireRole('admin'), async (c) => {
   const activityId = c.req.param('activityId');
   const body = updateActivitySchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
@@ -343,7 +343,7 @@ courseContentRoutes.patch('/activities/:activityId', requireRole('admin', 'instr
   return c.json(serializeActivity(updated, trans));
 });
 
-courseContentRoutes.delete('/activities/:activityId', requireRole('admin', 'instructor'), async (c) => {
+courseContentRoutes.delete('/activities/:activityId', requireRole('admin'), async (c) => {
   const activityId = c.req.param('activityId');
   const [existing] = await db.select().from(lessons).where(eq(lessons.id, activityId)).limit(1);
   if (!existing) return c.json({ error: 'Activity not found' }, 404);
@@ -354,6 +354,6 @@ courseContentRoutes.delete('/activities/:activityId', requireRole('admin', 'inst
   return c.json({ ok: true });
 });
 
-courseContentRoutes.post('/courses/:courseId/activities', requireRole('admin', 'instructor'), async (c) => {
+courseContentRoutes.post('/courses/:courseId/activities', requireRole('admin'), async (c) => {
   return c.json({ error: 'Activities must belong to a module. Create a module first.' }, 400);
 });

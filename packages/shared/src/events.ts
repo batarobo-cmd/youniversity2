@@ -15,6 +15,8 @@ export const WS_EVENTS = {
   PROGRESS_UPDATED: 'progress_updated',
   COMPLETION_EVALUATED: 'completion_evaluated',
   PRESENCE: 'presence',
+  USER_PROFILE_UPDATED: 'user_profile_updated',
+  USERS_UPDATED: 'users_updated',
 } as const;
 
 export type WsEventType = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
@@ -59,4 +61,11 @@ export interface PresencePayload {
   courseId: string;
   lessonId?: string;
   online: boolean;
+}
+
+export interface UsersUpdatedPayload {
+  action: 'created' | 'updated' | 'deleted';
+  userId: string;
+  actorId: string;
+  role?: string;
 }

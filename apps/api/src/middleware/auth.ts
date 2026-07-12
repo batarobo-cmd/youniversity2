@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Context, Next } from 'hono';
 import { config } from '../config';
 import type { UserRole } from '@youniversity2/shared';
+import { roleGrants } from '@youniversity2/shared';
 import { touchSession, getSessionUser, destroySession } from '../services/session';
 import { isUserSuspended } from '../services/user-suspension';
 
@@ -87,7 +88,7 @@ export async function authMiddleware(c: Context, next: Next) {
 export function requireRole(...roles: UserRole[]) {
   return async (c: Context, next: Next) => {
     const user = c.get('user') as AuthUser | undefined;
-    if (!user || !roles.includes(user.role)) {
+    if (!user || !roles.some((required) => roleGrants(required, user.role))) {
       return c.json({ error: 'Forbidden' }, 403);
     }
     await next();

@@ -94,7 +94,7 @@ courseRoutes.get('/', async (c) => {
   );
 });
 
-courseRoutes.patch('/:id', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.patch('/:id', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const body = z
@@ -226,7 +226,7 @@ courseRoutes.get('/:id', async (c) => {
   });
 });
 
-courseRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.post('/', requireRole('admin'), async (c) => {
   const user = c.get('user') as AuthUser;
   const body = createCourseSchema.safeParse(await c.req.json());
   if (!body.success) {
@@ -267,7 +267,7 @@ courseRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
   return c.json(course, 201);
 });
 
-courseRoutes.post('/:id/translate', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.post('/:id/translate', requireRole('admin'), async (c) => {
   const courseId = c.req.param('id');
   const body = z.object({ targetLocale: z.enum(SUPPORTED_LOCALES) }).safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid locale' }, 400);
@@ -324,7 +324,7 @@ courseRoutes.post('/:id/translate', requireRole('admin', 'instructor'), async (c
   return c.json(newTranslation, 201);
 });
 
-courseRoutes.patch('/:id/publish', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.patch('/:id/publish', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const body = z.object({ isPublished: z.boolean() }).safeParse(await c.req.json());
@@ -357,7 +357,7 @@ courseRoutes.patch('/:id/publish', requireRole('admin', 'instructor'), async (c)
   return c.json(updated);
 });
 
-courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.patch('/:id/content', requireRole('admin'), async (c) => {
   const courseId = c.req.param('id');
   const body = z
     .object({
@@ -465,7 +465,7 @@ courseRoutes.patch('/:id/content', requireRole('admin', 'instructor'), async (c)
   });
 });
 
-courseRoutes.get('/:id/certificates', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.get('/:id/certificates', requireRole('admin'), async (c) => {
   const courseId = c.req.param('id');
   const rows = await db
     .select({
@@ -533,7 +533,7 @@ function buildAssignmentStatusTimestamps(
   return byUser;
 }
 
-courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.get('/:id/reporting', requireRole('admin'), async (c) => {
   const courseId = c.req.param('id');
 
   const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
@@ -676,7 +676,7 @@ courseRoutes.get('/:id/reporting', requireRole('admin', 'instructor'), async (c)
   return c.json(rows);
 });
 
-courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const userId = c.req.param('userId');
@@ -768,7 +768,7 @@ courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin', 
 
 courseRoutes.delete(
   '/:id/reporting/:userId/certificates/:certificateId',
-  requireRole('admin', 'instructor'),
+  requireRole('admin'),
   async (c) => {
     const actor = c.get('user') as AuthUser;
     const courseId = c.req.param('id');
@@ -811,7 +811,7 @@ courseRoutes.delete(
   },
 );
 
-courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.put('/:id/completion-rules', requireRole('admin'), async (c) => {
   const courseId = c.req.param('id');
   const body = z
     .object({
@@ -872,7 +872,7 @@ courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), as
   return c.json(rules);
 });
 
-courseRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+courseRoutes.delete('/:id', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
   const courseTitle = await getCourseTitle(courseId);

@@ -7,7 +7,7 @@ import { isCourseVisibleToStudents } from './course-visibility';
 import { hasStaffPrivileges } from './student-view';
 
 export function isStaff(user: AuthUser) {
-  return user.role === 'admin' || user.role === 'instructor';
+  return user.role === 'admin' || user.role === 'system_admin';
 }
 
 export function canStudentOpenCourse(enrollmentStatus: string | null | undefined): boolean {

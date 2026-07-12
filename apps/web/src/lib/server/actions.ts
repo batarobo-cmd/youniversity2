@@ -2,6 +2,7 @@ import { fail, isActionFailure } from '@sveltejs/kit';
 import type { Cookies } from '@sveltejs/kit';
 import type { ActionFailure } from '@sveltejs/kit';
 import type { User } from '@youniversity2/shared';
+import { isPlatformAdminRole, isStaffRole } from '@youniversity2/shared';
 import { SESSION_COOKIE } from '$lib/session';
 import { serverApiJson } from '$lib/server/api';
 
@@ -14,11 +15,11 @@ export function sessionTokenOrFail(cookies: Cookies) {
 }
 
 export function platformAdminOrFail(user: User | null | undefined) {
-  if (user?.role !== 'admin') return fail(403, { error: 'Nedostatočné oprávnenie.' });
+  if (!isPlatformAdminRole(user?.role)) return fail(403, { error: 'Nedostatočné oprávnenie.' });
 }
 
 export function adminOrFail(user: User | null | undefined) {
-  if (user?.role !== 'admin' && user?.role !== 'instructor') {
+  if (!isStaffRole(user?.role)) {
     return fail(403, { error: 'Nedostatočné oprávnenie.' });
   }
 }
@@ -47,7 +48,7 @@ export async function actionPlatformAdminOrFail(
 ): Promise<ActionFailure<{ error?: string }> | ActionAuth> {
   const auth = await actionUserOrFail(fetch, cookies);
   if (isActionFailure(auth)) return auth;
-  if (auth.user.role !== 'admin') return fail(403, { error: 'Nedostatočné oprávnenie.' });
+  if (!isPlatformAdminRole(auth.user.role)) return fail(403, { error: 'Nedostatočné oprávnenie.' });
   return auth;
 }
 
@@ -58,7 +59,7 @@ export async function actionAdminOrFail(
 ): Promise<ActionFailure<{ error?: string }> | ActionAuth> {
   const auth = await actionUserOrFail(fetch, cookies);
   if (isActionFailure(auth)) return auth;
-  if (auth.user.role !== 'admin' && auth.user.role !== 'instructor') {
+  if (!isStaffRole(auth.user.role)) {
     return fail(403, { error: 'Nedostatočné oprávnenie.' });
   }
   return auth;

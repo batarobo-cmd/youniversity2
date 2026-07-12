@@ -1,13 +1,24 @@
-export type DemoUserRole = 'admin' | 'student';
+import type { UserRole } from '@youniversity2/shared';
+
+export type DemoUserRole = 'admin' | 'student' | 'system_admin';
 
 export type DemoUserCredential = {
   email: string;
   password: string;
   name: string;
-  role: DemoUserRole;
+  role: UserRole;
+  /** Protection password for system_admin role changes (demo only). */
+  systemAdminGuardPassword?: string;
 };
 
 const PRODUCTION_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
+  system_admin: {
+    email: 'sysadmin@youniversity2.sk',
+    password: 'sysadmin123',
+    name: 'System Admin',
+    role: 'system_admin',
+    systemAdminGuardPassword: 'sysadmin-guard',
+  },
   admin: {
     email: 'admin@youniversity2.sk',
     password: 'admin123',
@@ -23,6 +34,13 @@ const PRODUCTION_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
 };
 
 const LOCAL_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
+  system_admin: {
+    email: 'sysadmin@local',
+    password: 'sysadmin',
+    name: 'System Admin',
+    role: 'system_admin',
+    systemAdminGuardPassword: 'sysadmin-guard',
+  },
   admin: {
     email: 'admin@local',
     password: 'admin',
@@ -38,6 +56,7 @@ const LOCAL_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
 };
 
 const LEGACY_LOCAL_EMAILS: Record<DemoUserRole, string> = {
+  system_admin: 'sysadmin@youniversity2.sk',
   admin: 'admin@youniversity2.sk',
   student: 'student@youniversity2.sk',
 };
@@ -62,7 +81,8 @@ export function resolveLoginIdentifier(input: string): string {
 
   const key = trimmed.toLowerCase();
   const creds = getDemoUserCredentials();
-  if (key === 'admin' || key === 'student') {
+  if (key === 'admin' || key === 'student' || key === 'sysadmin' || key === 'system_admin') {
+    if (key === 'sysadmin' || key === 'system_admin') return creds.system_admin.email;
     return creds[key].email;
   }
 

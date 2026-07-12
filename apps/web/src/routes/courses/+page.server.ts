@@ -1,12 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { isStaffRole } from '@youniversity2/shared';
 import { requireAuthToken, serverApiJson, studentViewApiHeaders, readStudentViewCookie } from '$lib/server/api';
 
 export const load: PageServerLoad = async ({ parent, fetch, depends, cookies }) => {
   depends('student:courses');
   const { token, user } = await parent();
   requireAuthToken(token);
-  const isStaff = user?.role === 'admin' || user?.role === 'instructor';
+  const isStaff = isStaffRole(user?.role);
   if (isStaff && !readStudentViewCookie(cookies)) {
     redirect(303, '/dashboard');
   }

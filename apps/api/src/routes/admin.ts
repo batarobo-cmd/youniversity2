@@ -14,12 +14,36 @@ import {
 import { getUserLogs } from '../services/user-logs';
 import { recordUserActivity } from '../services/activity-log';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
-import { USER_ROLES, SUPPORTED_LOCALES } from '@youniversity2/shared';
+import { USER_ROLES, SUPPORTED_LOCALES, isSystemAdminRole } from '@youniversity2/shared';
 import { getAdminAuthSettings, updateAuthSettings } from '../services/auth-settings';
+import {
+  canAssignSystemAdminRole,
+  validateActiveSystemAdminRemains,
+  validateRoleChange,
+  validateSystemAdminRemains,
+  LAST_SYSTEM_ADMIN_ERROR,
+  LAST_ACTIVE_SYSTEM_ADMIN_ERROR,
+} from '../services/user-role-policy';
+import { broadcastToUser, broadcastToAdmin } from '../realtime/hub';
+import { WS_EVENTS } from '@youniversity2/shared';
+import { updateSessionRoleForUser } from '../services/session';
 
 export const adminRoutes = new Hono();
 
 adminRoutes.use('*', authMiddleware);
+
+function notifyUsersUpdated(
+  action: 'created' | 'updated' | 'deleted',
+  userId: string,
+  actorId: string,
+  role?: string,
+) {
+  broadcastToAdmin({
+    type: WS_EVENTS.USERS_UPDATED,
+    payload: { action, userId, actorId, role },
+    timestamp: new Date().toISOString(),
+  });
+}
 
 function serializeAdminUser(user: typeof users.$inferSelect) {
   return {
@@ -31,6 +55,7 @@ function serializeAdminUser(user: typeof users.$inferSelect) {
     avatarUrl: user.avatarUrl ?? undefined,
     oauthProvider: user.oauthProvider ?? undefined,
     hasPassword: Boolean(user.passwordHash),
+    hasSystemAdminPassword: Boolean(user.systemAdminPasswordHash),
     isSuspended: user.isSuspended,
     givenName: user.givenName ?? undefined,
     familyName: user.familyName ?? undefined,
@@ -50,7 +75,7 @@ function serializeAdminUser(user: typeof users.$inferSelect) {
   };
 }
 
-adminRoutes.get('/students', requireRole('admin', 'instructor'), async (c) => {
+adminRoutes.get('/students', requireRole('admin'), async (c) => {
   const q = c.req.query('q')?.trim();
 
   if (q !== undefined && q.length < 2) {
@@ -58,7 +83,7 @@ adminRoutes.get('/students', requireRole('admin', 'instructor'), async (c) => {
   }
 
   const conditions = [
-    inArray(users.role, ['student', 'admin', 'instructor']),
+    inArray(users.role, ['student', 'admin', 'system_admin']),
     eq(users.isSuspended, false),
   ];
   if (q) {
@@ -98,7 +123,7 @@ function parseDateEnd(value?: string) {
   return d;
 }
 
-adminRoutes.get('/registrations/history', requireRole('admin', 'instructor'), async (c) => {
+adminRoutes.get('/registrations/history', requireRole('admin'), async (c) => {
   const parsed = historyQuerySchema.safeParse({
     q: c.req.query('q'),
     from: c.req.query('from'),
@@ -148,7 +173,7 @@ adminRoutes.get('/registrations/history', requireRole('admin', 'instructor'), as
   });
 });
 
-adminRoutes.get('/logins/history', requireRole('admin', 'instructor'), async (c) => {
+adminRoutes.get('/logins/history', requireRole('admin'), async (c) => {
   const parsed = historyQuerySchema.safeParse({
     q: c.req.query('q'),
     from: c.req.query('from'),
@@ -345,12 +370,30 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
 
   if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
 
+  const authUser = c.get('user') as AuthUser;
+  if (body.data.role === 'system_admin' && !canAssignSystemAdminRole(authUser.role)) {
+    return c.json({ error: 'Only system administrators can create system admin accounts' }, 403);
+  }
+
   const existing = await db.select().from(users).where(eq(users.email, body.data.email)).limit(1);
   if (existing.length > 0) {
     return c.json({ error: 'Email already registered' }, 409);
   }
 
   const passwordHash = await bcrypt.hash(body.data.password, 12);
+  let systemAdminPasswordHash: string | null | undefined;
+  if (body.data.role === 'system_admin') {
+    const roleCheck = await validateRoleChange({
+      actorRole: authUser.role,
+      targetUserId: 'new',
+      targetCurrentRole: 'student',
+      newRole: 'system_admin',
+      targetSystemAdminPasswordHash: null,
+    });
+    if (!roleCheck.ok) return c.json({ error: roleCheck.error }, roleCheck.status);
+    systemAdminPasswordHash = null;
+  }
+
   const profileFields = [
     'givenName',
     'familyName',
@@ -372,6 +415,9 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
     role: body.data.role,
     preferredLocale: body.data.preferredLocale,
   };
+  if (systemAdminPasswordHash !== undefined) {
+    values.systemAdminPasswordHash = systemAdminPasswordHash;
+  }
   for (const field of profileFields) {
     if (body.data[field] !== undefined) {
       values[field] = body.data[field] || null;
@@ -380,7 +426,6 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
 
   const [created] = await db.insert(users).values(values).returning();
 
-  const authUser = c.get('user') as AuthUser;
   void recordUserActivity(authUser.id, 'user.created', {
     payload: {
       targetId: created.id,
@@ -389,6 +434,19 @@ adminRoutes.post('/users', requireRole('admin'), async (c) => {
       role: created.role,
     },
   });
+
+  if (created.role === 'system_admin') {
+    broadcastToUser(created.id, {
+      type: WS_EVENTS.USER_PROFILE_UPDATED,
+      payload: {
+        role: created.role,
+        needsSystemAdminPassword: !created.systemAdminPasswordHash,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  notifyUsersUpdated('created', created.id, authUser.id, created.role);
 
   return c.json(serializeAdminUser(created), 201);
 });
@@ -404,6 +462,7 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
       role: z.enum(USER_ROLES).optional(),
       preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
       password: z.string().min(8).optional(),
+      systemAdminPassword: z.string().min(1).optional(),
       isSuspended: z.boolean().optional(),
       givenName: z.string().max(255).optional().nullable(),
       familyName: z.string().max(255).optional().nullable(),
@@ -429,20 +488,53 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
     if (dup.length > 0) return c.json({ error: 'Email already registered' }, 409);
   }
 
-  if (id === authUser.id && body.data.role && body.data.role !== 'admin') {
-    return c.json({ error: 'Cannot change your own administrator role' }, 400);
-  }
-
   if (id === authUser.id && body.data.isSuspended === true) {
     return c.json({ error: 'Cannot suspend your own account' }, 400);
+  }
+
+  if (
+    existing.role === 'system_admin' &&
+    body.data.isSuspended === true &&
+    !isSystemAdminRole(authUser.role)
+  ) {
+    return c.json(
+      { error: 'Only system administrators can suspend system administrator accounts' },
+      403,
+    );
+  }
+
+  if (body.data.isSuspended === true) {
+    const suspendCheck = await validateActiveSystemAdminRemains({
+      targetUserId: id,
+      currentRole: existing.role,
+      currentlySuspended: existing.isSuspended,
+      willSuspend: true,
+    });
+    if (!suspendCheck.ok) return c.json({ error: suspendCheck.error }, suspendCheck.status);
   }
 
   const updates: Partial<typeof users.$inferInsert> = {
     updatedAt: new Date(),
   };
+
+  if (body.data.role && body.data.role !== existing.role) {
+    const roleCheck = await validateRoleChange({
+      actorUserId: authUser.id,
+      actorRole: authUser.role,
+      targetUserId: id,
+      targetCurrentRole: existing.role,
+      newRole: body.data.role,
+      systemAdminPassword: body.data.systemAdminPassword,
+      targetSystemAdminPasswordHash: existing.systemAdminPasswordHash,
+    });
+    if (!roleCheck.ok) return c.json({ error: roleCheck.error }, roleCheck.status);
+    updates.role = body.data.role;
+    if (roleCheck.systemAdminPasswordHash !== undefined) {
+      updates.systemAdminPasswordHash = roleCheck.systemAdminPasswordHash;
+    }
+  }
   if (body.data.email) updates.email = body.data.email;
   if (body.data.name) updates.name = body.data.name;
-  if (body.data.role) updates.role = body.data.role;
   if (body.data.preferredLocale) updates.preferredLocale = body.data.preferredLocale;
   if (body.data.password) updates.passwordHash = await bcrypt.hash(body.data.password, 12);
   if (body.data.isSuspended !== undefined) updates.isSuspended = body.data.isSuspended;
@@ -466,7 +558,83 @@ adminRoutes.patch('/users/:id', requireRole('admin'), async (c) => {
     }
   }
 
-  const [updated] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+  const updatedResult = await db.transaction(async (tx) => {
+    const [locked] = await tx.select().from(users).where(eq(users.id, id)).for('update');
+    if (!locked) throw new Error('User not found');
+
+    const touchesSystemAdminPool =
+      (updates.role && updates.role !== locked.role &&
+        (locked.role === 'system_admin' || updates.role === 'system_admin')) ||
+      (updates.isSuspended === true &&
+        !locked.isSuspended &&
+        locked.role === 'system_admin');
+
+    if (touchesSystemAdminPool) {
+      await tx.select({ id: users.id }).from(users).where(eq(users.role, 'system_admin')).for('update');
+    }
+
+    if (updates.role && updates.role !== locked.role) {
+      const remainsCheck = await validateSystemAdminRemains({
+        targetUserId: id,
+        currentRole: locked.role,
+        newRole: updates.role,
+      });
+      if (!remainsCheck.ok) throw new Error(remainsCheck.error);
+    }
+
+    if (updates.isSuspended === true && !locked.isSuspended) {
+      const suspendCheck = await validateActiveSystemAdminRemains({
+        targetUserId: id,
+        currentRole: locked.role,
+        currentlySuspended: locked.isSuspended,
+        willSuspend: true,
+      });
+      if (!suspendCheck.ok) throw new Error(suspendCheck.error);
+    }
+
+    const [row] = await tx.update(users).set(updates).where(eq(users.id, id)).returning();
+    return row ?? null;
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : 'Update failed';
+    if (
+      message === LAST_SYSTEM_ADMIN_ERROR ||
+      message === LAST_ACTIVE_SYSTEM_ADMIN_ERROR ||
+      message === 'User not found'
+    ) {
+      return null;
+    }
+    throw err;
+  });
+
+  const updated = updatedResult;
+
+  if (!updated) {
+    const roleDemotion =
+      body.data.role && body.data.role !== existing.role && existing.role === 'system_admin';
+    const suspendAttempt = body.data.isSuspended === true && !existing.isSuspended;
+    if (roleDemotion) {
+      return c.json({ error: LAST_SYSTEM_ADMIN_ERROR }, 400);
+    }
+    if (suspendAttempt) {
+      return c.json({ error: LAST_ACTIVE_SYSTEM_ADMIN_ERROR }, 400);
+    }
+    return c.json({ error: 'User not found' }, 404);
+  }
+
+  if (body.data.role && body.data.role !== existing.role) {
+    await updateSessionRoleForUser(updated.id, updated.role);
+    broadcastToUser(updated.id, {
+      type: WS_EVENTS.USER_PROFILE_UPDATED,
+      payload: {
+        role: updated.role,
+        needsSystemAdminPassword:
+          updated.role === 'system_admin' && !updated.systemAdminPasswordHash,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  notifyUsersUpdated('updated', updated.id, authUser.id, updated.role);
 
   const suspensionChanged =
     body.data.isSuspended !== undefined && body.data.isSuspended !== existing.isSuspended;
@@ -505,7 +673,51 @@ adminRoutes.delete('/users/:id', requireRole('admin'), async (c) => {
     return c.json({ error: 'Cannot delete your own account' }, 400);
   }
 
-  const [deleted] = await db.delete(users).where(eq(users.id, id)).returning();
+  const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!existing) return c.json({ error: 'User not found' }, 404);
+
+  if (existing.role === 'system_admin') {
+    if (!isSystemAdminRole(authUser.role)) {
+      return c.json(
+        { error: 'Only system administrators can delete system administrator accounts' },
+        403,
+      );
+    }
+    const remainsCheck = await validateSystemAdminRemains({
+      targetUserId: existing.id,
+      currentRole: existing.role,
+      deleteUser: true,
+    });
+    if (!remainsCheck.ok) {
+      return c.json({ error: remainsCheck.error }, remainsCheck.status);
+    }
+  }
+
+  const deleted = await db.transaction(async (tx) => {
+    const [locked] = await tx.select().from(users).where(eq(users.id, id)).for('update');
+    if (!locked) return null;
+
+    if (locked.role === 'system_admin') {
+      await tx.select({ id: users.id }).from(users).where(eq(users.role, 'system_admin')).for('update');
+      const remainsCheck = await validateSystemAdminRemains({
+        targetUserId: locked.id,
+        currentRole: locked.role,
+        deleteUser: true,
+      });
+      if (!remainsCheck.ok) throw new Error(remainsCheck.error);
+    }
+
+    const [row] = await tx.delete(users).where(eq(users.id, id)).returning();
+    return row ?? null;
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : 'Delete failed';
+    if (message === LAST_SYSTEM_ADMIN_ERROR) return 'blocked' as const;
+    throw err;
+  });
+
+  if (deleted === 'blocked') {
+    return c.json({ error: LAST_SYSTEM_ADMIN_ERROR }, 400);
+  }
   if (!deleted) return c.json({ error: 'User not found' }, 404);
 
   void recordUserActivity(authUser.id, 'user.deleted', {
@@ -515,6 +727,8 @@ adminRoutes.delete('/users/:id', requireRole('admin'), async (c) => {
       targetEmail: deleted.email,
     },
   });
+
+  notifyUsersUpdated('deleted', deleted.id, authUser.id, deleted.role);
 
   return c.json({ ok: true });
 });

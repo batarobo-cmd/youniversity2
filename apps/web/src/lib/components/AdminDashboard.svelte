@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import AdminHistoryModal from '$lib/components/AdminHistoryModal.svelte';
   import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
+  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
   import '$lib/styles/dashboard.css';
 
   interface Props {
@@ -77,35 +78,39 @@
       {#if courses.length === 0}
         <div class="empty-state">{t('dash.noActiveCoursesLastHour', $locale)}</div>
       {:else}
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>{t('dash.courseName', $locale)}</th>
-              <th>{t('dash.activityLastHour', $locale)}</th>
-              <th>{t('dash.activeUsersLastHour', $locale)}</th>
-              <th>{t('dash.status', $locale)}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each courses as course}
-              <tr>
-                <td><a href="/courses/{course.id}">{course.title as string}</a></td>
-                <td>{course.activityCount as number}</td>
-                <td>{course.activeUsers as number}</td>
-                <td>
-                  <CoursePublicationBadge
-                    variant="badge"
-                    course={{
-                      isPublished: Boolean(course.isPublished),
-                      startsAt: course.startsAt as string | null | undefined,
-                      endsAt: course.endsAt as string | null | undefined,
-                    }}
-                  />
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <ViewportPaginator items={courses} rowHeight={44} headerOffset={340} footerReserved={120} minPageSize={3}>
+          {#snippet children(pageItems)}
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>{t('dash.courseName', $locale)}</th>
+                  <th>{t('dash.activityLastHour', $locale)}</th>
+                  <th>{t('dash.activeUsersLastHour', $locale)}</th>
+                  <th>{t('dash.status', $locale)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each pageItems as course}
+                  <tr>
+                    <td><a href="/courses/{course.id}">{course.title as string}</a></td>
+                    <td>{course.activityCount as number}</td>
+                    <td>{course.activeUsers as number}</td>
+                    <td>
+                      <CoursePublicationBadge
+                        variant="badge"
+                        course={{
+                          isPublished: Boolean(course.isPublished),
+                          startsAt: course.startsAt as string | null | undefined,
+                          endsAt: course.endsAt as string | null | undefined,
+                        }}
+                      />
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/snippet}
+        </ViewportPaginator>
       {/if}
     </div>
   </section>
@@ -121,24 +126,34 @@
       {#if recentRegistrations.length === 0}
         <div class="empty-state">{t('dash.noRegistrations', $locale)}</div>
       {:else}
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>{t('auth.name', $locale)}</th>
-              <th>{t('auth.email', $locale)}</th>
-              <th>{t('dash.registeredAt', $locale)}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each recentRegistrations as reg}
-              <tr>
-                <td>{reg.userName as string}</td>
-                <td>{reg.userEmail as string}</td>
-                <td>{formatDateTime(reg.registeredAt as string)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <ViewportPaginator
+          items={recentRegistrations}
+          rowHeight={44}
+          headerOffset={340}
+          footerReserved={120}
+          minPageSize={3}
+        >
+          {#snippet children(pageItems)}
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>{t('auth.name', $locale)}</th>
+                  <th>{t('auth.email', $locale)}</th>
+                  <th>{t('dash.registeredAt', $locale)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each pageItems as reg}
+                  <tr>
+                    <td>{reg.userName as string}</td>
+                    <td>{reg.userEmail as string}</td>
+                    <td>{formatDateTime(reg.registeredAt as string)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/snippet}
+        </ViewportPaginator>
       {/if}
     </div>
   </section>
@@ -154,26 +169,30 @@
       {#if recentLogins.length === 0}
         <div class="empty-state">{t('dash.noLogins', $locale)}</div>
       {:else}
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>{t('auth.name', $locale)}</th>
-              <th>{t('auth.email', $locale)}</th>
-              <th>{t('dash.loggedInAt', $locale)}</th>
-              <th>{t('dash.loginMethod', $locale)}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each recentLogins as login}
-              <tr>
-                <td>{login.userName as string}</td>
-                <td>{login.userEmail as string}</td>
-                <td>{formatDateTime(login.loggedInAt as string)}</td>
-                <td>{loginMethodLabel(login.method as string)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <ViewportPaginator items={recentLogins} rowHeight={44} headerOffset={340} footerReserved={120} minPageSize={3}>
+          {#snippet children(pageItems)}
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>{t('auth.name', $locale)}</th>
+                  <th>{t('auth.email', $locale)}</th>
+                  <th>{t('dash.loggedInAt', $locale)}</th>
+                  <th>{t('dash.loginMethod', $locale)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each pageItems as login}
+                  <tr>
+                    <td>{login.userName as string}</td>
+                    <td>{login.userEmail as string}</td>
+                    <td>{formatDateTime(login.loggedInAt as string)}</td>
+                    <td>{loginMethodLabel(login.method as string)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/snippet}
+        </ViewportPaginator>
       {/if}
     </div>
   </section>

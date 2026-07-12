@@ -7,6 +7,7 @@
   import { initActivityTracker, trackPageView } from '$lib/activity-tracker';
   import { api } from '$lib/api';
   import AppShell from '$lib/components/AppShell.svelte';
+  import SystemAdminPasswordPrompt from '$lib/components/SystemAdminPasswordPrompt.svelte';
   import type { LayoutData } from './$types';
   import type { User } from '@youniversity2/shared';
 
@@ -88,5 +89,6 @@
     <div class="page-enter">
       {@render children()}
     </div>
+    <SystemAdminPasswordPrompt />
   </AppShell>
 {/if}

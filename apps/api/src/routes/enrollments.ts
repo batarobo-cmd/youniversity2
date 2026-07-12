@@ -14,7 +14,7 @@ export const enrollmentRoutes = new Hono();
 
 enrollmentRoutes.use('*', authMiddleware);
 
-enrollmentRoutes.get('/', requireRole('admin', 'instructor'), async (c) => {
+enrollmentRoutes.get('/', requireRole('admin'), async (c) => {
   const courseId = c.req.query('courseId');
   if (!courseId) return c.json({ error: 'courseId required' }, 400);
 
@@ -31,7 +31,7 @@ enrollmentRoutes.get('/', requireRole('admin', 'instructor'), async (c) => {
   return c.json(result);
 });
 
-enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
+enrollmentRoutes.post('/', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const body = z
     .object({
@@ -177,7 +177,7 @@ enrollmentRoutes.post('/', requireRole('admin', 'instructor'), async (c) => {
   return c.json(enrollment, 201);
 });
 
-enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) => {
+enrollmentRoutes.delete('/:id', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const enrollmentId = c.req.param('id');
 
@@ -220,7 +220,7 @@ enrollmentRoutes.delete('/:id', requireRole('admin', 'instructor'), async (c) =>
   return c.json(enrollment);
 });
 
-enrollmentRoutes.post('/:id/suspend', requireRole('admin', 'instructor'), async (c) => {
+enrollmentRoutes.post('/:id/suspend', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const enrollmentId = c.req.param('id');
 
@@ -268,7 +268,7 @@ enrollmentRoutes.post('/:id/suspend', requireRole('admin', 'instructor'), async 
   return c.json(enrollment);
 });
 
-enrollmentRoutes.post('/:id/unsuspend', requireRole('admin', 'instructor'), async (c) => {
+enrollmentRoutes.post('/:id/unsuspend', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const enrollmentId = c.req.param('id');
 
@@ -321,7 +321,7 @@ enrollmentRoutes.post('/:id/unsuspend', requireRole('admin', 'instructor'), asyn
   return c.json(enrollment);
 });
 
-enrollmentRoutes.delete('/:id/permanent', requireRole('admin', 'instructor'), async (c) => {
+enrollmentRoutes.delete('/:id/permanent', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const enrollmentId = c.req.param('id');
 

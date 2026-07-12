@@ -3,8 +3,31 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = 'sk';
 
-export const USER_ROLES = ['admin', 'instructor', 'student'] as const;
+export const USER_ROLES = ['system_admin', 'admin', 'student'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
+
+/** Roles assignable in user management (system_admin only by system admins). */
+export const ASSIGNABLE_USER_ROLES = ['admin', 'student'] as const;
+export type AssignableUserRole = (typeof ASSIGNABLE_USER_ROLES)[number];
+
+export function isSystemAdminRole(role: UserRole | null | undefined): boolean {
+  return role === 'system_admin';
+}
+
+export function isPlatformAdminRole(role: UserRole | null | undefined): boolean {
+  return role === 'admin' || role === 'system_admin';
+}
+
+export function isStaffRole(role: UserRole | null | undefined): boolean {
+  return role === 'admin' || role === 'system_admin';
+}
+
+/** Whether `actual` satisfies a route/guard that requires `required` (system_admin counts as admin). */
+export function roleGrants(required: UserRole, actual: UserRole): boolean {
+  if (actual === required) return true;
+  if (required === 'admin' && actual === 'system_admin') return true;
+  return false;
+}
 
 /** Cookie / header for temporary admin student-view mode. */
 export const STUDENT_VIEW_COOKIE = 'yo2_student_view';

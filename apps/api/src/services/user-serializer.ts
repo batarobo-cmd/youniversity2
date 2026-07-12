@@ -10,6 +10,8 @@ export function serializeUser(user: UserRow) {
     avatarUrl: user.avatarUrl ?? undefined,
     oauthProvider: user.oauthProvider ?? undefined,
     hasPassword: Boolean(user.passwordHash),
+    needsSystemAdminPassword:
+      user.role === 'system_admin' && !user.systemAdminPasswordHash,
     givenName: user.givenName ?? undefined,
     familyName: user.familyName ?? undefined,
     jobTitle: user.jobTitle ?? undefined,

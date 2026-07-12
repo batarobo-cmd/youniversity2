@@ -1,12 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { goto, invalidate } from '$app/navigation';
   import {
     isAuthenticated,
     isPlatformAdmin,
+    isSystemAdmin,
     user as currentUser,
     locale,
+    setAuth,
+    token,
   } from '$lib/stores/auth';
+  import { api } from '$lib/api';
   import { t } from '$lib/i18n';
   import { submitAction, actionErrorMessage, isActionSuccess } from '$lib/client/form-action';
   import { USER_ROLES, SUPPORTED_LOCALES, type UserRole } from '@youniversity2/shared';
@@ -14,6 +19,10 @@
   import UserLogsModal from '$lib/components/UserLogsModal.svelte';
   import UserCoursesCell from '$lib/components/UserCoursesCell.svelte';
   import UserCertificatesCell from '$lib/components/UserCertificatesCell.svelte';
+  import UserRoleSelect from '$lib/components/UserRoleSelect.svelte';
+  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
+  import { subscribeUsersTableRefresh } from '$lib/live-admin-users';
+  import { localizeAdminUserError } from '$lib/admin-user-errors';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
@@ -64,12 +73,18 @@
 
   let { data }: { data: PageData } = $props();
 
+  const pageLocale = $derived($locale);
+  const authUser = $derived($currentUser);
+  const authUserId = $derived(authUser?.id);
+  const isSysAdmin = $derived($isSystemAdmin);
+
   const users = $derived(data.users as ManagedUser[]);
   let loading = $state(false);
   let search = $state('');
   let message = $state('');
   let mutationError = $state('');
-  const error = $derived(mutationError || data.loadError || '');
+  const rawError = $derived(mutationError || data.loadError || '');
+  const error = $derived(rawError ? localizeAdminUserError(rawError, $locale) : '');
 
   let modalOpen = $state(false);
   let editing = $state<ManagedUser | null>(null);
@@ -90,9 +105,12 @@
   let formBusinessPhone = $state('');
   let formCity = $state('');
   let formCountry = $state('');
+  let formSystemAdminPassword = $state('');
   let saving = $state(false);
   let logsUser = $state<ManagedUser | null>(null);
   let logsOpen = $state(false);
+  let roleChangingId = $state<string | null>(null);
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   const filtered = $derived(
     users.filter((u) => {
@@ -115,10 +133,38 @@
     const unsubAdmin = isPlatformAdmin.subscribe((admin) => {
       if (!admin) goto('/dashboard');
     });
+    const unsubUsers = subscribeUsersTableRefresh(() => {
+      scheduleRefreshUsers();
+    });
     return () => {
       unsubAuth();
       unsubAdmin();
+      unsubUsers();
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
+  });
+
+  function scheduleRefreshUsers() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      void refreshUsers();
+    }, 120);
+  }
+
+  $effect(() => {
+    if (!modalOpen || !editing || saving || roleChangingId) return;
+    const fresh = users.find((u) => u.id === editing!.id);
+    if (!fresh) {
+      closeModal();
+      return;
+    }
+    if (fresh.role !== editing.role) {
+      editing = fresh;
+      formRole = fresh.role;
+    }
+    if (fresh.isSuspended !== editing.isSuspended) {
+      editing = fresh;
+    }
   });
 
   async function refreshUsers() {
@@ -127,6 +173,17 @@
       await invalidate('admin:users');
     } finally {
       loading = false;
+    }
+  }
+
+  async function syncAuthFromServer() {
+    const sessionToken = get(token);
+    if (!sessionToken) return;
+    try {
+      const me = await api.getMe(sessionToken);
+      setAuth(sessionToken, me);
+    } catch {
+      // session refresh is best-effort
     }
   }
 
@@ -140,12 +197,48 @@
     }
     message = t('admin.saved', $locale);
     await refreshUsers();
+    await syncAuthFromServer();
     return true;
   }
 
+  const systemAdminCount = $derived(users.filter((u) => u.role === 'system_admin').length);
+  const activeSystemAdminCount = $derived(
+    users.filter((u) => u.role === 'system_admin' && !u.isSuspended).length,
+  );
+
+  const canSelfDemoteInModal = $derived(
+    Boolean(
+      editing &&
+        authUserId === editing.id &&
+        editing.role === 'system_admin' &&
+        systemAdminCount > 1,
+    ),
+  );
+
+  const assignableRoles = $derived(
+    USER_ROLES.filter((role) => {
+      if (!isSysAdmin && !canSelfDemoteInModal && role === 'system_admin') return false;
+      if (editing?.role === 'system_admin' && !isSysAdmin && !canSelfDemoteInModal) return false;
+      if (
+        editing &&
+        authUserId === editing.id &&
+        editing.role === 'system_admin' &&
+        systemAdminCount <= 1 &&
+        role !== 'system_admin'
+      ) {
+        return false;
+      }
+      return true;
+    }),
+  );
+
+  const roleSelectLocked = $derived(
+    Boolean(editing?.role === 'system_admin' && !isSysAdmin && !canSelfDemoteInModal),
+  );
+
   function roleLabel(role: UserRole) {
+    if (role === 'system_admin') return t('admin.roleSystemAdmin', $locale);
     if (role === 'admin') return t('admin.roleAdmin', $locale);
-    if (role === 'instructor') return t('admin.roleInstructor', $locale);
     return t('admin.roleStudent', $locale);
   }
 
@@ -167,6 +260,7 @@
     formBusinessPhone = '';
     formCity = '';
     formCountry = '';
+    formSystemAdminPassword = '';
     modalOpen = true;
     mutationError = '';
     message = '';
@@ -226,11 +320,22 @@
         const payload: Record<string, string | null> = {
           name: formName.trim(),
           email: formEmail.trim(),
-          role: formRole,
           preferredLocale: formLocale,
           ...profilePayload(),
         };
         if (formPassword.trim()) payload.password = formPassword;
+        const roleChanged = formRole !== editing.role;
+        if (roleChanged) {
+          payload.role = formRole;
+          if (editing.role === 'system_admin' && formRole !== 'system_admin') {
+            if (!formSystemAdminPassword) {
+              mutationError = t('admin.systemAdminPasswordRequired', $locale);
+              saving = false;
+              return;
+            }
+            payload.systemAdminPassword = formSystemAdminPassword;
+          }
+        }
         const ok = await runMutation('saveUser', {
           mode: 'update',
           id: editing.id,
@@ -291,8 +396,30 @@
     });
   }
 
+  async function changeRole(u: ManagedUser, role: UserRole, systemAdminPassword?: string) {
+    if (role === u.role) return;
+    mutationError = '';
+    message = '';
+    roleChangingId = u.id;
+    try {
+      const payload: Record<string, string> = { role };
+      if (systemAdminPassword) payload.systemAdminPassword = systemAdminPassword;
+      const ok = await runMutation('saveUser', {
+        mode: 'update',
+        id: u.id,
+        payload: JSON.stringify(payload),
+      });
+      if (ok) {
+        message = t('admin.usersRoleChanged', $locale);
+        await syncAuthFromServer();
+      }
+    } finally {
+      roleChangingId = null;
+    }
+  }
+
   function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString($locale === 'sk' ? 'sk-SK' : 'en-US', {
+    return new Date(iso).toLocaleDateString(pageLocale === 'sk' ? 'sk-SK' : 'en-US', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -329,20 +456,22 @@
 {:else if filtered.length === 0}
   <div class="empty-state panel">{t('admin.usersEmpty', $locale)}</div>
 {:else}
-  <div class="users-table-wrap">
-    <table class="users-table">
-      <thead>
-        <tr>
-          <th>{t('auth.name', $locale)}</th>
-          <th>{t('admin.usersRole', $locale)}</th>
-          <th>{t('admin.usersCourses', $locale)}</th>
-          <th>{t('admin.usersCertificates', $locale)}</th>
-          <th>{t('admin.usersCreated', $locale)}</th>
-          <th style="text-align: right;">{t('admin.usersActions', $locale)}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each filtered as u}
+  <ViewportPaginator items={filtered} resetKey={search} rowHeight={76} headerOffset={300} footerReserved={140}>
+    {#snippet children(pageItems)}
+      <div class="users-table-wrap paginated-table-shell">
+        <table class="users-table">
+          <thead>
+            <tr>
+              <th>{t('auth.name', pageLocale)}</th>
+              <th>{t('admin.usersRole', pageLocale)}</th>
+              <th>{t('admin.usersCourses', pageLocale)}</th>
+              <th>{t('admin.usersCertificates', pageLocale)}</th>
+              <th>{t('admin.usersCreated', pageLocale)}</th>
+              <th style="text-align: right;">{t('admin.usersActions', pageLocale)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each pageItems as u (u.id)}
           <tr class:users-row--suspended={u.isSuspended}>
             <td>
               <div class="users-cell-user">
@@ -350,18 +479,18 @@
                 <div>
                   <div class="users-cell-name">
                     {u.name}
-                    {#if $currentUser?.id === u.id}
-                      <span class="users-you-tag">{t('admin.usersYou', $locale)}</span>
+                    {#if authUserId === u.id}
+                      <span class="users-you-tag">{t('admin.usersYou', pageLocale)}</span>
                     {/if}
                     {#if u.isSuspended}
-                      <span class="users-status-badge">{t('admin.usersSuspended', $locale)}</span>
+                      <span class="users-status-badge">{t('admin.usersSuspended', pageLocale)}</span>
                     {/if}
                   </div>
                   <div class="users-cell-email">{u.email}</div>
                   {#if u.employeeId || u.department || u.companyName}
                     <div class="users-cell-meta">
                       {#if u.employeeId}
-                        {t('profile.employeeId', $locale)}: {u.employeeId}
+                        {t('profile.employeeId', pageLocale)}: {u.employeeId}
                       {/if}
                       {#if u.department}
                         {#if u.employeeId} · {/if}{u.department}
@@ -375,9 +504,17 @@
               </div>
             </td>
             <td>
-              <span class="users-role-badge users-role-badge--{u.role}">{roleLabel(u.role)}</span>
+              <UserRoleSelect
+                value={u.role}
+                userId={u.id}
+                userName={u.name}
+                {systemAdminCount}
+                canAssignSystemAdmin={isSysAdmin}
+                disabled={roleChangingId === u.id}
+                onChange={(role, systemAdminPassword) => changeRole(u, role, systemAdminPassword)}
+              />
               <div class="users-auth-badge">
-                {u.oauthProvider ? t('admin.usersOAuth', $locale) : t('admin.usersLocal', $locale)}
+                {u.oauthProvider ? t('admin.usersOAuth', pageLocale) : t('admin.usersLocal', pageLocale)}
                 {#if u.oauthProvider}
                   · {u.oauthProvider}
                 {/if}
@@ -395,7 +532,7 @@
                 <button
                   type="button"
                   class="users-action-btn"
-                  title={t('admin.usersLogs', $locale)}
+                  title={t('admin.usersLogs', pageLocale)}
                   onclick={() => openLogs(u)}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -410,7 +547,7 @@
                 <button
                   type="button"
                   class="users-action-btn"
-                  title={t('admin.usersEdit', $locale)}
+                  title={t('admin.usersEdit', pageLocale)}
                   onclick={() => openEdit(u)}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -423,15 +560,16 @@
                     />
                   </svg>
                 </button>
-                {#if $currentUser?.id !== u.id}
+                {#if authUserId !== u.id && (isSysAdmin || u.role !== 'system_admin')}
+                  {#if u.role !== 'system_admin' || activeSystemAdminCount > 1 || u.isSuspended}
                   <button
                     type="button"
                     class="users-action-btn"
                     class:users-action-btn--warn={!u.isSuspended}
                     class:users-action-btn--success={u.isSuspended}
                     title={u.isSuspended
-                      ? t('admin.usersUnsuspend', $locale)
-                      : t('admin.usersSuspend', $locale)}
+                      ? t('admin.usersUnsuspend', pageLocale)
+                      : t('admin.usersSuspend', pageLocale)}
                     onclick={() => toggleSuspend(u)}
                   >
                     {#if u.isSuspended}
@@ -456,10 +594,12 @@
                       </svg>
                     {/if}
                   </button>
+                  {/if}
+                  {#if u.role !== 'system_admin' || systemAdminCount > 1}
                   <button
                     type="button"
                     class="users-action-btn users-action-btn--danger"
-                    title={t('admin.usersDelete', $locale)}
+                    title={t('admin.usersDelete', pageLocale)}
                     onclick={() => removeUser(u)}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -472,14 +612,17 @@
                       />
                     </svg>
                   </button>
+                  {/if}
                 {/if}
               </div>
             </td>
           </tr>
         {/each}
-      </tbody>
-    </table>
-  </div>
+          </tbody>
+        </table>
+      </div>
+    {/snippet}
+  </ViewportPaginator>
 {/if}
 
 {#if modalOpen}
@@ -507,16 +650,24 @@
         </div>
         <div>
           <label for="u-role">{t('admin.usersRole', $locale)}</label>
-          <select
-            id="u-role"
-            bind:value={formRole}
-            disabled={editing !== null && $currentUser?.id === editing.id}
-          >
-            {#each USER_ROLES as role}
-              <option value={role}>{roleLabel(role)}</option>
-            {/each}
-          </select>
+          {#if roleSelectLocked}
+            <p class="users-role-locked" title={t('admin.systemAdminRoleLocked', $locale)}>
+              {roleLabel('system_admin')}
+            </p>
+          {:else}
+            <select id="u-role" bind:value={formRole}>
+              {#each assignableRoles as role}
+                <option value={role}>{roleLabel(role)}</option>
+              {/each}
+            </select>
+          {/if}
         </div>
+        {#if editing?.role === 'system_admin' && formRole !== 'system_admin' && (isSysAdmin || canSelfDemoteInModal)}
+          <div>
+            <label for="u-sys-pw-off">{t('admin.systemAdminPasswordConfirmLabel', $locale)}</label>
+            <input id="u-sys-pw-off" type="password" bind:value={formSystemAdminPassword} />
+          </div>
+        {/if}
         <div>
           <label for="u-locale">{t('locale.label', $locale)}</label>
           <select id="u-locale" bind:value={formLocale}>

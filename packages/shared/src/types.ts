@@ -18,6 +18,8 @@ export interface User {
   avatarUrl?: string;
   oauthProvider?: 'google' | 'microsoft';
   hasPassword?: boolean;
+  /** True when system_admin must set their role protection password. */
+  needsSystemAdminPassword?: boolean;
   givenName?: string;
   familyName?: string;
   jobTitle?: string;

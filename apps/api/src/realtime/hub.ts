@@ -121,7 +121,7 @@ export function createWebSocketHandlers() {
       const token = ws.data.user;
       addToRoom(`user:${token.id}`, ws);
 
-      if (token.role === 'admin' || token.role === 'instructor') {
+      if (token.role === 'admin' || token.role === 'system_admin') {
         addToRoom('admin:global', ws);
       }
     },

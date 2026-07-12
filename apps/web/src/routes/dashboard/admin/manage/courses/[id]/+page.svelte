@@ -8,6 +8,7 @@
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
   import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
+  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
   import { moduleActivities, normalizeActivityType, isEvaluableActivity } from '$lib/activity-types';
   import { certificateDownloadFileName, certificateDownloadUrl } from '$lib/certificate-download';
   import type { PageData } from './$types';
@@ -98,6 +99,7 @@
     userId: string;
     completions: ReportingRow['completions'];
   } | null>(null);
+  let viewportHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 720);
   let completionRulesSynced = $state(false);
   let hydratedCourseId = $state<string | null>(null);
   let previousCourseId = $state<string | null>(null);
@@ -107,6 +109,8 @@
       (a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime(),
     ),
   );
+
+  const certModalListHeight = $derived(Math.max(160, viewportHeight * 0.85 - 180));
 
   function formatCertificateIssuedAt(iso: string) {
     return new Date(iso).toLocaleString($locale, {
@@ -746,6 +750,12 @@
   }
 </script>
 
+<svelte:window
+  onresize={() => {
+    viewportHeight = window.innerHeight;
+  }}
+/>
+
 <div class="course-edit">
   <div class="course-edit-top">
     <a href="/dashboard/admin/manage" class="course-edit-back">
@@ -943,19 +953,26 @@
           {#if assignedEnrollments.length === 0}
             <p class="cat-tree-empty">{t('admin.noEnrollments', $locale)}</p>
           {:else}
-            <div class="users-table-wrap course-edit-table">
-              <table class="users-table course-students-table">
-                <thead>
-                  <tr>
-                    <th class="students-col-name">{t('admin.studentName', $locale)}</th>
-                    <th class="students-col-email">E-mail</th>
-                    <th class="students-col-date">{t('admin.enrolledAt', $locale)}</th>
-                    <th class="students-col-status">{t('admin.enrollmentStatus', $locale)}</th>
-                    <th class="students-col-actions">{t('admin.reportingColActions', $locale)}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each assignedEnrollments as row}
+            <ViewportPaginator
+              items={assignedEnrollments}
+              rowHeight={56}
+              headerOffset={460}
+              footerReserved={160}
+            >
+              {#snippet children(pageItems)}
+                <div class="users-table-wrap course-edit-table paginated-table-shell">
+                  <table class="users-table course-students-table">
+                    <thead>
+                      <tr>
+                        <th class="students-col-name">{t('admin.studentName', $locale)}</th>
+                        <th class="students-col-email">E-mail</th>
+                        <th class="students-col-date">{t('admin.enrolledAt', $locale)}</th>
+                        <th class="students-col-status">{t('admin.enrollmentStatus', $locale)}</th>
+                        <th class="students-col-actions">{t('admin.reportingColActions', $locale)}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each pageItems as row}
                     <tr>
                       <td class="students-col-name">{row.user.name}</td>
                       <td class="students-col-email">{row.user.email}</td>
@@ -999,10 +1016,12 @@
                         </div>
                       </td>
                     </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/snippet}
+            </ViewportPaginator>
           {/if}
           {/if}
         </div>
@@ -1026,18 +1045,20 @@
           {#if issuedCerts.length === 0}
             <p class="cat-tree-empty">{t('admin.noCertificates', $locale)}</p>
           {:else}
-            <div class="users-table-wrap course-edit-table">
-              <table class="users-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>{t('admin.studentName', $locale)}</th>
-                    <th>{t('admin.usersCreated', $locale)}</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each sortedIssuedCerts as cert}
+            <ViewportPaginator items={sortedIssuedCerts} rowHeight={56} headerOffset={520} footerReserved={160}>
+              {#snippet children(pageItems)}
+                <div class="users-table-wrap course-edit-table paginated-table-shell">
+                  <table class="users-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>{t('admin.studentName', $locale)}</th>
+                        <th>{t('admin.usersCreated', $locale)}</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each pageItems as cert}
                     <tr>
                       <td>{cert.certificateNumber}</td>
                       <td>{cert.userName}<br /><span class="course-edit-sub">{cert.userEmail}</span></td>
@@ -1052,10 +1073,12 @@
                         </a>
                       </td>
                     </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/snippet}
+            </ViewportPaginator>
           {/if}
           {/if}
         </div>
@@ -1100,28 +1123,36 @@
             {#if filteredReportingRows.length === 0}
               <p class="cat-tree-empty">{t('admin.reportingFilterNoResults', $locale)}</p>
             {:else}
-            <div class="users-table-wrap course-edit-table reporting-table-wrap">
-              <table class="users-table reporting-table">
-                <colgroup>
-                  <col class="reporting-col-name" />
-                  <col class="reporting-col-assignment" />
-                  <col class="reporting-col-progress" />
-                  <col class="reporting-col-evaluation" />
-                  <col class="reporting-col-certs" />
-                  <col class="reporting-col-actions" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th class="reporting-col-name" title={t('admin.studentName', $locale)}>{t('admin.reportingColName', $locale)}</th>
-                    <th class="reporting-col-assignment" title={t('admin.reportingAssignmentStatus', $locale)}>{t('admin.reportingColAssignment', $locale)}</th>
-                    <th class="reporting-col-progress" title={t('course.progress', $locale)}>{t('admin.reportingColProgress', $locale)}</th>
-                    <th class="reporting-col-evaluation" title={t('admin.reportingProgressEvaluation', $locale)}>{t('admin.reportingColEvaluation', $locale)}</th>
-                    <th class="reporting-col-certs" title={t('admin.issuedCertificates', $locale)}>{t('admin.reportingColCerts', $locale)}</th>
-                    <th class="reporting-col-actions">{t('admin.reportingColActions', $locale)}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each filteredReportingRows as row}
+            <ViewportPaginator
+              items={filteredReportingRows}
+              resetKey="{reportingFilterQuery}|{reportingFilterAssignment}|{reportingFilterState}"
+              rowHeight={64}
+              headerOffset={560}
+              footerReserved={160}
+            >
+              {#snippet children(pageItems)}
+                <div class="users-table-wrap course-edit-table reporting-table-wrap paginated-table-shell">
+                  <table class="users-table reporting-table">
+                    <colgroup>
+                      <col class="reporting-col-name" />
+                      <col class="reporting-col-assignment" />
+                      <col class="reporting-col-progress" />
+                      <col class="reporting-col-evaluation" />
+                      <col class="reporting-col-certs" />
+                      <col class="reporting-col-actions" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th class="reporting-col-name" title={t('admin.studentName', $locale)}>{t('admin.reportingColName', $locale)}</th>
+                        <th class="reporting-col-assignment" title={t('admin.reportingAssignmentStatus', $locale)}>{t('admin.reportingColAssignment', $locale)}</th>
+                        <th class="reporting-col-progress" title={t('course.progress', $locale)}>{t('admin.reportingColProgress', $locale)}</th>
+                        <th class="reporting-col-evaluation" title={t('admin.reportingProgressEvaluation', $locale)}>{t('admin.reportingColEvaluation', $locale)}</th>
+                        <th class="reporting-col-certs" title={t('admin.issuedCertificates', $locale)}>{t('admin.reportingColCerts', $locale)}</th>
+                        <th class="reporting-col-actions">{t('admin.reportingColActions', $locale)}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each pageItems as row}
                     <tr>
                       <td class="reporting-col-name">
                         {row.user.name}<br />
@@ -1197,10 +1228,12 @@
                         </button>
                       </td>
                     </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/snippet}
+            </ViewportPaginator>
             {/if}
           {/if}
         </div>
@@ -1216,46 +1249,55 @@
         <h3>{t('admin.reportingCertificateHistory', $locale)} — {certHistoryModal.userName}</h3>
         <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>{t('admin.cancel', $locale)}</button>
       </div>
-      <div class="reporting-modal-list">
-        {#each certHistoryModal.completions as completion, index}
-          <div class="reporting-modal-row">
-            <div class="reporting-modal-cert-meta">
-              <span class="reporting-modal-cert-id">#{completion.certificateNumber}</span>
-              {#if index === 0}
-                <span class="reporting-modal-cert-badge">{t('admin.reportingCertLatest', $locale)}</span>
-              {/if}
-              <span class="reporting-modal-cert-date">{formatCertificateIssuedAt(completion.issuedAt)}</span>
-            </div>
-            <div class="reporting-modal-cert-actions">
-              <a
-                class="btn btn-ghost btn-sm"
-                href={certificateDownloadUrl(completion.id)}
-                download={certificateDownloadFileName(completion.certificateNumber)}
-              >
-                {t('admin.downloadCertificate', $locale)}
-              </a>
-              <button
-                type="button"
-                class="reporting-cert-delete-btn"
-                title={t('admin.deleteCertificate', $locale)}
-                aria-label={t('admin.deleteCertificate', $locale)}
-                disabled={saving}
-                onclick={() =>
-                  deleteCertificate(
-                    certHistoryModal!.userId,
-                    completion.id,
-                    completion.certificateNumber,
-                  )}
-              >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-                  <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
-                </svg>
-              </button>
-            </div>
+      <ViewportPaginator
+        items={certHistoryModal.completions}
+        availableHeight={certModalListHeight}
+        rowHeight={56}
+        minPageSize={3}
+      >
+        {#snippet children(pageItems)}
+          <div class="reporting-modal-list">
+            {#each pageItems as completion}
+              <div class="reporting-modal-row">
+                <div class="reporting-modal-cert-meta">
+                  <span class="reporting-modal-cert-id">#{completion.certificateNumber}</span>
+                  {#if completion.id === certHistoryModal!.completions[0]?.id}
+                    <span class="reporting-modal-cert-badge">{t('admin.reportingCertLatest', $locale)}</span>
+                  {/if}
+                  <span class="reporting-modal-cert-date">{formatCertificateIssuedAt(completion.issuedAt)}</span>
+                </div>
+                <div class="reporting-modal-cert-actions">
+                  <a
+                    class="btn btn-ghost btn-sm"
+                    href={certificateDownloadUrl(completion.id)}
+                    download={certificateDownloadFileName(completion.certificateNumber)}
+                  >
+                    {t('admin.downloadCertificate', $locale)}
+                  </a>
+                  <button
+                    type="button"
+                    class="reporting-cert-delete-btn"
+                    title={t('admin.deleteCertificate', $locale)}
+                    aria-label={t('admin.deleteCertificate', $locale)}
+                    disabled={saving}
+                    onclick={() =>
+                      deleteCertificate(
+                        certHistoryModal!.userId,
+                        completion.id,
+                        completion.certificateNumber,
+                      )}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6 7h12M10 11v6M14 11v6M9 7V5h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                      <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            {/each}
           </div>
-        {/each}
-      </div>
+        {/snippet}
+      </ViewportPaginator>
     </div>
   </div>
 {/if}

@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 import { WS_EVENTS, type WsMessage } from '@youniversity2/shared';
 import { get } from 'svelte/store';
-import { token } from './auth';
+import { token, user } from './auth';
 import { api } from '../api';
 import { HEARTBEAT_INTERVAL_MS } from '../session';
 
@@ -21,7 +21,12 @@ export function startHeartbeat() {
   heartbeatTimer = setInterval(async () => {
     if (!get(token)) return;
     try {
-      await api.heartbeat();
+      const res = await api.heartbeat();
+      if (res.needsSystemAdminPassword) {
+        user.update((current) =>
+          current ? { ...current, needsSystemAdminPassword: true } : current,
+        );
+      }
     } catch {
       // Relácia vypršala — layout server redirect pri ďalšom requeste
     }
@@ -57,6 +62,21 @@ export function connectWebSocket(sessionToken?: string) {
   socket.onmessage = (event) => {
     const msg = JSON.parse(event.data) as WsMessage;
     lastMessage.set(msg);
+
+    if (msg.type === WS_EVENTS.USER_PROFILE_UPDATED) {
+      const payload = msg.payload as {
+        role?: import('@youniversity2/shared').User['role'];
+        needsSystemAdminPassword?: boolean;
+      };
+      user.update((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          role: payload.role ?? current.role,
+          needsSystemAdminPassword: Boolean(payload.needsSystemAdminPassword),
+        };
+      });
+    }
 
     if (msg.type === WS_EVENTS.ACTIVITY_BROADCAST) {
       const payload = msg.payload as { userName: string; event: { eventType: string } };

@@ -105,7 +105,11 @@ authRoutes.post('/heartbeat', async (c) => {
     return c.json({ error: 'Session expired' }, 401);
   }
   const [row] = await db
-    .select({ isSuspended: users.isSuspended })
+    .select({
+      isSuspended: users.isSuspended,
+      role: users.role,
+      systemAdminPasswordHash: users.systemAdminPasswordHash,
+    })
     .from(users)
     .where(eq(users.id, user.id))
     .limit(1);
@@ -113,7 +117,42 @@ authRoutes.post('/heartbeat', async (c) => {
     await destroySession(sessionId);
     return c.json({ error: SUSPENDED_ACCOUNT_CODE, code: SUSPENDED_ACCOUNT_CODE }, 403);
   }
-  return c.json({ ok: true });
+  return c.json({
+    ok: true,
+    needsSystemAdminPassword:
+      row?.role === 'system_admin' && !row.systemAdminPasswordHash,
+  });
+});
+
+authRoutes.post('/system-admin-password', authMiddleware, async (c) => {
+  const authUser = c.get('user') as AuthUser;
+  const body = z
+    .object({
+      password: z.string().min(8),
+      confirmPassword: z.string().min(8),
+    })
+    .safeParse(await c.req.json());
+
+  if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
+  if (body.data.password !== body.data.confirmPassword) {
+    return c.json({ error: 'Protection passwords do not match' }, 400);
+  }
+
+  const [existing] = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
+  if (!existing) return c.json({ error: 'User not found' }, 404);
+  if (existing.role !== 'system_admin') {
+    return c.json({ error: 'Only system administrators can set this password' }, 403);
+  }
+
+  const systemAdminPasswordHash = await bcrypt.hash(body.data.password, 12);
+  const [updated] = await db
+    .update(users)
+    .set({ systemAdminPasswordHash, updatedAt: new Date() })
+    .where(eq(users.id, authUser.id))
+    .returning();
+
+  void recordUserActivity(authUser.id, 'user.system_admin_password_set');
+  return c.json(serializeUser(updated));
 });
 
 authRoutes.post('/logout', authMiddleware, async (c) => {

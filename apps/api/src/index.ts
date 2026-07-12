@@ -19,6 +19,9 @@ import {
 } from './realtime/hub';
 import { startPublicationScheduler } from './services/publication-scheduler';
 
+import { migrateLegacyRoles } from './db/migrate-legacy-roles';
+import { ensureSystemAdminExists } from './db/ensure-system-admin-exists';
+
 const app = new Hono();
 
 app.use('*', logger());
@@ -46,6 +49,8 @@ app.route('/api/media', mediaRoutes);
 app.route('/api/certificates', certificateRoutes);
 
 await initRealtimeHub();
+await migrateLegacyRoles();
+await ensureSystemAdminExists();
 startPublicationScheduler();
 
 const wsHandlers = createWebSocketHandlers();
