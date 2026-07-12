@@ -249,8 +249,8 @@ async function findOrCreateOAuthUser(provider: OAuthProvider, profile: Corporate
       ...merged,
       name:
         merged.name ??
-        profile.displayName ||
-        composeDisplayName(profile.givenName, profile.familyName, profile.email),
+        (profile.displayName ||
+          composeDisplayName(profile.givenName, profile.familyName, profile.email)),
     })
     .returning();
 
