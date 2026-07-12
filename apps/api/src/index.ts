@@ -49,8 +49,16 @@ app.route('/api/media', mediaRoutes);
 app.route('/api/certificates', certificateRoutes);
 
 await initRealtimeHub();
-await migrateLegacyRoles();
-await ensureSystemAdminExists();
+try {
+  await migrateLegacyRoles();
+} catch (err) {
+  console.error('[startup] migrateLegacyRoles failed:', err);
+}
+try {
+  await ensureSystemAdminExists();
+} catch (err) {
+  console.error('[startup] ensureSystemAdminExists failed:', err);
+}
 startPublicationScheduler();
 
 const wsHandlers = createWebSocketHandlers();

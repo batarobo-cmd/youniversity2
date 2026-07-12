@@ -35,6 +35,11 @@ echo "    Tip: na 1 GB Lightsail môže web build trvať 3–8 min; 'exporting l
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" api
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" web
 
+echo "==> DB schéma (pred reštartom API — nový image, bez bežiaceho kontajnera)..."
+docker compose -f docker-compose.prod.yml run --rm --no-deps api bun run db:push || {
+  echo "WARN: db:push zlyhal — skontrolujte logy nižšie"
+}
+
 echo "==> Reštart kontajnerov..."
 docker compose -f docker-compose.prod.yml up -d --force-recreate web api nginx
 
@@ -43,6 +48,11 @@ docker compose -f docker-compose.prod.yml ps
 
 echo "==> Čakám na API..."
 sleep 8
+
+if ! docker compose -f docker-compose.prod.yml ps api --status running -q | grep -q .; then
+  echo "WARN: API kontajner nebeží — logy:"
+  docker compose -f docker-compose.prod.yml logs api --tail 40 || true
+fi
 
 echo "==> Migrácia čísel certifikátov (pred zmenou schémy)..."
 docker compose -f docker-compose.prod.yml exec -T api bun run db:migrate-cert-numbers || {
@@ -60,5 +70,5 @@ grep -E '^PUBLIC_URL=' .env | cut -d= -f2- || grep -E '^WEB_URL=' .env | cut -d=
 
 echo ""
 echo "==> Rýchly test..."
-curl -s -o /dev/null -w "health=%{http_code} " http://127.0.0.1/health || true
-curl -s -o /dev/null -w "web=%{http_code}\n" --max-time 15 http://127.0.0.1/ || true
+curl -sL -o /dev/null -w "health=%{http_code} " http://127.0.0.1/health || true
+curl -sL -o /dev/null -w "web=%{http_code}\n" --max-time 15 http://127.0.0.1/ || true
