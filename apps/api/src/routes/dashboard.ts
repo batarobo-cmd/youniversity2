@@ -67,30 +67,27 @@ dashboardRoutes.patch('/profile', async (c) => {
   const [user] = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
   if (!user) return c.json({ error: 'User not found' }, 404);
 
-  const oauthLocked = Boolean(user.oauthProvider && user.profileSyncedAt);
   const updates: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
 
   if (body.data.preferredLocale) updates.preferredLocale = body.data.preferredLocale;
 
-  if (!oauthLocked) {
-    if (body.data.name) updates.name = body.data.name;
-    const profileFields = [
-      'givenName',
-      'familyName',
-      'jobTitle',
-      'department',
-      'employeeId',
-      'companyName',
-      'officeLocation',
-      'mobilePhone',
-      'businessPhone',
-      'city',
-      'country',
-    ] as const;
-    for (const field of profileFields) {
-      if (body.data[field] !== undefined) {
-        updates[field] = body.data[field] || null;
-      }
+  if (body.data.name) updates.name = body.data.name;
+  const profileFields = [
+    'givenName',
+    'familyName',
+    'jobTitle',
+    'department',
+    'employeeId',
+    'companyName',
+    'officeLocation',
+    'mobilePhone',
+    'businessPhone',
+    'city',
+    'country',
+  ] as const;
+  for (const field of profileFields) {
+    if (body.data[field] !== undefined) {
+      updates[field] = body.data[field] || null;
     }
   }
 

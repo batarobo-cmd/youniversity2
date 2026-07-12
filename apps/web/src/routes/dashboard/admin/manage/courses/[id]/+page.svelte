@@ -83,7 +83,6 @@
   let enrollmentsLoading = $state(false);
 
   let certEnabled = $state(false);
-  let certTitle = $state('');
   let issuedCerts = $state<CertRow[]>([]);
   let certsLoaded = $state(false);
   let certsLoading = $state(false);
@@ -290,7 +289,7 @@
   }
 
   async function writeCompletionRules(
-    certificate?: { enabled: boolean; titleTemplate: string },
+    certificate?: { enabled: boolean },
     rules?: CompletionRule[],
   ) {
     const baseRules =
@@ -315,7 +314,6 @@
     try {
       await writeCompletionRules({
         enabled: true,
-        titleTemplate: certTitle.trim() || title,
       });
       await refreshCourse();
     } catch {
@@ -331,10 +329,8 @@
     evalRules = evalOnly.length
       ? evalOnly
       : [{ type: 'all_lessons_complete', config: {}, isRequired: true }];
-    const cert = (certRule?.config as { certificate?: { enabled?: boolean; titleTemplate?: string } })
-      ?.certificate;
+    const cert = (certRule?.config as { certificate?: { enabled?: boolean } })?.certificate;
     certEnabled = cert?.enabled ?? hasIssuedCerts;
-    certTitle = cert?.titleTemplate ?? '';
   }
 
   function syncMandatoryFromCourse(c: Record<string, unknown> | null) {
@@ -463,9 +459,7 @@
 
       const keepCertificates = certEnabled || issuedCerts.length > 0;
       await writeCompletionRules(
-        keepCertificates
-          ? { enabled: true, titleTemplate: certTitle.trim() || title }
-          : undefined,
+        keepCertificates ? { enabled: true } : undefined,
         [{ type: 'all_lessons_complete', config: {}, isRequired: true }],
       );
       message = t('admin.saved', $locale);
@@ -483,11 +477,7 @@
     message = '';
     error = '';
     try {
-      await writeCompletionRules(
-        certEnabled
-          ? { enabled: true, titleTemplate: certTitle.trim() || title }
-          : undefined,
-      );
+      await writeCompletionRules(certEnabled ? { enabled: true } : undefined);
       message = t('admin.saved', $locale);
       await refreshCourse();
     } catch (e) {
@@ -1021,10 +1011,6 @@
               <input type="checkbox" bind:checked={certEnabled} />
               {t('admin.certEnabled', $locale)}
             </label>
-            <div class="cat-tree-field">
-              <label for="cert-title">{t('admin.certTitleTemplate', $locale)}</label>
-              <input id="cert-title" bind:value={certTitle} placeholder={title} />
-            </div>
             <button type="submit" class="btn btn-sm" disabled={saving}>{t('admin.saveChanges', $locale)}</button>
           </form>
 

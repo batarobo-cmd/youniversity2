@@ -28,7 +28,6 @@
   let error = $state('');
   let saving = $state(false);
 
-  const oauthLocked = $derived(Boolean($user?.oauthProvider && $user?.profileSyncedAt));
   const hasPassword = $derived($user?.hasPassword !== false);
 
   function loadFromUser(u: User) {
@@ -67,21 +66,21 @@
     saving = true;
 
     try {
-      const payload: Record<string, string | null> = { preferredLocale };
-      if (!oauthLocked) {
-        payload.name = name;
-        payload.givenName = givenName || null;
-        payload.familyName = familyName || null;
-        payload.jobTitle = jobTitle || null;
-        payload.department = department || null;
-        payload.employeeId = employeeId || null;
-        payload.companyName = companyName || null;
-        payload.officeLocation = officeLocation || null;
-        payload.mobilePhone = mobilePhone || null;
-        payload.businessPhone = businessPhone || null;
-        payload.city = city || null;
-        payload.country = country || null;
-      }
+      const payload: Record<string, string | null> = {
+        preferredLocale,
+        name,
+        givenName: givenName || null,
+        familyName: familyName || null,
+        jobTitle: jobTitle || null,
+        department: department || null,
+        employeeId: employeeId || null,
+        companyName: companyName || null,
+        officeLocation: officeLocation || null,
+        mobilePhone: mobilePhone || null,
+        businessPhone: businessPhone || null,
+        city: city || null,
+        country: country || null,
+      };
       if (newPassword) {
         payload.currentPassword = currentPassword;
         payload.newPassword = newPassword;
@@ -121,17 +120,11 @@
 
 <div class="panel profile-panel">
   <div class="panel-body">
-    {#if oauthLocked}
-      <div class="profile-oauth-note">
-        {t('profile.oauthSynced', $locale)}
-        {#if $user?.oauthProvider}
-          <span class="profile-oauth-provider">
-            {t('profile.oauthProvider', $locale)}: {$user.oauthProvider}
-          </span>
-        {/if}
-      </div>
-    {:else}
-      <p class="profile-avatar-hint">{t('profile.avatarHint', $locale)}</p>
+    <p class="profile-avatar-hint">{t('profile.avatarHint', $locale)}</p>
+    {#if $user?.oauthProvider}
+      <p class="profile-oauth-note">
+        {t('profile.oauthProvider', $locale)}: {$user.oauthProvider}. {t('profile.oauthManualHint', $locale)}
+      </p>
     {/if}
 
     {#if message}
@@ -157,7 +150,7 @@
           {/if}
           <div>
             <label for="name">{t('auth.name', $locale)}</label>
-            <input id="name" bind:value={name} required disabled={oauthLocked} />
+            <input id="name" bind:value={name} required />
           </div>
           <div>
             <label for="pref-locale">{t('locale.label', $locale)}</label>
@@ -175,31 +168,31 @@
         <div class="profile-grid">
           <div>
             <label for="given-name">{t('profile.givenName', $locale)}</label>
-            <input id="given-name" bind:value={givenName} disabled={oauthLocked} />
+            <input id="given-name" bind:value={givenName} />
           </div>
           <div>
             <label for="family-name">{t('profile.familyName', $locale)}</label>
-            <input id="family-name" bind:value={familyName} disabled={oauthLocked} />
+            <input id="family-name" bind:value={familyName} />
           </div>
           <div>
             <label for="job-title">{t('profile.jobTitle', $locale)}</label>
-            <input id="job-title" bind:value={jobTitle} disabled={oauthLocked} />
+            <input id="job-title" bind:value={jobTitle} />
           </div>
           <div>
             <label for="department">{t('profile.department', $locale)}</label>
-            <input id="department" bind:value={department} disabled={oauthLocked} />
+            <input id="department" bind:value={department} />
           </div>
           <div>
             <label for="employee-id">{t('profile.employeeId', $locale)}</label>
-            <input id="employee-id" bind:value={employeeId} disabled={oauthLocked} />
+            <input id="employee-id" bind:value={employeeId} />
           </div>
           <div>
             <label for="company">{t('profile.companyName', $locale)}</label>
-            <input id="company" bind:value={companyName} disabled={oauthLocked} />
+            <input id="company" bind:value={companyName} />
           </div>
           <div>
             <label for="office">{t('profile.officeLocation', $locale)}</label>
-            <input id="office" bind:value={officeLocation} disabled={oauthLocked} />
+            <input id="office" bind:value={officeLocation} />
           </div>
         </div>
       </div>
@@ -209,11 +202,11 @@
         <div class="profile-grid">
           <div>
             <label for="mobile">{t('profile.mobilePhone', $locale)}</label>
-            <input id="mobile" type="tel" bind:value={mobilePhone} disabled={oauthLocked} />
+            <input id="mobile" type="tel" bind:value={mobilePhone} />
           </div>
           <div>
             <label for="business">{t('profile.businessPhone', $locale)}</label>
-            <input id="business" type="tel" bind:value={businessPhone} disabled={oauthLocked} />
+            <input id="business" type="tel" bind:value={businessPhone} />
           </div>
         </div>
       </div>
@@ -223,11 +216,11 @@
         <div class="profile-grid">
           <div>
             <label for="city">{t('profile.city', $locale)}</label>
-            <input id="city" bind:value={city} disabled={oauthLocked} />
+            <input id="city" bind:value={city} />
           </div>
           <div>
             <label for="country">{t('profile.country', $locale)}</label>
-            <input id="country" bind:value={country} disabled={oauthLocked} />
+            <input id="country" bind:value={country} />
           </div>
         </div>
       </div>

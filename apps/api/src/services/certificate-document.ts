@@ -2,22 +2,12 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import {
   certificates,
-  completionRules,
   courseTranslations,
   courses,
   users,
 } from '../db/schema';
 import { generateCertificatePdf, type CertificatePdfLocale } from './certificate-pdf';
 import { getCertificatePdfObject, uploadCertificatePdf } from './storage';
-
-function certificateTitleTemplate(rules: Array<{ config: unknown }>, fallback: string) {
-  for (const rule of rules) {
-    const template = (rule.config as { certificate?: { titleTemplate?: string } })?.certificate
-      ?.titleTemplate;
-    if (template?.trim()) return template.trim();
-  }
-  return fallback;
-}
 
 async function resolveCourseTitle(courseId: string, locale: string, fallback: string) {
   const [translation] = await db
@@ -51,10 +41,6 @@ export async function buildCertificatePdfInput(certificateId: string) {
   if (!row) return null;
 
   const locale = (row.preferredLocale === 'en' ? 'en' : 'sk') as CertificatePdfLocale;
-  const rules = await db
-    .select({ config: completionRules.config })
-    .from(completionRules)
-    .where(eq(completionRules.courseId, row.courseId));
 
   const baseTitle = await resolveCourseTitle(
     row.courseId,
@@ -64,7 +50,7 @@ export async function buildCertificatePdfInput(certificateId: string) {
 
   return {
     studentName: row.studentName,
-    courseTitle: certificateTitleTemplate(rules, baseTitle),
+    courseTitle: baseTitle,
     certificateNumber: row.certificateNumber,
     issuedAt: row.issuedAt,
     locale,

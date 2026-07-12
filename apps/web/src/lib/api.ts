@@ -301,7 +301,7 @@ export const api = {
     courseId: string,
     data: {
       rules: Array<{ type: string; config?: Record<string, unknown>; isRequired?: boolean }>;
-      certificate?: { enabled: boolean; titleTemplate?: string };
+      certificate?: { enabled: boolean };
     },
   ) =>
     request<unknown[]>(`/api/courses/${courseId}/completion-rules`, {

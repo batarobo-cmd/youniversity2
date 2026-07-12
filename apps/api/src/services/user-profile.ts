@@ -58,7 +58,7 @@ export function corporateProfileToDbFields(profile: CorporateProfile): Partial<U
   return fields;
 }
 
-/** Apply OAuth corporate profile — full sync on first account creation / link, avatar+name on later logins. */
+/** Apply OAuth profile — only basic identity fields; work details are edited manually in profile. */
 export function mergeOAuthProfile(
   existing: UserRow | null,
   profile: CorporateProfile,
@@ -72,16 +72,18 @@ export function mergeOAuthProfile(
   };
 
   if (isFirstSync) {
-    Object.assign(updates, corporateProfileToDbFields(profile));
-    updates.profileSyncedAt = now;
+    if (profile.givenName) updates.givenName = profile.givenName;
+    if (profile.familyName) updates.familyName = profile.familyName;
     if (profile.preferredLocale && !existing?.preferredLocale) {
       updates.preferredLocale = profile.preferredLocale;
     }
+    const domain = extractEmailDomain(profile.email);
+    if (domain) updates.companyDomain = domain;
   }
 
   return updates;
 }
 
 export function isFirstProfileSync(existing: UserRow | null): boolean {
-  return !existing || !existing.profileSyncedAt;
+  return !existing?.givenName && !existing?.familyName && !existing?.name;
 }

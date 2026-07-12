@@ -812,7 +812,6 @@ courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), as
       certificate: z
         .object({
           enabled: z.boolean(),
-          titleTemplate: z.string().optional(),
         })
         .optional(),
     })
@@ -833,14 +832,15 @@ courseRoutes.put('/:id/completion-rules', requireRole('admin', 'instructor'), as
   }));
 
   if (body.data.certificate?.enabled) {
+    const certificateConfig = { enabled: true as const };
     const idx = toInsert.findIndex((r) => r.type === 'all_lessons_complete');
     if (idx >= 0) {
-      toInsert[idx].config = { ...toInsert[idx].config, certificate: body.data.certificate };
+      toInsert[idx].config = { ...toInsert[idx].config, certificate: certificateConfig };
     } else {
       toInsert.push({
         courseId,
         type: 'all_lessons_complete' as const,
-        config: { certificate: body.data.certificate },
+        config: { certificate: certificateConfig },
         isRequired: true,
       });
     }

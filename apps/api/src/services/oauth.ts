@@ -11,11 +11,9 @@ import {
   composeDisplayName,
   mergeOAuthProfile,
   isFirstProfileSync,
-  corporateProfileToDbFields,
 } from './user-profile';
 import { serializeUser } from './user-serializer';
 import {
-  getPublicAuthConfig,
   isEmailDomainAllowed,
   isOAuthProviderActive,
   resolveOAuthProvider,
@@ -24,28 +22,20 @@ import {
 
 export type OAuthProvider = 'google' | 'microsoft';
 
-interface OAuthIdentity {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl?: string;
-}
-
 const secret = new TextEncoder().encode(config.jwtSecret);
 
-const GOOGLE_OAUTH_SCOPES = [
-  'openid',
-  'email',
-  'profile',
-  'https://www.googleapis.com/auth/user.organization.read',
-  'https://www.googleapis.com/auth/user.phonenumbers.read',
-].join(' ');
+const GOOGLE_OAUTH_SCOPES = 'openid email profile';
 
 const MICROSOFT_OAUTH_SCOPES = 'openid profile email User.Read';
 
-export async function getEnabledProviders() {
-  const publicConfig = await getPublicAuthConfig();
-  return publicConfig.oauth;
+function redirectUri(provider: OAuthProvider) {
+  return `${config.oauth.apiUrl}/api/auth/oauth/${provider}/callback`;
+}
+
+function mapLocaleFromOAuth(value?: string): string | undefined {
+  if (!value) return undefined;
+  const base = value.split(/[-_]/)[0]?.toLowerCase();
+  return base || undefined;
 }
 
 async function createState(provider: OAuthProvider): Promise<string> {
@@ -65,184 +55,21 @@ async function verifyState(state: string, expectedProvider: OAuthProvider): Prom
   }
 }
 
-function redirectUri(provider: OAuthProvider) {
-  return `${config.oauth.apiUrl}/api/auth/oauth/${provider}/callback`;
-}
-
-function mapLocaleFromMicrosoft(value?: string): string | undefined {
-  if (!value) return undefined;
-  const base = value.split('-')[0]?.toLowerCase();
-  return base || undefined;
-}
-
-function pickGoogleOrganization(
-  organizations?: Array<{
-    name?: string;
-    title?: string;
-    department?: string;
-    location?: string;
-    domain?: string;
-    current?: boolean;
-    primary?: boolean;
-  }>,
-) {
-  if (!organizations?.length) return undefined;
-  return (
-    organizations.find((o) => o.current) ??
-    organizations.find((o) => o.primary) ??
-    organizations[0]
-  );
-}
-
-function pickGooglePhone(
-  phoneNumbers?: Array<{ value?: string; type?: string; canonicalForm?: string }>,
-  ...types: string[]
-) {
-  if (!phoneNumbers?.length) return undefined;
-  const normalized = types.map((t) => t.toLowerCase());
-  const match = phoneNumbers.find((p) => p.type && normalized.includes(p.type.toLowerCase()));
-  return match?.value ?? match?.canonicalForm ?? phoneNumbers[0]?.value ?? phoneNumbers[0]?.canonicalForm;
-}
-
-function pickGoogleEmployeeId(
-  externalIds?: Array<{ value?: string; type?: string }>,
-) {
-  if (!externalIds?.length) return undefined;
-  const orgId = externalIds.find((e) => e.type?.toLowerCase() === 'organization');
-  return orgId?.value ?? externalIds[0]?.value;
-}
-
-async function fetchGoogleCorporateProfile(
-  accessToken: string,
-  identity: OAuthIdentity,
-): Promise<CorporateProfile> {
-  const base: CorporateProfile = {
-    email: identity.email,
-    displayName: identity.name,
-    avatarUrl: identity.avatarUrl,
-  };
-
-  try {
-    const params = new URLSearchParams({
-      personFields: 'names,organizations,phoneNumbers,externalIds,addresses,photos',
-    });
-    const res = await fetch(`https://people.googleapis.com/v1/people/me?${params}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) return base;
-
-    const data = (await res.json()) as {
-      names?: Array<{ givenName?: string; familyName?: string; displayName?: string }>;
-      organizations?: Array<{
-        name?: string;
-        title?: string;
-        department?: string;
-        location?: string;
-        domain?: string;
-        current?: boolean;
-        primary?: boolean;
-      }>;
-      phoneNumbers?: Array<{ value?: string; type?: string; canonicalForm?: string }>;
-      externalIds?: Array<{ value?: string; type?: string }>;
-      addresses?: Array<{ city?: string; country?: string; type?: string }>;
-      photos?: Array<{ url?: string }>;
-    };
-
-    const name = data.names?.[0];
-    const org = pickGoogleOrganization(data.organizations);
-    const workAddress = data.addresses?.find((a) => a.type?.toLowerCase() === 'work') ?? data.addresses?.[0];
-
-    return {
-      email: identity.email,
-      displayName: name?.displayName ?? identity.name,
-      givenName: name?.givenName,
-      familyName: name?.familyName,
-      jobTitle: org?.title,
-      department: org?.department,
-      employeeId: pickGoogleEmployeeId(data.externalIds),
-      companyName: org?.name,
-      officeLocation: org?.location,
-      mobilePhone: pickGooglePhone(data.phoneNumbers, 'mobile', 'main'),
-      businessPhone: pickGooglePhone(data.phoneNumbers, 'work'),
-      city: workAddress?.city,
-      country: workAddress?.country,
-      avatarUrl: data.photos?.[0]?.url ?? identity.avatarUrl,
-    };
-  } catch {
-    return base;
-  }
-}
-
-async function fetchMicrosoftCorporateProfile(
-  accessToken: string,
-  identity: OAuthIdentity,
-): Promise<CorporateProfile> {
-  const select = [
-    'displayName',
-    'givenName',
-    'surname',
-    'mail',
-    'userPrincipalName',
-    'jobTitle',
-    'department',
-    'employeeId',
-    'companyName',
-    'officeLocation',
-    'mobilePhone',
-    'businessPhones',
-    'city',
-    'country',
-    'preferredLanguage',
-  ].join(',');
-
-  const res = await fetch(`https://graph.microsoft.com/v1.0/me?$select=${select}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!res.ok) {
-    return {
-      email: identity.email,
-      displayName: identity.name,
-      avatarUrl: identity.avatarUrl,
-    };
-  }
-
-  const data = (await res.json()) as {
-    displayName?: string;
-    givenName?: string;
-    surname?: string;
-    mail?: string;
-    userPrincipalName?: string;
-    jobTitle?: string;
-    department?: string;
-    employeeId?: string;
-    companyName?: string;
-    officeLocation?: string;
-    mobilePhone?: string;
-    businessPhones?: string[];
-    city?: string;
-    country?: string;
-    preferredLanguage?: string;
-  };
-
-  const email = data.mail ?? data.userPrincipalName ?? identity.email;
-
+function basicProfileFromIdentity(input: {
+  email: string;
+  displayName: string;
+  givenName?: string;
+  familyName?: string;
+  avatarUrl?: string;
+  preferredLocale?: string;
+}): CorporateProfile {
   return {
-    email,
-    displayName: data.displayName ?? identity.name,
-    givenName: data.givenName,
-    familyName: data.surname,
-    jobTitle: data.jobTitle,
-    department: data.department,
-    employeeId: data.employeeId,
-    companyName: data.companyName,
-    officeLocation: data.officeLocation,
-    mobilePhone: data.mobilePhone,
-    businessPhone: data.businessPhones?.[0],
-    city: data.city,
-    country: data.country,
-    preferredLocale: mapLocaleFromMicrosoft(data.preferredLanguage),
-    avatarUrl: identity.avatarUrl,
+    email: input.email,
+    displayName: input.displayName,
+    givenName: input.givenName,
+    familyName: input.familyName,
+    avatarUrl: input.avatarUrl,
+    preferredLocale: input.preferredLocale,
   };
 }
 
@@ -301,17 +128,27 @@ async function exchangeGoogleCode(code: string): Promise<CorporateProfile & { oa
   });
 
   if (!profileRes.ok) throw new Error('Google profile fetch failed');
-  const profile = (await profileRes.json()) as { id: string; email: string; name: string; picture?: string };
-
-  const identity: OAuthIdentity = {
-    id: profile.id,
-    email: profile.email,
-    name: profile.name,
-    avatarUrl: profile.picture,
+  const profile = (await profileRes.json()) as {
+    id: string;
+    email: string;
+    name: string;
+    given_name?: string;
+    family_name?: string;
+    picture?: string;
+    locale?: string;
   };
 
-  const corporate = await fetchGoogleCorporateProfile(tokens.access_token, identity);
-  return { ...corporate, oauthId: profile.id };
+  return {
+    ...basicProfileFromIdentity({
+      email: profile.email,
+      displayName: profile.name,
+      givenName: profile.given_name,
+      familyName: profile.family_name,
+      avatarUrl: profile.picture,
+      preferredLocale: mapLocaleFromOAuth(profile.locale),
+    }),
+    oauthId: profile.id,
+  };
 }
 
 async function exchangeMicrosoftCode(code: string): Promise<CorporateProfile & { oauthId: string }> {
@@ -334,26 +171,37 @@ async function exchangeMicrosoftCode(code: string): Promise<CorporateProfile & {
   if (!tokenRes.ok) throw new Error('Microsoft token exchange failed');
   const tokens = (await tokenRes.json()) as { access_token: string };
 
-  const idRes = await fetch('https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName', {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
-  });
+  const profileRes = await fetch(
+    'https://graph.microsoft.com/v1.0/me?$select=id,displayName,givenName,surname,mail,userPrincipalName,preferredLanguage',
+    {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    },
+  );
 
-  if (!idRes.ok) throw new Error('Microsoft profile fetch failed');
-  const idProfile = (await idRes.json()) as {
+  if (!profileRes.ok) throw new Error('Microsoft profile fetch failed');
+  const profile = (await profileRes.json()) as {
     id: string;
+    displayName?: string;
+    givenName?: string;
+    surname?: string;
     mail?: string;
-    userPrincipalName: string;
-    displayName: string;
+    userPrincipalName?: string;
+    preferredLanguage?: string;
   };
 
-  const identity: OAuthIdentity = {
-    id: idProfile.id,
-    email: idProfile.mail ?? idProfile.userPrincipalName,
-    name: idProfile.displayName,
-  };
+  const email = profile.mail ?? profile.userPrincipalName;
+  if (!email) throw new Error('Microsoft profile missing email');
 
-  const corporate = await fetchMicrosoftCorporateProfile(tokens.access_token, identity);
-  return { ...corporate, oauthId: idProfile.id };
+  return {
+    ...basicProfileFromIdentity({
+      email,
+      displayName: profile.displayName ?? email,
+      givenName: profile.givenName,
+      familyName: profile.surname,
+      preferredLocale: mapLocaleFromOAuth(profile.preferredLanguage),
+    }),
+    oauthId: profile.id,
+  };
 }
 
 async function findOrCreateOAuthUser(provider: OAuthProvider, profile: CorporateProfile, oauthId: string) {
@@ -364,8 +212,7 @@ async function findOrCreateOAuthUser(provider: OAuthProvider, profile: Corporate
     .limit(1);
 
   if (byOAuth) {
-    const firstSync = isFirstProfileSync(byOAuth);
-    const updates = mergeOAuthProfile(byOAuth, profile, firstSync);
+    const updates = mergeOAuthProfile(byOAuth, profile, isFirstProfileSync(byOAuth));
     const [updated] = await db
       .update(users)
       .set(updates)
@@ -377,9 +224,8 @@ async function findOrCreateOAuthUser(provider: OAuthProvider, profile: Corporate
   const [byEmail] = await db.select().from(users).where(eq(users.email, profile.email)).limit(1);
 
   if (byEmail) {
-    const firstSync = isFirstProfileSync(byEmail);
     const updates = {
-      ...mergeOAuthProfile(byEmail, profile, firstSync),
+      ...mergeOAuthProfile(byEmail, profile, isFirstProfileSync(byEmail)),
       oauthProvider: provider,
       oauthId,
     };
@@ -391,6 +237,7 @@ async function findOrCreateOAuthUser(provider: OAuthProvider, profile: Corporate
     return linked;
   }
 
+  const merged = mergeOAuthProfile(null, profile, true);
   const [created] = await db
     .insert(users)
     .values({
@@ -399,9 +246,11 @@ async function findOrCreateOAuthUser(provider: OAuthProvider, profile: Corporate
       oauthId,
       role: 'student',
       companyDomain: extractEmailDomain(profile.email),
-      ...corporateProfileToDbFields(profile),
-      profileSyncedAt: new Date(),
-      name: profile.displayName || composeDisplayName(profile.givenName, profile.familyName, profile.email),
+      ...merged,
+      name:
+        merged.name ??
+        profile.displayName ||
+        composeDisplayName(profile.givenName, profile.familyName, profile.email),
     })
     .returning();
 

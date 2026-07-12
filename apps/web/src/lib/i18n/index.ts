@@ -310,7 +310,6 @@ const sk: Messages = {
   'admin.deleteEnrollmentConfirm': 'Naozaj chcete používateľa úplne odstrániť z kurzu?',
   'admin.certEnabled':
     'Automaticky vystaviť certifikát po splnení podmienok z vyhodnotenia kurzu',
-  'admin.certTitleTemplate': 'Názov certifikátu',
   'admin.issuedCertificates': 'Vydané certifikáty',
   'admin.noCertificates': 'Zatiaľ nebol vydaný žiadny certifikát.',
   'admin.reportingHint':
@@ -540,8 +539,8 @@ const sk: Messages = {
   'profile.businessPhone': 'Pracovný telefón',
   'profile.city': 'Mesto',
   'profile.country': 'Krajina',
-  'profile.oauthSynced': 'Údaje synchronizované z firemného účtu (Google / Microsoft 365). Pracovné polia nie je možné meniť.',
   'profile.oauthProvider': 'Prihlásenie cez',
+  'profile.oauthManualHint': 'Pracovné údaje si doplníte sami v profile.',
 };
 
 const en: Messages = {
@@ -853,7 +852,6 @@ const en: Messages = {
   'admin.deleteEnrollmentConfirm': 'Permanently remove this user from the course?',
   'admin.certEnabled':
     'Automatically issue certificate when course evaluation requirements are met',
-  'admin.certTitleTemplate': 'Certificate title',
   'admin.issuedCertificates': 'Issued certificates',
   'admin.noCertificates': 'No certificates issued yet.',
   'admin.reportingHint':
@@ -1083,8 +1081,8 @@ const en: Messages = {
   'profile.businessPhone': 'Business phone',
   'profile.city': 'City',
   'profile.country': 'Country',
-  'profile.oauthSynced': 'Details synced from your corporate account (Google / Microsoft 365). Work fields cannot be edited.',
   'profile.oauthProvider': 'Signed in via',
+  'profile.oauthManualHint': 'You can fill in work details manually in your profile.',
 };
 
 const catalogs: Record<Locale, Messages> = { sk, en, cs: sk, de: en, hu: sk };
