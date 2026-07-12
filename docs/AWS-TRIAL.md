@@ -85,10 +85,10 @@ Na **serveri** (SSH):
 
 ```bash
 cd ~/youniversity2
-git fetch origin --tags
-git pull --ff-only origin main
 ./deploy/aws-trial-update.sh
 ```
+
+Skript sám spraví `git pull` a pri HTTPS (`.env` s `https://` URL) automaticky nastaví `docker/nginx.https.conf`.
 
 **Pomalý alebo „zamrznutý“ build?** Na 1 GB Lightsail je normálne, že krok `web build` + `exporting layers` trvá niekoľko minút. Skript teraz používa Docker cache (rýchlejšie opakované deploye). Čistý rebuild len keď treba:
 

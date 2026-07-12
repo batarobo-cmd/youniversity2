@@ -11,6 +11,11 @@ git fetch origin main
 git restore deploy/aws-trial-update.sh deploy/aws-trial-bootstrap.sh 2>/dev/null || true
 git pull --ff-only origin main
 
+if grep -qE '^(PUBLIC_URL|WEB_URL|API_URL)=https://' .env 2>/dev/null; then
+  echo "==> HTTPS server — aplikujem docker/nginx.https.conf"
+  cp docker/nginx.https.conf docker/nginx.conf
+fi
+
 export VITE_APP_VERSION="$(git rev-parse --short HEAD)"
 echo "==> Verzia buildu: ${VITE_APP_VERSION}"
 
