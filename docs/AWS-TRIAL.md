@@ -135,11 +135,58 @@ docker compose -f docker-compose.prod.yml up -d
 
 Tým prestaneš platiť (okrem prípadného úložiska snapshotov).
 
-## HTTPS (voliteľné)
+## HTTPS s vlastnou doménou
+
+A záznamy na Websupport stačia ako prvý krok:
+
+| Host | Typ | Hodnota |
+|------|-----|---------|
+| `elearning.batacon.sk` | A | `52.58.37.65` |
+| `elearning.batacon.eu` | A | `52.58.37.65` |
+
+**Ešte musíš:**
+
+1. **Lightsail firewall** — otvor porty **80** (HTTP) a **443** (HTTPS)  
+   Lightsail → instance → **Networking** → IPv4 firewall → Add rule
+
+2. **Počkať na DNS propagáciu** (5–60 min, niekedy dlhšie):
+   ```bash
+   dig +short elearning.batacon.sk
+   dig +short elearning.batacon.eu
+   ```
+   Obe musia vrátiť `52.58.37.65`.
+
+3. **Na serveri** stiahni najnovší kód a spusti HTTPS skript:
+   ```bash
+   cd ~/youniversity2
+   git pull --ff-only origin main
+   chmod +x deploy/aws-setup-https.sh
+   CERTBOT_EMAIL=tvoj@email.sk ./deploy/aws-setup-https.sh
+   ```
+
+   Skript:
+   - vydá Let's Encrypt certifikát pre obe domény
+   - prepne nginx na HTTPS
+   - upraví `.env` (`https://elearning.batacon.sk`, `COOKIE_SECURE=true`)
+   - reštartuje web + api
+
+4. **Otestuj v prehliadači:**
+   - https://elearning.batacon.sk
+   - https://elearning.batacon.eu
+
+**Primárna doména** je `elearning.batacon.sk` (OAuth redirecty, cookies). Druhá doména funguje tiež, obe majú rovnaký certifikát.
+
+**Obnova certifikátu** (pridaj do cron na serveri):
+```bash
+sudo crontab -e
+# 0 3 * * * certbot renew --quiet && cd ~/youniversity2 && docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload
+```
+
+## HTTPS (starý skratkový popis)
 
 Pre skúšobný týždeň stačí HTTP. Pre HTTPS neskôr:
 - Lightsail load balancer + certifikát, alebo
-- Caddy / Certbot na inštancii s vlastnou doménou
+- `./deploy/aws-setup-https.sh` s Certbot (odporúčané pre tento projekt)
 
 ## Riešenie problémov
 
