@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
+import { canStudentViewCourse } from '../services/course-access';
 import {
   authorizePresentationFileAccess,
   signPresentationAccessToken,
@@ -321,10 +322,15 @@ mediaRoutes.post('/presentations', authMiddleware, requireRole('admin'), async (
 });
 
 mediaRoutes.get('/scorm/:courseId/:packageId/:path{.+}', authMiddleware, async (c) => {
+  const user = c.get('user') as AuthUser;
   const courseId = c.req.param('courseId');
   const packageId = c.req.param('packageId');
   const rel = decodeURIComponent(c.req.param('path') ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
   if (!rel || rel.includes('..')) return c.json({ error: 'Invalid path' }, 400);
+
+  if (!(await canStudentViewCourse(user, courseId, c))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   const [pkg] = await db
     .select({ storagePrefix: scormPackages.storagePrefix })

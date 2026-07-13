@@ -11,3 +11,8 @@ Thumbs.db
 coverage/
 uploads/
 *.db
+cookies.txt
+tmp-*.json
+tmp-*.txt
+tmp-*.html
+scorm-sample-*.zip

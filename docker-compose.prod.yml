@@ -26,6 +26,7 @@ services:
     container_name: you2-api
     env_file: .env
     environment:
+      NODE_ENV: production
       PORT: 3001
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://youniversity:${POSTGRES_PASSWORD:-youniversity}@postgres:5432/youniversity2
