@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto, invalidate } from '$app/navigation';
-  import { isAuthenticated, isAdmin, locale } from '$lib/stores/auth';
+  import { isAuthenticated, showStaffNav, locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { lastMessage } from '$lib/stores/realtime';
   import { shouldRefreshDashboard } from '$lib/live-dashboard';
@@ -64,8 +64,8 @@
     const unsubAuth = isAuthenticated.subscribe((auth) => {
       if (!auth) goto('/');
     });
-    const unsubAdmin = isAdmin.subscribe((admin) => {
-      if (admin) goto('/dashboard');
+    const unsubStaff = showStaffNav.subscribe((show) => {
+      if (show) goto('/dashboard');
     });
 
     const unsubWs = lastMessage.subscribe((msg) => {
@@ -76,7 +76,7 @@
 
     return () => {
       unsubAuth();
-      unsubAdmin();
+      unsubStaff();
       unsubWs();
     };
   });

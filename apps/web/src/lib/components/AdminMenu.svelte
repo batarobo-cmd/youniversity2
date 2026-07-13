@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { locale, ensureStudentViewCookie } from '$lib/stores/auth';
   import { isAdminUser, isPlatformAdminUser } from '$lib/stores/auth';
@@ -23,7 +22,8 @@
     popoverStyle = `top:${rect.bottom + 6}px;left:${rect.left + rect.width / 2}px;`;
   }
 
-  function toggle() {
+  function toggle(e: MouseEvent) {
+    e.stopPropagation();
     open = !open;
     if (open) {
       updatePopoverPosition();
@@ -34,13 +34,13 @@
     open = false;
   }
 
-  function navigateTo(href: string) {
+  function handleMenuItemClick(e: MouseEvent) {
+    e.stopPropagation();
     ensureStudentViewCookie();
-    close();
-    void goto(href);
+    queueMicrotask(() => close());
   }
 
-  function handleWindowPointerDown(e: PointerEvent) {
+  function handleWindowClick(e: MouseEvent) {
     if (!open || !rootEl) return;
     const target = e.target as Node;
     if (rootEl.contains(target)) return;
@@ -58,14 +58,19 @@
 
   const adminSectionActive = $derived(isActive('/dashboard/admin'));
 
+  let previousPathname = $page.url.pathname;
+
   $effect(() => {
-    $page.url.pathname;
-    close();
+    const pathname = $page.url.pathname;
+    if (pathname !== previousPathname) {
+      previousPathname = pathname;
+      close();
+    }
   });
 </script>
 
 <svelte:window
-  onpointerdown={handleWindowPointerDown}
+  onclick={handleWindowClick}
   onkeydown={handleKeydown}
   onresize={updatePopoverPosition}
   onscroll={updatePopoverPosition}
@@ -105,34 +110,34 @@
       style={popoverStyle}
       role="menu"
     >
-      <button
-        type="button"
+      <a
+        href="/dashboard/admin/manage"
         class="admin-menu-item"
         class:admin-menu-item--active={isActive('/dashboard/admin/manage')}
         role="menuitem"
-        onclick={() => navigateTo('/dashboard/admin/manage')}
+        onclick={handleMenuItemClick}
       >
         {t('admin.menuCoursesCategories', $locale)}
-      </button>
+      </a>
       {#if showPlatformAdmin}
-        <button
-          type="button"
+        <a
+          href="/dashboard/admin/users"
           class="admin-menu-item"
           class:admin-menu-item--active={isActive('/dashboard/admin/users')}
           role="menuitem"
-          onclick={() => navigateTo('/dashboard/admin/users')}
+          onclick={handleMenuItemClick}
         >
           {t('admin.menuUsers', $locale)}
-        </button>
-        <button
-          type="button"
+        </a>
+        <a
+          href="/dashboard/admin/auth"
           class="admin-menu-item"
           class:admin-menu-item--active={isActive('/dashboard/admin/auth')}
           role="menuitem"
-          onclick={() => navigateTo('/dashboard/admin/auth')}
+          onclick={handleMenuItemClick}
         >
           {t('admin.menuAuth', $locale)}
-        </button>
+        </a>
       {/if}
     </div>
   {/if}

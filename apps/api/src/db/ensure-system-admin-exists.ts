@@ -10,6 +10,29 @@ export async function ensureSystemAdminExists(): Promise<void> {
   const total = await countSystemAdmins();
   if (total > 0) return;
 
+  const bootstrapEmail = process.env.BOOTSTRAP_SYSTEM_ADMIN_EMAIL?.trim().toLowerCase();
+
+  if (bootstrapEmail) {
+    const [user] = await db.select().from(users).where(eq(users.email, bootstrapEmail)).limit(1);
+    if (user) {
+      await db
+        .update(users)
+        .set({
+          role: 'system_admin',
+          isSuspended: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+      console.warn(
+        `[system-admin] Promoted ${bootstrapEmail} to system_admin (BOOTSTRAP_SYSTEM_ADMIN_EMAIL).`,
+      );
+      return;
+    }
+    console.error(
+      `[system-admin] BOOTSTRAP_SYSTEM_ADMIN_EMAIL=${bootstrapEmail} not found in database.`,
+    );
+  }
+
   console.error('[system-admin] CRITICAL: No system administrator exists in the database.');
 
   if (!useLocalDevCredentials()) return;

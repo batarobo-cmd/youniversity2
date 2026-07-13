@@ -3,7 +3,7 @@ import { token, locale, studentViewMode, API_BASE } from './stores/auth';
 import { getTabSessionId } from './session';
 import { STUDENT_VIEW_HEADER } from '@youniversity2/shared';
 
-function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const t = get(token);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -165,6 +165,46 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  scormLaunch: (data: {
+    lessonId: string;
+    packageId: string;
+    scoId: string;
+    version: 'scorm_12' | 'scorm_2004';
+  }) =>
+    request<{ attemptId: string; cmi: Record<string, unknown> }>('/api/scorm/launch', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  scormCommit: (data: {
+    attemptId: string;
+    cmi: Record<string, unknown>;
+    terminated?: boolean;
+  }) =>
+    request<{
+      ok: boolean;
+      derived?: { isComplete?: boolean; percentComplete?: number };
+    }>('/api/scorm/commit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  /** Best-effort commit during page unload (fetch keepalive). */
+  scormCommitKeepalive: (data: {
+    attemptId: string;
+    cmi: Record<string, unknown>;
+    terminated?: boolean;
+  }) => {
+    if (typeof window === 'undefined') return;
+    void fetch(`${API_BASE}/api/scorm/commit`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: authHeaders(),
+      body: JSON.stringify(data),
+      keepalive: true,
+    }).catch(() => {});
+  },
 
   getCourseProgress: (courseId: string) =>
     request<unknown[]>(`/api/progress/course/${courseId}`),

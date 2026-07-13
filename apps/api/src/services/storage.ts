@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { config } from '../config';
+import { lookup as mimeLookup } from 'mime-types';
 
 const ALLOWED_VIDEO_TYPES = new Set([
   'video/mp4',
@@ -50,6 +51,13 @@ const PRESENTATION_EXTENSION_TO_MIME: Record<string, string> = {
 };
 
 const MAX_PRESENTATION_BYTES = 100 * 1024 * 1024;
+
+const ALLOWED_SCORM_ZIP_TYPES = new Set([
+  'application/zip',
+  'application/x-zip-compressed',
+  'multipart/x-zip',
+]);
+const MAX_SCORM_ZIP_BYTES = 500 * 1024 * 1024;
 
 let bucketReady = false;
 
@@ -163,6 +171,14 @@ export function isAllowedPresentationSize(size: number) {
   return size > 0 && size <= MAX_PRESENTATION_BYTES;
 }
 
+export function isAllowedScormZipType(contentType: string) {
+  return ALLOWED_SCORM_ZIP_TYPES.has(contentType.toLowerCase());
+}
+
+export function isAllowedScormZipSize(size: number) {
+  return size > 0 && size <= MAX_SCORM_ZIP_BYTES;
+}
+
 export async function uploadCoursePresentation(
   courseId: string,
   fileName: string,
@@ -205,6 +221,68 @@ export async function getCoursePresentationObject(fileKey: string) {
   } catch {
     return null;
   }
+}
+
+function sanitizeScormPath(path: string) {
+  const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized) return null;
+  if (normalized.includes('..')) return null;
+  // Disallow absolute URLs masquerading as paths
+  if (/^[a-zA-Z]+:\/\//.test(normalized)) return null;
+  return normalized;
+}
+
+export function inferScormContentType(filePath: string) {
+  const mime = mimeLookup(filePath);
+  return (typeof mime === 'string' && mime) || 'application/octet-stream';
+}
+
+export async function uploadScormAsset(
+  storagePrefix: string,
+  relativePath: string,
+  body: Uint8Array,
+) {
+  await ensureBucket();
+
+  const safeRel = sanitizeScormPath(relativePath);
+  if (!safeRel) return null;
+
+  const prefix = storagePrefix.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!prefix || prefix.includes('..')) return null;
+
+  const fileKey = `${prefix}${safeRel}`;
+  const contentType = inferScormContentType(fileKey);
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: config.s3.bucket,
+      Key: fileKey,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+
+  return { fileKey, contentType };
+}
+
+export async function getScormAssetObject(fileKey: string) {
+  if (!fileKey || fileKey.includes('..')) return null;
+  if (!fileKey.startsWith('course-scorm/')) return null;
+
+  try {
+    return await s3.send(
+      new GetObjectCommand({
+        Bucket: config.s3.bucket,
+        Key: fileKey,
+      }),
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function scormStoragePrefix(courseId: string, packageId: string) {
+  return `course-scorm/${courseId}/${packageId}/`;
 }
 
 export async function uploadCertificatePdf(courseId: string, certificateId: string, body: Uint8Array) {

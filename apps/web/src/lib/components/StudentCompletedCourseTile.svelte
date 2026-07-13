@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
@@ -44,6 +45,17 @@
     if (!iso) return '';
     return new Date(iso).toLocaleDateString($locale, { dateStyle: 'medium' });
   }
+
+  function openCourse(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = `/courses/${course.id}`;
+    const before = window.location.pathname;
+    void goto(target);
+    setTimeout(() => {
+      if (window.location.pathname === before) window.location.assign(target);
+    }, 80);
+  }
 </script>
 
 <article class="completed-course-tile" class:completed-course-tile--locked={!canOpen}>
@@ -56,7 +68,7 @@
 
   <h3 class="completed-course-tile-title">
     {#if canOpen}
-      <a href="/courses/{course.id}">{course.title}</a>
+      <a href="/courses/{course.id}" onpointerdowncapture={openCourse} onclick={openCourse}>{course.title}</a>
     {:else}
       <span>{course.title}</span>
     {/if}
@@ -120,7 +132,14 @@
   </div>
 
   {#if canOpen}
-    <a href="/courses/{course.id}" class="btn btn-sm completed-course-tile-action">{t('courses.open', $locale)} →</a>
+    <a
+      href="/courses/{course.id}"
+      class="btn btn-sm completed-course-tile-action"
+      onpointerdowncapture={openCourse}
+      onclick={openCourse}
+    >
+      {t('courses.open', $locale)} →
+    </a>
   {:else}
     <span class="completed-course-tile-access-closed">{t('courses.accessClosed', $locale)}</span>
   {/if}

@@ -11,6 +11,7 @@ import { progressRoutes } from './routes/progress';
 import { courseContentRoutes } from './routes/course-content';
 import { mediaRoutes } from './routes/media';
 import { certificateRoutes } from './routes/certificates';
+import { scormRoutes } from './routes/scorm';
 import { config } from './config';
 import {
   initRealtimeHub,
@@ -47,6 +48,7 @@ app.route('/api/enrollments', enrollmentRoutes);
 app.route('/api/progress', progressRoutes);
 app.route('/api/media', mediaRoutes);
 app.route('/api/certificates', certificateRoutes);
+app.route('/api/scorm', scormRoutes);
 
 await initRealtimeHub();
 try {

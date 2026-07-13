@@ -5,6 +5,7 @@
   import { normalizeActivityType } from '$lib/activity-types';
   import VideoActivityFields from '$lib/components/VideoActivityFields.svelte';
   import PresentationActivityFields from '$lib/components/PresentationActivityFields.svelte';
+  import ScormActivityFields from '$lib/components/ScormActivityFields.svelte';
   import {
     configFromVideoForm,
     emptyVideoForm,
@@ -20,6 +21,13 @@
     validatePresentationForm,
     type PresentationFormState,
   } from '$lib/presentation-config';
+  import {
+    configFromScormForm,
+    emptyScormForm,
+    scormFormFromConfig,
+    validateScormForm,
+    type ScormFormState,
+  } from '$lib/scorm-config';
   import type { Locale } from '@youniversity2/shared';
 
   type ActivityRow = {
@@ -68,6 +76,8 @@
   let editVideoForm = $state<VideoFormState>(emptyVideoForm());
   let newPresentationForm = $state<PresentationFormState>(emptyPresentationForm());
   let editPresentationForm = $state<PresentationFormState>(emptyPresentationForm());
+  let newScormForm = $state<ScormFormState>(emptyScormForm());
+  let editScormForm = $state<ScormFormState>(emptyScormForm());
   let dragModuleId = $state<string | null>(null);
   let dragActivity = $state<{ id: string; moduleId: string } | null>(null);
   let dropTargetModuleId = $state<string | null>(null);
@@ -130,6 +140,10 @@
     return normalizeActivityType(type) === 'presentation';
   }
 
+  function isScormType(type: string) {
+    return normalizeActivityType(type) === 'scorm';
+  }
+
   function videoValidationMessages() {
     return {
       uploadRequired: t('admin.videoUploadRequired', locale),
@@ -146,6 +160,13 @@
       embedRequired: t('admin.presentationEmbedRequired', locale),
       embedInvalid: t('admin.presentationEmbedInvalid', locale),
       slideMinRequired: t('admin.presentationSlideMinRequired', locale),
+    };
+  }
+
+  function scormValidationMessages() {
+    return {
+      uploadRequired: t('admin.scormUploadRequired', locale),
+      scoRequired: t('admin.scormScoRequired', locale),
     };
   }
 
@@ -181,6 +202,10 @@
 
     if (isPresentationType(newActivityType)) {
       return validatePresentationForm(newPresentationForm, presentationValidationMessages());
+    }
+
+    if (isScormType(newActivityType)) {
+      return validateScormForm(newScormForm, scormValidationMessages());
     }
 
     return null;
@@ -271,6 +296,7 @@
     newActivityDescription = '';
     newVideoForm = emptyVideoForm();
     newPresentationForm = emptyPresentationForm();
+    newScormForm = emptyScormForm();
   }
 
   async function addActivity(moduleId: string) {
@@ -298,7 +324,9 @@
       ? configFromVideoForm(newVideoForm)
       : isPresentationType(newActivityType)
         ? configFromPresentationForm(newPresentationForm)
-        : undefined;
+        : isScormType(newActivityType)
+          ? configFromScormForm(newScormForm)
+          : undefined;
 
     await run(async () => {
       await serverMutate('apiMutation', `/api/modules/${moduleId}/activities`, 'POST', {
@@ -323,17 +351,27 @@
     if (isVideoType(activity.type)) {
       editVideoForm = videoFormFromConfig(cfg);
       editPresentationForm = emptyPresentationForm();
+      editScormForm = emptyScormForm();
       editConfigUrl = '';
       return;
     }
     if (isPresentationType(activity.type)) {
       editPresentationForm = presentationFormFromConfig(cfg);
       editVideoForm = emptyVideoForm();
+      editScormForm = emptyScormForm();
+      editConfigUrl = '';
+      return;
+    }
+    if (isScormType(activity.type)) {
+      editScormForm = scormFormFromConfig(cfg);
+      editVideoForm = emptyVideoForm();
+      editPresentationForm = emptyPresentationForm();
       editConfigUrl = '';
       return;
     }
     editVideoForm = emptyVideoForm();
     editPresentationForm = emptyPresentationForm();
+    editScormForm = emptyScormForm();
     editConfigUrl = (cfg.audioUrl as string) || '';
   }
 
@@ -370,6 +408,13 @@
         return;
       }
       config = configFromPresentationForm(editPresentationForm);
+    } else if (isScormType(activity.type)) {
+      const scormError = validateScormForm(editScormForm, scormValidationMessages());
+      if (scormError) {
+        error = scormError;
+        return;
+      }
+      config = configFromScormForm(editScormForm);
     } else {
       config = configForType(activity.type, editConfigUrl);
     }
@@ -661,6 +706,8 @@
                     <VideoActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editVideoForm} />
                   {:else if isPresentationType(activity.type)}
                     <PresentationActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editPresentationForm} />
+                  {:else if isScormType(activity.type)}
+                    <ScormActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editScormForm} />
                   {:else if showUrlField(activity.type)}
                     <label>
                       <span>{t('admin.activityMediaUrl', locale)}</span>
@@ -700,7 +747,7 @@
           <div
             class="activity-editor-add-form"
             class:activity-editor-add-form--media={
-              isVideoType(newActivityType) || isPresentationType(newActivityType)
+              isVideoType(newActivityType) || isPresentationType(newActivityType) || isScormType(newActivityType)
             }
           >
             <div class="activity-editor-add-form-body">
@@ -743,6 +790,8 @@
                     disabled={saving}
                     bind:form={newPresentationForm}
                   />
+                {:else if isScormType(newActivityType)}
+                  <ScormActivityFields courseId={courseId} {locale} disabled={saving} bind:form={newScormForm} />
                 {/if}
               {/if}
             </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
@@ -43,6 +44,18 @@
     const to = course.endsAt ? formatDateTime(course.endsAt) : t('courses.noEndDate', $locale);
     return t('courses.availablePeriod', $locale).replace('{from}', from).replace('{to}', to);
   }
+
+  function openCourse(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = `/courses/${course.id}`;
+    const before = window.location.pathname;
+    void goto(target);
+    // Hard fallback for rare cases where client-side navigation doesn't start.
+    setTimeout(() => {
+      if (window.location.pathname === before) window.location.assign(target);
+    }, 80);
+  }
 </script>
 
 <article
@@ -54,7 +67,7 @@
   <div class="course-card-info">
     <h3>
       {#if canOpen}
-        <a href="/courses/{course.id}">{course.title}</a>
+        <a href="/courses/{course.id}" onpointerdowncapture={openCourse} onclick={openCourse}>{course.title}</a>
       {:else}
         <span>{course.title}</span>
       {/if}
@@ -109,6 +122,13 @@
     {/if}
   </div>
   {#if canOpen}
-    <a href="/courses/{course.id}" class="btn btn-sm course-card-action">{t('courses.open', $locale)} →</a>
+    <a
+      href="/courses/{course.id}"
+      class="btn btn-sm course-card-action"
+      onpointerdowncapture={openCourse}
+      onclick={openCourse}
+    >
+      {t('courses.open', $locale)} →
+    </a>
   {/if}
 </article>

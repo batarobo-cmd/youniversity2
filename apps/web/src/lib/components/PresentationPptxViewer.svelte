@@ -523,7 +523,7 @@
 
   $effect(() => {
 
-    if (!slideTimerActive || loading) {
+    if (!active || !slideTimerActive || loading) {
 
       if (tickTimer) {
 

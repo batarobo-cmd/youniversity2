@@ -703,7 +703,7 @@
     try {
       await serverMutate('apiMutation', `/api/courses/${courseId}/reporting/${userId}/reset-progress`, 'POST');
       message = t('admin.saved', $locale);
-      await refreshCourse();
+      await loadReporting(true);
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -1222,7 +1222,7 @@
                           class="btn btn-ghost btn-sm reporting-reset-btn"
                           disabled={saving || !row.enrollment}
                           title={t('admin.reportingResetProgress', $locale)}
-                          onclick={() => resetStudentProgress(row.user.id)}
+                          onclick={() => void resetStudentProgress(row.user.id)}
                         >
                           {t('admin.reportingResetProgressShort', $locale)}
                         </button>

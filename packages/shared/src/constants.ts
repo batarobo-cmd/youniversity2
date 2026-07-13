@@ -40,6 +40,7 @@ export const ACTIVITY_TYPES = [
   'text',
   'test',
   'certificate',
+  'scorm',
 ] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 

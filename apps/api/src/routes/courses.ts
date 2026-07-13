@@ -27,6 +27,7 @@ import { canStudentViewCourse, isEnrollmentListedForStudent } from '../services/
 import { effectiveRole } from '../services/student-view';
 import { getReportingProgressState } from '../services/enrollment-achievement';
 import { evaluateCourseCompletion } from '../services/completion';
+import { clearCourseLessonProgress } from '../services/enrollment-progress';
 
 const createCourseSchema = z.object({
   slug: z.string().min(2).max(255),
@@ -684,19 +685,7 @@ courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin'),
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return c.json({ error: 'Course not found' }, 404);
 
-  const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId));
-  const moduleIds = modules.map((m) => m.id);
-  const allLessons =
-    moduleIds.length > 0
-      ? await db.select().from(lessons).where(inArray(lessons.moduleId, moduleIds))
-      : [];
-  const lessonIds = allLessons.filter((l) => l.type !== 'text').map((l) => l.id);
-
-  if (lessonIds.length > 0) {
-    await db
-      .delete(lessonProgress)
-      .where(and(eq(lessonProgress.userId, userId), inArray(lessonProgress.lessonId, lessonIds)));
-  }
+  const resetLessonCount = await clearCourseLessonProgress(userId, courseId);
 
   const [existingEnrollment] = await db
     .select()
@@ -762,7 +751,7 @@ courseRoutes.post('/:id/reporting/:userId/reset-progress', requireRole('admin'),
   return c.json({
     ok: true,
     enrollment: updatedEnrollment ?? null,
-    resetLessonCount: lessonIds.length,
+    resetLessonCount,
   });
 });
 

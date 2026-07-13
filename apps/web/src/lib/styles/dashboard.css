@@ -168,6 +168,8 @@
   flex-shrink: 0;
   align-self: center;
   white-space: nowrap;
+  position: relative;
+  z-index: 2;
 }
 
 .course-card--future {
@@ -201,6 +203,8 @@
   color: var(--color-text);
   text-decoration: none;
   transition: color var(--duration-fast);
+  position: relative;
+  z-index: 2;
 }
 
 .course-card-info h3 a:hover {

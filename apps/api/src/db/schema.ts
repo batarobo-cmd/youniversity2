@@ -19,6 +19,7 @@ export const lessonTypeEnum = pgEnum('lesson_type', [
   'text',
   'test',
   'certificate',
+  'scorm',
   'quiz',
   'embed',
 ]);
@@ -270,6 +271,46 @@ export const activityEvents = pgTable('activity_events', {
   payload: jsonb('payload').notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const scormPackages = pgTable('scorm_packages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  courseId: uuid('course_id')
+    .notNull()
+    .references(() => courses.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 500 }).notNull().default('SCORM package'),
+  /** 'scorm_12' | 'scorm_2004' */
+  version: varchar('version', { length: 32 }).notNull(),
+  /** Parsed manifest (organizations/resources + derived SCO list). */
+  manifest: jsonb('manifest').$type<Record<string, unknown>>().notNull().default({}),
+  /** Base storage prefix, e.g. course-scorm/{courseId}/{packageId}/ */
+  storagePrefix: varchar('storage_prefix', { length: 500 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const scormAttempts = pgTable(
+  'scorm_attempts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lessonId: uuid('lesson_id')
+      .notNull()
+      .references(() => lessons.id, { onDelete: 'cascade' }),
+    packageId: uuid('package_id')
+      .notNull()
+      .references(() => scormPackages.id, { onDelete: 'cascade' }),
+    scoId: varchar('sco_id', { length: 255 }).notNull(),
+    version: varchar('version', { length: 32 }).notNull(),
+    /** Runtime data store for GetValue/SetValue. */
+    cmi: jsonb('cmi').$type<Record<string, unknown>>().notNull().default({}),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    lastCommitAt: timestamp('last_commit_at', { withTimezone: true }),
+    terminatedAt: timestamp('terminated_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('scorm_attempt_user_lesson_sco_idx').on(t.userId, t.lessonId, t.scoId)],
+);
 
 export const loginEvents = pgTable('login_events', {
   id: uuid('id').primaryKey().defaultRandom(),

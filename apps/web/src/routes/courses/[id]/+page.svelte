@@ -21,6 +21,18 @@
   } from '$lib/presentation-config';
   import PresentationPptxViewer from '$lib/components/PresentationPptxViewer.svelte';
   import PresentationPdfViewer from '$lib/components/PresentationPdfViewer.svelte';
+  import ScormPlayer, { type ScormSessionState } from '$lib/components/ScormPlayer.svelte';
+  import { api } from '$lib/api';
+  import {
+    buildScormAssetUrl,
+    prepareScormCmiForResume,
+    scormLaunchConfigFromLesson,
+    scormLaunchKey,
+  } from '$lib/scorm-config';
+  import {
+    applyScormCompletionMarkers,
+    scormCmiIndicatesComplete,
+  } from '@youniversity2/shared';
   import type { PageData } from './$types';
   import '$lib/styles/courses.css';
 
@@ -66,6 +78,9 @@
   } | null>(null);
   let presentationSyncTimer: ReturnType<typeof setTimeout> | null = null;
   let mountedPresentationIds = $state<Set<string>>(new Set());
+  let mountedScormIds = $state<Set<string>>(new Set());
+  let scormLaunchTokens = $state<Record<string, number>>({});
+  let scormSessions = $state<Record<string, ScormSessionState>>({});
 
   const PRESENTATION_PROGRESS_SYNC_MS = 800;
 
@@ -112,6 +127,12 @@
         selfId &&
         payload?.userId === selfId
       ) {
+        if ((payload as { reset?: boolean }).reset) {
+          scormSessions = {};
+          mountedScormIds = new Set();
+          scormLaunchTokens = {};
+          void refreshCourse();
+        }
         return;
       }
 
@@ -504,6 +525,10 @@
       if (activityType(first.lesson) === 'presentation') {
         markPresentationMounted(first.lesson.id as string);
       }
+      if (activityType(first.lesson) === 'scorm') {
+        markScormMounted(first.lesson.id as string);
+        void ensureScormSession(first.lesson);
+      }
       activeLesson = first.lesson;
     }
   });
@@ -537,6 +562,165 @@
     mountedPresentationIds = new Set([...mountedPresentationIds, lessonId]);
   }
 
+  function markScormMounted(lessonId: string) {
+    if (!mountedScormIds.has(lessonId)) {
+      mountedScormIds = new Set([...mountedScormIds, lessonId]);
+    }
+  }
+
+  function reloadScormPlayer(lessonId: string) {
+    scormLaunchTokens = {
+      ...scormLaunchTokens,
+      [lessonId]: (scormLaunchTokens[lessonId] ?? 0) + 1,
+    };
+  }
+
+  async function commitScormSession(lessonId: string) {
+    const sess = scormSessions[lessonId];
+    const cfg = scormLaunchConfig(lessonById(lessonId) ?? {});
+    if (!sess?.attemptId || Object.keys(sess.cmi).length === 0) return;
+    const cmi = { ...sess.cmi };
+    if (cfg?.version === 'scorm_2004') {
+      cmi['cmi.exit'] = 'suspend';
+    } else {
+      cmi['cmi.core.exit'] = 'suspend';
+    }
+    try {
+      await api.scormCommit({
+        attemptId: sess.attemptId,
+        cmi,
+        terminated: false,
+      });
+    } catch {
+      // best effort
+    }
+  }
+
+  function scormActivities() {
+    return sortedModules().flatMap((mod) =>
+      sortedModuleActivities(mod).filter((item) => activityType(item) === 'scorm'),
+    );
+  }
+
+  function scormLaunchConfig(lesson: Record<string, unknown>) {
+    return scormLaunchConfigFromLesson(lesson, courseId);
+  }
+
+  async function ensureScormSession(lesson: Record<string, unknown>) {
+    const cfg = scormLaunchConfig(lesson);
+    if (!cfg) return;
+
+    const lessonId = cfg.lessonId;
+    const launchKey = scormLaunchKey(cfg);
+    const existing = scormSessions[lessonId];
+    if (existing?.launching && existing.launchKey === launchKey) return;
+
+    const hadSession = Boolean(existing?.attemptId && existing.launchKey === launchKey);
+    if (!hadSession) {
+      scormSessions = {
+        ...scormSessions,
+        [lessonId]: {
+          attemptId: '',
+          cmi: {},
+          iframeSrc: '',
+          launchKey,
+          launching: true,
+          error: '',
+        },
+      };
+    }
+
+    try {
+      const launch = await api.scormLaunch({
+        lessonId: cfg.lessonId,
+        packageId: cfg.packageId,
+        scoId: cfg.scoId,
+        version: cfg.version,
+      });
+
+      const sessionCmi = prepareScormCmiForResume(cfg.version, launch.cmi ?? {});
+
+      if (scormCmiIndicatesComplete(cfg.version, sessionCmi)) {
+        const completeCmi = { ...sessionCmi };
+        applyScormCompletionMarkers(cfg.version, completeCmi);
+        try {
+          const commit = await api.scormCommit({
+            attemptId: launch.attemptId,
+            cmi: completeCmi,
+            terminated: true,
+          });
+          await handleScormCommitted(lessonId, {
+            isComplete: commit.derived?.isComplete,
+            percentComplete: commit.derived?.percentComplete,
+          });
+          scormSessions = {
+            ...scormSessions,
+            [lessonId]: {
+              attemptId: launch.attemptId,
+              cmi: completeCmi,
+              iframeSrc:
+                existing?.iframeSrc ||
+                buildScormAssetUrl(cfg.courseId, cfg.packageId, cfg.launchPath),
+              launchKey,
+              launching: false,
+              error: '',
+            },
+          };
+          return;
+        } catch {
+          // fall through with launch session
+        }
+      }
+
+      scormSessions = {
+        ...scormSessions,
+        [lessonId]: {
+          attemptId: launch.attemptId,
+          cmi: sessionCmi,
+          iframeSrc:
+            existing?.iframeSrc ||
+            buildScormAssetUrl(cfg.courseId, cfg.packageId, cfg.launchPath),
+          launchKey,
+          launching: false,
+          error: '',
+        },
+      };
+    } catch (e) {
+      scormSessions = {
+        ...scormSessions,
+        [lessonId]: {
+          attemptId: '',
+          cmi: {},
+          iframeSrc: '',
+          launchKey,
+          launching: false,
+          error: (e as Error).message,
+        },
+      };
+    }
+  }
+
+  function updateScormSessionCmi(lessonId: string, cmi: Record<string, unknown>) {
+    const current = scormSessions[lessonId];
+    if (!current) return;
+    scormSessions = {
+      ...scormSessions,
+      [lessonId]: { ...current, cmi },
+    };
+  }
+
+  async function handleScormCommitted(
+    lessonId: string,
+    result: { isComplete?: boolean; percentComplete?: number },
+  ) {
+    if (!result.isComplete) return;
+    patchLessonProgress(lessonId, {
+      percentComplete: result.percentComplete ?? 100,
+      isComplete: true,
+    });
+    await invalidate('student:course');
+  }
+
   function lessonById(lessonId: string): Record<string, unknown> | null {
     for (const mod of sortedModules()) {
       const match = sortedModuleActivities(mod).find((item) => item.id === lessonId);
@@ -545,10 +729,30 @@
     return null;
   }
 
-  function openLesson(lesson: Record<string, unknown>) {
+  async function openLesson(lesson: Record<string, unknown>) {
     const lessonId = lesson.id as string;
     if (activeLesson?.id === lessonId) return;
-    activeLesson = lessonById(lessonId) ?? lesson;
+
+    const leavingScormId =
+      activeLesson && activityType(activeLesson) === 'scorm'
+        ? (activeLesson.id as string)
+        : null;
+    if (leavingScormId) {
+      await commitScormSession(leavingScormId);
+    }
+
+    const nextLesson = lessonById(lessonId) ?? lesson;
+
+    if (activityType(nextLesson) === 'scorm') {
+      const isReturn = mountedScormIds.has(lessonId);
+      markScormMounted(lessonId);
+      await ensureScormSession(nextLesson);
+      if (isReturn) {
+        reloadScormPlayer(lessonId);
+      }
+    }
+
+    activeLesson = nextLesson;
     activeModuleId = null;
     if (activityType(activeLesson) === 'presentation') {
       markPresentationMounted(lessonId);
@@ -919,7 +1123,7 @@
                   class="lesson-btn"
                   class:lesson-btn--done={prog?.isComplete}
                   class:active={activeLesson?.id === lesson.id}
-                  onclick={() => openLesson(lesson)}
+                  onclick={() => void openLesson(lesson)}
                 >
                   <span class="lesson-btn-type">{t(`activity.type.${type}`, $locale)}</span>
                   {lesson.title as string}
@@ -1016,11 +1220,36 @@
           </div>
         {/if}
 
+        {#if mountedScormIds.size > 0}
+          <div class="scorm-viewers">
+            {#each scormActivities() as scormLesson (scormLesson.id)}
+              {@const scormConfig = scormLaunchConfig(scormLesson)}
+              {#if mountedScormIds.has(scormLesson.id as string) && scormConfig}
+                {#key `${scormLesson.id}:${scormLaunchTokens[scormLesson.id as string] ?? 0}`}
+                  <ScormPlayer
+                    active={activeLesson?.id === scormLesson.id}
+                    session={scormSessions[scormLesson.id as string] ?? null}
+                    locale={$locale}
+                    config={scormConfig}
+                    onCmiSaved={(cmi) => updateScormSessionCmi(scormLesson.id as string, cmi)}
+                    onCommitted={(result) => void handleScormCommitted(scormLesson.id as string, result)}
+                  />
+                {/key}
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
         {#key activeLesson.id}
         {@const type = activityType(activeLesson)}
         {@const config = (activeLesson.config as Record<string, unknown>) ?? {}}
 
-        {#if type === 'video'}
+        {#if type === 'scorm'}
+          {@const scormConfig = scormLaunchConfig(activeLesson)}
+          {#if !scormConfig}
+            <p class="empty-hint">SCORM aktivita nemá nastavený balík alebo SCO.</p>
+          {/if}
+        {:else if type === 'video'}
           {@const lessonProgress = getLessonProgress(activeLesson.id as string)}
           {@const videoUrl = effectiveVideoUrl(config)}
           {@const requiresWatchToEnd = isWatchToEndMode(config)}
