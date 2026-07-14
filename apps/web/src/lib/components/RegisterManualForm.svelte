@@ -9,44 +9,16 @@
     turnstileSiteKey?: string | null;
   } = $props();
 
-  let container = $state<HTMLDivElement | null>(null);
-  let widgetId = $state<string | undefined>(undefined);
-  let turnstileToken = $state('');
+  let captchaReady = $state(!turnstileSiteKey);
 
   onMount(() => {
-    if (!turnstileSiteKey || !container) return;
-
-    const render = () => {
-      if (!container || !window.turnstile) return;
-      widgetId = window.turnstile.render(container, {
-        sitekey: turnstileSiteKey,
-        callback: (token: string) => {
-          turnstileToken = token;
-        },
-        'expired-callback': () => {
-          turnstileToken = '';
-        },
-        'error-callback': () => {
-          turnstileToken = '';
-        },
-      });
-    };
-
-    if (window.turnstile) {
-      render();
-    } else {
-      const script = document.createElement('script');
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-      script.async = true;
-      script.onload = render;
-      document.head.appendChild(script);
-    }
-
+    (window as Window & { __yo2TurnstileRegister?: (token: string) => void }).__yo2TurnstileRegister =
+      (token: string) => {
+        captchaReady = Boolean(token?.trim());
+      };
     return () => {
-      if (widgetId && window.turnstile) {
-        window.turnstile.remove(widgetId);
-      }
-      turnstileToken = '';
+      delete (window as Window & { __yo2TurnstileRegister?: (token: string) => void })
+        .__yo2TurnstileRegister;
     };
   });
 </script>
@@ -98,17 +70,17 @@
   </div>
 
   {#if turnstileSiteKey}
-    <input type="hidden" name="turnstileToken" value={turnstileToken} />
     <div class="form-field register-captcha">
-      <div bind:this={container}></div>
+      <div
+        class="cf-turnstile"
+        data-sitekey={turnstileSiteKey}
+        data-action="turnstile-spin-v2"
+        data-callback="__yo2TurnstileRegister"
+      ></div>
     </div>
   {/if}
 
-  <button
-    type="submit"
-    class="login-submit"
-    disabled={Boolean(turnstileSiteKey) && !turnstileToken}
-  >
+  <button type="submit" class="login-submit" disabled={Boolean(turnstileSiteKey) && !captchaReady}>
     {t('auth.register', $locale)}
   </button>
 </form>

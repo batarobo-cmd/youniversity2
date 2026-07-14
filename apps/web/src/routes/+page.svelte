@@ -28,6 +28,16 @@
   );
 </script>
 
+<svelte:head>
+  {#if registrationEnabled && turnstileSiteKey}
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+      async
+      defer
+    ></script>
+  {/if}
+</svelte:head>
+
 <div class="login-page">
   <aside class="login-brand">
     <div class="login-brand-content">

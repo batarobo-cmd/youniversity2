@@ -85,7 +85,9 @@ export const actions = {
     const password = String(form.get('password') ?? '');
     const givenName = String(form.get('givenName') ?? '').trim();
     const familyName = String(form.get('familyName') ?? '').trim();
-    const turnstileToken = String(form.get('turnstileToken') ?? '').trim();
+  const turnstileToken = String(
+    form.get('cf-turnstile-response') ?? form.get('turnstileToken') ?? '',
+  ).trim();
     const companyWebsite = String(form.get('companyWebsite') ?? '').trim();
 
     if (!email || !password || !givenName || !familyName) {

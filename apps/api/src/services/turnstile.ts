@@ -9,6 +9,8 @@ export function isTurnstileConfigured(): boolean {
   return Boolean(config.turnstile.secretKey.trim());
 }
 
+/** Canonical Cloudflare siteverify (Spin v2 — no managed Worker). */
+
 export async function verifyTurnstileToken(
   token: string | undefined,
   remoteIp?: string | null,
