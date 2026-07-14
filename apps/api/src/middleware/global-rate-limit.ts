@@ -14,8 +14,18 @@ export const globalRateLimitMiddleware: MiddlewareHandler = async (c, next) => {
     return;
   }
 
-  const clientIp =
-    clientIpFromHeaders(c.req.header('X-Forwarded-For'), c.req.header('X-Real-IP')) ?? 'unknown';
+  const clientIp = clientIpFromHeaders(
+    c.req.header('X-Forwarded-For'),
+    c.req.header('X-Real-IP'),
+  );
+
+  // Internal service calls (web → api on Docker network) have no forwarded IP.
+  // Rate-limit only requests that arrived through nginx from the public internet.
+  if (!clientIp) {
+    await next();
+    return;
+  }
+
   const key = `global:${clientIp}`;
 
   try {
