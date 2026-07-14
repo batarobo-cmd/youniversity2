@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { lessonProgress, activityEvents, lessons, courseModules, courses } from '../db/schema';

@@ -118,6 +118,10 @@
     }),
   );
 
+  const editDirty = $derived(
+    editingId !== null && editBaseline !== null && editDraftKey !== editBaseline,
+  );
+
   function isDraggingModule() {
     return dragModuleId !== null;
   }
@@ -519,6 +523,16 @@
     if (options?.closeAfterSave) editingId = null;
   }
 
+  async function saveEdit() {
+    if (!editingId) return;
+    const activity = findActivityById(editingId);
+    if (!activity) return;
+    activityAutosave.cancel();
+    await run(async () => {
+      await persistActivity(activity, { closeAfterSave: true });
+    });
+  }
+
   function cancelEdit() {
     activityAutosave.cancel();
     editingId = null;
@@ -764,6 +778,14 @@
                 {/if}
                 <div class="activity-row-actions">
                   {#if editingId === activity.id}
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      disabled={saving || !editDirty}
+                      onclick={() => saveEdit()}
+                    >
+                      {t('admin.saveChanges', locale)}
+                    </button>
                     <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={cancelEdit}>
                       {t('admin.cancel', locale)}
                     </button>
@@ -790,6 +812,9 @@
                     <PresentationActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editPresentationForm} />
                   {:else if isScormType(activity.type)}
                     <ScormActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editScormForm} />
+                    {#if editScormForm.packageId && editDirty}
+                      <p class="activity-edit-save-hint">{t('admin.scormUploadReady', locale)}</p>
+                    {/if}
                   {:else if showUrlField(activity.type)}
                     <label>
                       <span>{t('admin.activityMediaUrl', locale)}</span>
