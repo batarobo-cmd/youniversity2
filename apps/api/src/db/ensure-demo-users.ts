@@ -3,13 +3,15 @@ import { eq } from 'drizzle-orm';
 import { db } from './index';
 import { users } from './schema';
 import {
+  buildProductionDemoCredentials,
   getDemoUserCredentials,
   getLegacyDemoEmails,
+  getProductionBootstrapPassword,
+  useLocalDevCredentials,
   type DemoUserRole,
 } from '../services/demo-users';
 
-async function upsertDemoUser(role: DemoUserRole) {
-  const creds = getDemoUserCredentials()[role];
+async function upsertDemoUser(role: DemoUserRole, creds: { email: string; password: string; name: string; role: string; systemAdminGuardPassword?: string }) {
   const passwordHash = await bcrypt.hash(creds.password, 12);
   const systemAdminPasswordHash =
     creds.role === 'system_admin' && creds.systemAdminGuardPassword
@@ -38,12 +40,14 @@ async function upsertDemoUser(role: DemoUserRole) {
     });
 }
 
-async function migrateLegacyDemoUsers() {
+async function migrateLegacyDemoUsers(
+  credsByRole: Record<DemoUserRole, { email: string; password: string; name: string; role: string; systemAdminGuardPassword?: string }>,
+) {
   const legacyEmails = getLegacyDemoEmails();
   if (!legacyEmails) return;
 
   for (const role of ['system_admin', 'admin', 'student'] as const) {
-    const creds = getDemoUserCredentials()[role];
+    const creds = credsByRole[role];
     const [legacy] = await db
       .select()
       .from(users)
@@ -80,21 +84,35 @@ async function migrateLegacyDemoUsers() {
 }
 
 async function ensureDemoUsers() {
-  await migrateLegacyDemoUsers();
-  await upsertDemoUser('system_admin');
-  await upsertDemoUser('admin');
-  await upsertDemoUser('student');
+  let credsByRole: Record<DemoUserRole, { email: string; password: string; name: string; role: string; systemAdminGuardPassword?: string }>;
 
-  const creds = getDemoUserCredentials();
+  if (useLocalDevCredentials()) {
+    credsByRole = getDemoUserCredentials();
+  } else {
+    const bootstrapPassword = getProductionBootstrapPassword();
+    if (!bootstrapPassword) {
+      console.log(
+        'Skipping demo user bootstrap in production (set DEMO_BOOTSTRAP_PASSWORD in .env for first deploy, then run deploy/aws-change-demo-passwords.sh).',
+      );
+      return;
+    }
+    credsByRole = buildProductionDemoCredentials(bootstrapPassword);
+  }
+
+  await migrateLegacyDemoUsers(credsByRole);
+  await upsertDemoUser('system_admin', credsByRole.system_admin);
+  await upsertDemoUser('admin', credsByRole.admin);
+  await upsertDemoUser('student', credsByRole.student);
+
   console.log('Demo users ready:');
   if (getLegacyDemoEmails()) {
     console.log('  sysadmin / sysadmin  (guard: sysadmin-guard)');
     console.log('  admin / admin');
     console.log('  student / student');
   } else {
-    console.log(`  ${creds.system_admin.email} / ${creds.system_admin.password}`);
-    console.log(`  ${creds.admin.email} / ${creds.admin.password}`);
-    console.log(`  ${creds.student.email} / ${creds.student.password}`);
+    console.log(`  ${credsByRole.admin.email} (password from DEMO_BOOTSTRAP_PASSWORD or aws-change-demo-passwords.sh)`);
+    console.log(`  ${credsByRole.student.email} (same)`);
+    console.log(`  ${credsByRole.system_admin.email} (same)`);
   }
 }
 

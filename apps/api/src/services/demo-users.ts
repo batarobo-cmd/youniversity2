@@ -11,28 +11,7 @@ export type DemoUserCredential = {
   systemAdminGuardPassword?: string;
 };
 
-const PRODUCTION_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
-  system_admin: {
-    email: 'sysadmin@youniversity2.sk',
-    password: 'sysadmin123',
-    name: 'System Admin',
-    role: 'system_admin',
-    systemAdminGuardPassword: 'sysadmin-guard',
-  },
-  admin: {
-    email: 'admin@youniversity2.sk',
-    password: 'admin123',
-    name: 'Admin',
-    role: 'admin',
-  },
-  student: {
-    email: 'student@youniversity2.sk',
-    password: 'student123',
-    name: 'Ján Študent',
-    role: 'student',
-  },
-};
-
+/** Local dev only — short aliases (admin / student / sysadmin). */
 const LOCAL_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
   system_admin: {
     email: 'sysadmin@local',
@@ -55,6 +34,26 @@ const LOCAL_DEMO_USERS: Record<DemoUserRole, DemoUserCredential> = {
   },
 };
 
+/** Production bootstrap emails — passwords come from DEMO_BOOTSTRAP_PASSWORD env, never from source. */
+export const PRODUCTION_DEMO_EMAILS: Record<DemoUserRole, Omit<DemoUserCredential, 'password'>> = {
+  system_admin: {
+    email: 'sysadmin@youniversity2.sk',
+    name: 'System Admin',
+    role: 'system_admin',
+    systemAdminGuardPassword: 'sysadmin-guard',
+  },
+  admin: {
+    email: 'admin@youniversity2.sk',
+    name: 'Admin',
+    role: 'admin',
+  },
+  student: {
+    email: 'student@youniversity2.sk',
+    name: 'Ján Študent',
+    role: 'student',
+  },
+};
+
 const LEGACY_LOCAL_EMAILS: Record<DemoUserRole, string> = {
   system_admin: 'sysadmin@youniversity2.sk',
   admin: 'admin@youniversity2.sk',
@@ -66,7 +65,27 @@ export function useLocalDevCredentials(): boolean {
 }
 
 export function getDemoUserCredentials(): Record<DemoUserRole, DemoUserCredential> {
-  return useLocalDevCredentials() ? LOCAL_DEMO_USERS : PRODUCTION_DEMO_USERS;
+  if (!useLocalDevCredentials()) {
+    throw new Error('Demo credentials are only available in local development (NODE_ENV !== production)');
+  }
+  return LOCAL_DEMO_USERS;
+}
+
+/** Production bootstrap password from env (min 12 chars). Not stored in git. */
+export function getProductionBootstrapPassword(): string | null {
+  const value = process.env.DEMO_BOOTSTRAP_PASSWORD?.trim();
+  if (!value || value.length < 12) return null;
+  return value;
+}
+
+export function buildProductionDemoCredentials(
+  bootstrapPassword: string,
+): Record<DemoUserRole, DemoUserCredential> {
+  return {
+    system_admin: { ...PRODUCTION_DEMO_EMAILS.system_admin, password: bootstrapPassword },
+    admin: { ...PRODUCTION_DEMO_EMAILS.admin, password: bootstrapPassword },
+    student: { ...PRODUCTION_DEMO_EMAILS.student, password: bootstrapPassword },
+  };
 }
 
 export function getLegacyDemoEmails(): Record<DemoUserRole, string> | null {

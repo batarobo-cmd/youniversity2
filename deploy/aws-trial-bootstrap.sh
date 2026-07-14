@@ -34,4 +34,4 @@ echo ""
 echo "Hotovo. Otvor v prehliadači:"
 grep -E '^PUBLIC_URL=' .env | cut -d= -f2- || grep -E '^WEB_URL=' .env | cut -d= -f2-
 echo ""
-echo "Demo: admin@youniversity2.sk / admin123"
+echo "Demo účty: nastav heslá cez ./deploy/aws-change-demo-passwords.sh '<STRONG_PASSWORD>'"

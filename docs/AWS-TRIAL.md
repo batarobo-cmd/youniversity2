@@ -66,8 +66,10 @@ Otvor v prehliadači: `http://TVOJA_STATIC_IP`
 
 | Účet | E-mail | Heslo |
 |------|--------|-------|
-| Admin | admin@youniversity2.sk | admin123 |
-| Študent | student@youniversity2.sk | student123 |
+| Admin | admin@youniversity2.sk | nastavené cez `deploy/aws-change-demo-passwords.sh` |
+| Študent | student@youniversity2.sk | to isté |
+
+Pri prvom bootstrap-e môžete do `.env` pridať `DEMO_BOOTSTRAP_PASSWORD` (min. 12 znakov), potom heslo vždy zmeňte skriptom vyššie.
 
 Health check API: `http://TVOJA_IP/health`
 

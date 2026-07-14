@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Zmeň známe demo heslá na produkcii (admin123, student123, sysadmin123).
+# Zmeň demo heslá na produkcii (nahradí heslo pre všetky demo účty v DB).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

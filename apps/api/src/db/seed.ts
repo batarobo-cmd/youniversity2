@@ -15,6 +15,11 @@ import {
 import { getDemoUserCredentials } from '../services/demo-users';
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Seed skipped in production (use db:ensure-demo + aws-change-demo-passwords.sh).');
+    process.exit(0);
+  }
+
   console.log('Seeding database...');
 
   const demoUsers = getDemoUserCredentials();
@@ -159,13 +164,8 @@ async function seed() {
   }
 
   console.log('Seed complete!');
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('  Admin:   admin / admin');
-    console.log('  Student: student / student');
-  } else {
-    console.log(`  Admin:   ${adminCreds.email} / ${adminCreds.password}`);
-    console.log(`  Student: ${studentCreds.email} / ${studentCreds.password}`);
-  }
+  console.log('  Admin:   admin / admin');
+  console.log('  Student: student / student');
   process.exit(0);
 }
 

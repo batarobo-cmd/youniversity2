@@ -58,14 +58,17 @@ bun run dev
 - **WebSocket:** ws://localhost:3001/ws?token=\<jwt\>
 - **MinIO Console:** http://localhost:9001 (minioadmin / minioadmin)
 
-### Demo účty (po seed)
+### Demo účty (lokálny dev, po `bun run db:seed`)
 
-| Rola | Lokálny dev | Produkčný trial (AWS) |
-|------|-------------|------------------------|
-| Admin | `admin` / `admin` | admin@youniversity2.sk / admin123 |
-| Študent | `student` / `student` | student@youniversity2.sk / student123 |
+| Rola | Prihlásenie |
+|------|-------------|
+| Admin | `admin` / `admin` |
+| Študent | `student` / `student` |
+| System admin | `sysadmin` / `sysadmin` (guard: `sysadmin-guard`) |
 
 Pri existujúcej lokálnej DB spustite `bun run db:ensure-demo`, aby sa účty aktualizovali.
+
+**Produkcia (AWS):** heslá demo účtov nie sú v gite — nastavte cez `deploy/aws-change-demo-passwords.sh`.
 
 ## Štruktúra projektu
 
