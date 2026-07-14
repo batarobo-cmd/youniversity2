@@ -21,7 +21,7 @@
   } from '$lib/presentation-config';
   import PresentationPptxViewer from '$lib/components/PresentationPptxViewer.svelte';
   import PresentationPdfViewer from '$lib/components/PresentationPdfViewer.svelte';
-  import ScormPlayer, { type ScormSessionState } from '$lib/components/ScormPlayer.svelte';
+  import ScormPlayer, { type ScormFlushFn, type ScormSessionState } from '$lib/components/ScormPlayer.svelte';
   import { api } from '$lib/api';
   import {
     buildScormAssetUrl,
@@ -81,6 +81,7 @@
   let mountedScormIds = $state<Set<string>>(new Set());
   let scormLaunchTokens = $state<Record<string, number>>({});
   let scormSessions = $state<Record<string, ScormSessionState>>({});
+  const scormFlushFns = new Map<string, ScormFlushFn>();
 
   const PRESENTATION_PROGRESS_SYNC_MS = 800;
 
@@ -568,32 +569,21 @@
     }
   }
 
+  function registerScormFlush(lessonId: string, flush: ScormFlushFn | null) {
+    if (flush) scormFlushFns.set(lessonId, flush);
+    else scormFlushFns.delete(lessonId);
+  }
+
+  async function exitScormActivity(lessonId: string) {
+    await scormFlushFns.get(lessonId)?.(true);
+    await invalidate('student:course');
+  }
+
   function reloadScormPlayer(lessonId: string) {
     scormLaunchTokens = {
       ...scormLaunchTokens,
       [lessonId]: (scormLaunchTokens[lessonId] ?? 0) + 1,
     };
-  }
-
-  async function commitScormSession(lessonId: string) {
-    const sess = scormSessions[lessonId];
-    const cfg = scormLaunchConfig(lessonById(lessonId) ?? {});
-    if (!sess?.attemptId || Object.keys(sess.cmi).length === 0) return;
-    const cmi = { ...sess.cmi };
-    if (cfg?.version === 'scorm_2004') {
-      cmi['cmi.exit'] = 'suspend';
-    } else {
-      cmi['cmi.core.exit'] = 'suspend';
-    }
-    try {
-      await api.scormCommit({
-        attemptId: sess.attemptId,
-        cmi,
-        terminated: false,
-      });
-    } catch {
-      // best effort
-    }
   }
 
   function scormActivities() {
@@ -738,7 +728,7 @@
         ? (activeLesson.id as string)
         : null;
     if (leavingScormId) {
-      await commitScormSession(leavingScormId);
+      await scormFlushFns.get(leavingScormId)?.(false);
     }
 
     const nextLesson = lessonById(lessonId) ?? lesson;
@@ -1221,6 +1211,17 @@
         {/if}
 
         {#if mountedScormIds.size > 0}
+          {#if activeLesson && activityType(activeLesson) === 'scorm'}
+            <div class="scorm-activity-toolbar">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                onclick={() => void exitScormActivity(activeLesson.id as string)}
+              >
+                {t('course.scormExit', $locale)}
+              </button>
+            </div>
+          {/if}
           <div class="scorm-viewers">
             {#each scormActivities() as scormLesson (scormLesson.id)}
               {@const scormConfig = scormLaunchConfig(scormLesson)}
@@ -1231,6 +1232,7 @@
                     session={scormSessions[scormLesson.id as string] ?? null}
                     locale={$locale}
                     config={scormConfig}
+                    registerFlush={registerScormFlush}
                     onCmiSaved={(cmi) => updateScormSessionCmi(scormLesson.id as string, cmi)}
                     onCommitted={(result) => void handleScormCommitted(scormLesson.id as string, result)}
                   />
