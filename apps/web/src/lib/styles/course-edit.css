@@ -1194,6 +1194,13 @@
   color: var(--color-muted);
 }
 
+.activity-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
 .activity-editor-add-form {
   display: flex;
   flex-wrap: wrap;

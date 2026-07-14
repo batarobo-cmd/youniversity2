@@ -189,6 +189,7 @@ const sk: Messages = {
   'admin.deleteCourse': 'Odstrániť kurz',
   'admin.deleteCourseConfirm': 'Naozaj chcete odstrániť tento kurz?',
   'admin.saveChanges': 'Uložiť zmeny',
+  'admin.activityUnsavedHint': 'Máte neuložené zmeny — kliknite Uložiť zmeny alebo Zrušiť.',
   'admin.backToTree': 'Späť na strom kategórií',
   'admin.tabSettings': 'Základné údaje',
   'admin.tabContent': 'Obsah',

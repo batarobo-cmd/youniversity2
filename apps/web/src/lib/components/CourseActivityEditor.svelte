@@ -3,8 +3,6 @@
   import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { normalizeActivityType } from '$lib/activity-types';
-  import { createAutosave, type AutosaveStatus as AutosaveState } from '$lib/autosave';
-  import AutosaveStatus from '$lib/components/AutosaveStatus.svelte';
   import VideoActivityFields from '$lib/components/VideoActivityFields.svelte';
   import PresentationActivityFields from '$lib/components/PresentationActivityFields.svelte';
   import ScormActivityFields from '$lib/components/ScormActivityFields.svelte';
@@ -85,27 +83,9 @@
   let dropTargetModuleId = $state<string | null>(null);
   let dropBeforeActivityId = $state<string | null>(null);
   let dropBeforeModuleId = $state<string | null>(null);
-  let autosaveStatus = $state<AutosaveState>('idle');
-  let autosaveError = $state('');
   let editBaseline = $state<string | null>(null);
 
   const moduleTitleTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-  const activityAutosave = createAutosave({
-    debounceMs: 800,
-    onStatus: (status, err) => {
-      autosaveStatus = status;
-      autosaveError = err ?? '';
-    },
-    onSave: async () => {
-      if (!editingId) return false;
-      const activity = findActivityById(editingId);
-      if (!activity) return false;
-      if (!isTextType(activity.type) && !editTitle.trim()) return false;
-      await persistActivity(activity, { closeAfterSave: false });
-      return true;
-    },
-  });
 
   const editDraftKey = $derived.by(() =>
     JSON.stringify({
@@ -290,17 +270,13 @@
   $effect(() => {
     if (!editingId) {
       editBaseline = null;
-      activityAutosave.cancel();
       return;
     }
 
     const key = editDraftKey;
     if (editBaseline === null) {
       editBaseline = key;
-      return;
     }
-    if (key === editBaseline) return;
-    activityAutosave.schedule();
   });
 
   async function run(action: () => Promise<void>) {
@@ -418,7 +394,7 @@
   }
 
   function startEdit(activity: ActivityRow) {
-    activityAutosave.cancel();
+    editBaseline = null;
     editingId = activity.id;
     editTitle = activity.title;
     editContent = activity.content ?? '';
@@ -527,18 +503,14 @@
     if (!editingId) return;
     const activity = findActivityById(editingId);
     if (!activity) return;
-    activityAutosave.cancel();
     await run(async () => {
       await persistActivity(activity, { closeAfterSave: true });
     });
   }
 
   function cancelEdit() {
-    activityAutosave.cancel();
     editingId = null;
     editBaseline = null;
-    autosaveStatus = 'idle';
-    autosaveError = '';
   }
 
   async function deleteActivity(activityId: string) {
@@ -643,9 +615,6 @@
 
   <p class="course-edit-hint">{t('admin.activitiesHint', locale)}</p>
   <p class="course-edit-hint activity-editor-dnd-hint">{t('admin.dragToReorder', locale)}</p>
-  <div class="activity-editor-toolbar">
-    <AutosaveStatus status={autosaveStatus} error={autosaveError} />
-  </div>
 
   {#if modules.length === 0}
     <div class="activity-editor-empty">
@@ -812,15 +781,28 @@
                     <PresentationActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editPresentationForm} />
                   {:else if isScormType(activity.type)}
                     <ScormActivityFields courseId={courseId} {locale} disabled={saving} bind:form={editScormForm} />
-                    {#if editScormForm.packageId && editDirty}
-                      <p class="activity-edit-save-hint">{t('admin.scormUploadReady', locale)}</p>
-                    {/if}
                   {:else if showUrlField(activity.type)}
                     <label>
                       <span>{t('admin.activityMediaUrl', locale)}</span>
                       <input type="url" bind:value={editConfigUrl} disabled={saving} placeholder="https://..." />
                     </label>
                   {/if}
+                  {#if editDirty}
+                    <p class="activity-edit-save-hint">{t('admin.activityUnsavedHint', locale)}</p>
+                  {/if}
+                  <div class="activity-edit-actions">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      disabled={saving || !editDirty}
+                      onclick={() => saveEdit()}
+                    >
+                      {t('admin.saveChanges', locale)}
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={cancelEdit}>
+                      {t('admin.cancel', locale)}
+                    </button>
+                  </div>
                 </div>
               {/if}
             </li>
