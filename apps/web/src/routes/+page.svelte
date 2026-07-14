@@ -11,6 +11,7 @@
   let { data, form = null }: { data: PageData; form?: ActionData | null } = $props();
 
   let isRegister = $state(false);
+  let manualDetailsOpen = $state(false);
 
   const authConfig = $derived(data.authConfig);
   const oauthGoogle = $derived(authConfig.oauth.google.enabled);
@@ -18,6 +19,11 @@
   const hasOAuth = $derived(oauthGoogle || oauthMicrosoft);
   const registrationEnabled = $derived(authConfig.manualRegistrationEnabled);
   const turnstileSiteKey = $derived(authConfig.turnstileSiteKey ?? null);
+
+  function toggleAuthMode() {
+    isRegister = !isRegister;
+    if (hasOAuth) manualDetailsOpen = true;
+  }
 
   const error = $derived(
     authErrorMessage(
@@ -67,8 +73,16 @@
 
     <div class="login-card">
       <div class="login-card-header">
-        <h2>{t('auth.welcome', $locale)}</h2>
-        <p>{t('auth.welcomeSub', $locale)}</p>
+        <h2>
+          {isRegister && registrationEnabled
+            ? t('auth.registerWelcome', $locale)
+            : t('auth.welcome', $locale)}
+        </h2>
+        <p>
+          {isRegister && registrationEnabled
+            ? t('auth.registerWelcomeSub', $locale)
+            : t('auth.welcomeSub', $locale)}
+        </p>
       </div>
 
       {#if error}
@@ -107,8 +121,12 @@
       {/if}
 
       {#if hasOAuth}
-        <details class="manual-login-details">
-          <summary>{t('auth.manualLogin', $locale)}</summary>
+        <details class="manual-login-details" bind:open={manualDetailsOpen}>
+          <summary>
+            {isRegister && registrationEnabled
+              ? t('auth.manualRegister', $locale)
+              : t('auth.manualLogin', $locale)}
+          </summary>
           <div class="manual-login-body">
             {#if isRegister && registrationEnabled}
               <RegisterManualForm {turnstileSiteKey} />
@@ -181,7 +199,7 @@
 
       {#if registrationEnabled}
         <div class="login-footer">
-          <button type="button" class="login-footer-link" onclick={() => (isRegister = !isRegister)}>
+          <button type="button" class="login-footer-link" onclick={toggleAuthMode}>
             {isRegister ? t('auth.hasAccount', $locale) : t('auth.noAccount', $locale)}
           </button>
         </div>
