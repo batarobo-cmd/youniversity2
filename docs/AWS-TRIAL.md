@@ -92,7 +92,24 @@ cd ~/youniversity2
 
 Skript sám spraví `git pull` a pri HTTPS (`.env` s `https://` URL) automaticky nastaví `docker/nginx.https.conf`.
 
-**Pomalý alebo „zamrznutý“ build?** Na 1 GB Lightsail je normálne, že krok `web build` + `exporting layers` trvá niekoľko minút. Skript teraz používa Docker cache (rýchlejšie opakované deploye). Čistý rebuild len keď treba:
+**Pomalý alebo „zamrznutý“ build?** Na **2 GB** Lightsail (predvolený profil) web build zvyčajne trvá 2–8 min (`WEB_BUILD_HEAP_MB=768`). Na **1 GB** môže trvať 5–15 min — použite `LOW_RAM=1 WEB_BUILD_HEAP_MB=512`. Skript používa Docker cache (rýchlejšie opakované deploye).
+
+**2 GB Lightsail — odporúčaný deploy:**
+
+```bash
+./deploy/aws-trial-update.sh
+# alebo čistý rebuild:
+./deploy/aws-rebuild-2gb.sh
+# FULL_REBUILD=1 ./deploy/aws-rebuild-2gb.sh
+```
+
+**1 GB Lightsail:**
+
+```bash
+LOW_RAM=1 WEB_BUILD_HEAP_MB=512 ./deploy/aws-trial-update.sh
+```
+
+Čistý rebuild (obidva profily):
 
 ```bash
 FULL_REBUILD=1 ./deploy/aws-trial-update.sh

@@ -37,7 +37,7 @@ services:
       GLOBAL_RATE_LIMIT_WINDOW_SEC: ${GLOBAL_RATE_LIMIT_WINDOW_SEC:-900}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
-    mem_limit: 512m
+    mem_limit: 640m
     healthcheck:
       test:
         [
@@ -61,10 +61,10 @@ services:
       dockerfile: docker/Dockerfile.web
       args:
         VITE_APP_VERSION: ${VITE_APP_VERSION:-dev}
-        WEB_BUILD_HEAP_MB: ${WEB_BUILD_HEAP_MB:-512}
+        WEB_BUILD_HEAP_MB: ${WEB_BUILD_HEAP_MB:-768}
     container_name: you2-web
-    shm_size: 256mb
-    mem_limit: 512m
+    shm_size: 384mb
+    mem_limit: 640m
     environment:
       API_URL: http://api:3001
       PORT: 3000
@@ -83,9 +83,9 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=128MB
+      - shared_buffers=256MB
       - -c
-      - effective_cache_size=512MB
+      - effective_cache_size=1024MB
       - -c
       - maintenance_work_mem=64MB
       - -c
@@ -102,7 +102,7 @@ services:
       POSTGRES_DB: youniversity2
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    mem_limit: 512m
+    mem_limit: 640m
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U youniversity -d youniversity2']
       interval: 5s
@@ -113,7 +113,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: you2-redis
-    command: ['redis-server', '--maxmemory', '128mb', '--maxmemory-policy', 'allkeys-lru']
+    command: ['redis-server', '--maxmemory', '192mb', '--maxmemory-policy', 'allkeys-lru']
     volumes:
       - redis_data:/data
     mem_limit: 192m

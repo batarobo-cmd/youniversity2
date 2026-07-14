@@ -18,10 +18,18 @@ if [ ! -f .env ]; then
 fi
 
 export VITE_APP_VERSION="$(git rev-parse --short HEAD)"
-echo "==> Verzia buildu: ${VITE_APP_VERSION}"
+export WEB_BUILD_HEAP_MB="${WEB_BUILD_HEAP_MB:-768}"
+export DOCKER_BUILDKIT=1
+export COMPOSE_PARALLEL_LIMIT=1
+echo "==> Verzia buildu: ${VITE_APP_VERSION} (WEB_BUILD_HEAP_MB=${WEB_BUILD_HEAP_MB})"
 
-echo "==> Build a štart kontajnerov..."
-docker compose -f docker-compose.prod.yml up -d --build
+echo "==> Build kontajnerov (postupne — 2 GB profil)..."
+docker compose -f docker-compose.prod.yml build api
+docker compose -f docker-compose.prod.yml stop web nginx 2>/dev/null || true
+docker compose -f docker-compose.prod.yml build web
+
+echo "==> Štart kontajnerov..."
+docker compose -f docker-compose.prod.yml up -d --force-recreate
 
 echo "==> Čakám na PostgreSQL..."
 sleep 12

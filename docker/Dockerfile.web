@@ -13,8 +13,8 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 
 ARG VITE_APP_VERSION=dev
-# Default 512 MB heap — safe on 1 GB Lightsail (+ swap). Override: WEB_BUILD_HEAP_MB=768
-ARG WEB_BUILD_HEAP_MB=512
+# Default 768 MB heap — 2 GB Lightsail. Pre 1 GB: WEB_BUILD_HEAP_MB=512 + LOW_RAM=1
+ARG WEB_BUILD_HEAP_MB=768
 ENV API_URL=http://api:3001
 ENV VITE_API_URL=
 ENV VITE_APP_VERSION=${VITE_APP_VERSION}

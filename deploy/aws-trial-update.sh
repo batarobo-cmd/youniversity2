@@ -36,16 +36,31 @@ export DOCKER_BUILDKIT=1
 export COMPOSE_PARALLEL_LIMIT=1
 
 if [ "${LOW_RAM:-0}" = "1" ]; then
-  echo "==> LOW_RAM=1 — pred web buildom uvoľním RAM (1 GB inštancia)..."
+  export WEB_BUILD_HEAP_MB="${WEB_BUILD_HEAP_MB:-512}"
+  echo "==> 1 GB build profile — WEB_BUILD_HEAP_MB=${WEB_BUILD_HEAP_MB}"
+  echo "    Pred web buildom uvoľním RAM (stop web, nginx, api, minio)..."
   if ! swapon --show 2>/dev/null | grep -q .; then
-    echo "    WARN: aktívny swap nebol nájdený — odporúčame 2G (docs/AWS-TRIAL.md)"
+    echo "    WARN: aktívny swap nebol nájdený — odporúčame 2G swapfile (docs/AWS-TRIAL.md)"
   fi
   docker compose -f docker-compose.prod.yml stop web nginx api minio 2>/dev/null || true
+else
+  export WEB_BUILD_HEAP_MB="${WEB_BUILD_HEAP_MB:-768}"
+  echo "==> 2 GB build profile — WEB_BUILD_HEAP_MB=${WEB_BUILD_HEAP_MB}"
 fi
 
-echo "==> Rebuild kontajnerov (postupne — menej RAM na malých inštanciách)..."
-echo "    Tip: na 1 GB Lightsail web build trvá 5–15 min; LOW_RAM=1 WEB_BUILD_HEAP_MB=512 odporúčané."
+echo "==> Rebuild kontajnerov (postupne — menej špičkového RAM)..."
+if [ "${LOW_RAM:-0}" = "1" ]; then
+  echo "    Tip: na 1 GB Lightsail web build trvá 5–15 min; LOW_RAM=1 WEB_BUILD_HEAP_MB=512"
+else
+  echo "    Tip: na 2 GB Lightsail web build zvyčajne 2–8 min; pred web buildom stopnem len web+nginx"
+fi
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" api
+
+if [ "${LOW_RAM:-0}" != "1" ]; then
+  echo "==> Uvoľňujem RAM pre web build (web + nginx)..."
+  docker compose -f docker-compose.prod.yml stop web nginx 2>/dev/null || true
+fi
+
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" web
 
 echo "==> DB migrácie (pred reštartom API — nový image, bez bežiaceho kontajnera)..."
