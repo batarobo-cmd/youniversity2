@@ -13,11 +13,14 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 
 ARG VITE_APP_VERSION=dev
+# Default 512 MB heap — safe on 1 GB Lightsail (+ swap). Override: WEB_BUILD_HEAP_MB=768
+ARG WEB_BUILD_HEAP_MB=512
 ENV API_URL=http://api:3001
 ENV VITE_API_URL=
 ENV VITE_APP_VERSION=${VITE_APP_VERSION}
-# Lightsail 1 GB inštancie — obmedzená heap pre Vite/SvelteKit build
-ENV NODE_OPTIONS=--max-old-space-size=768
+ENV NODE_ENV=production
+ENV CI=true
+ENV NODE_OPTIONS=--max-old-space-size=${WEB_BUILD_HEAP_MB}
 RUN bun run --filter @youniversity2/web build
 
 FROM oven/bun:1.2-alpine AS runner
@@ -30,6 +33,7 @@ COPY --from=builder /app/apps/web/build ./
 ENV PORT=3000
 ENV HOST=0.0.0.0
 ENV API_URL=http://api:3001
+ENV NODE_ENV=production
 
 EXPOSE 3000
 

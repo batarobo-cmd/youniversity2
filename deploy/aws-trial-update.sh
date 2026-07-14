@@ -35,8 +35,16 @@ fi
 export DOCKER_BUILDKIT=1
 export COMPOSE_PARALLEL_LIMIT=1
 
+if [ "${LOW_RAM:-0}" = "1" ]; then
+  echo "==> LOW_RAM=1 — pred web buildom uvoľním RAM (1 GB inštancia)..."
+  if ! swapon --show 2>/dev/null | grep -q .; then
+    echo "    WARN: aktívny swap nebol nájdený — odporúčame 2G (docs/AWS-TRIAL.md)"
+  fi
+  docker compose -f docker-compose.prod.yml stop web nginx api minio 2>/dev/null || true
+fi
+
 echo "==> Rebuild kontajnerov (postupne — menej RAM na malých inštanciách)..."
-echo "    Tip: na 1 GB Lightsail môže web build trvať 3–8 min; 'exporting layers' nie je zamrznutie."
+echo "    Tip: na 1 GB Lightsail web build trvá 5–15 min; LOW_RAM=1 WEB_BUILD_HEAP_MB=512 odporúčané."
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" api
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" web
 

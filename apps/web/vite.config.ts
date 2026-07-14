@@ -23,6 +23,11 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['pdfjs-dist'],
   },
+  build: {
+    sourcemap: false,
+    reportCompressedSize: false,
+    cssMinify: 'esbuild',
+  },
   server: {
     port: 5173,
     proxy: {

@@ -56,7 +56,9 @@ services:
       dockerfile: docker/Dockerfile.web
       args:
         VITE_APP_VERSION: ${VITE_APP_VERSION:-dev}
+        WEB_BUILD_HEAP_MB: ${WEB_BUILD_HEAP_MB:-512}
     container_name: you2-web
+    shm_size: 256mb
     environment:
       API_URL: http://api:3001
       PORT: 3000
