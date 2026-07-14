@@ -265,7 +265,7 @@ export async function uploadScormAsset(
   return { fileKey, contentType };
 }
 
-export async function getScormAssetObject(fileKey: string) {
+export async function getScormAssetObject(fileKey: string, range?: string) {
   if (!fileKey || fileKey.includes('..')) return null;
   if (!fileKey.startsWith('course-scorm/')) return null;
 
@@ -274,6 +274,7 @@ export async function getScormAssetObject(fileKey: string) {
       new GetObjectCommand({
         Bucket: config.s3.bucket,
         Key: fileKey,
+        ...(range ? { Range: range } : {}),
       }),
     );
   } catch {

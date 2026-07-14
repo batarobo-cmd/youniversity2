@@ -35,6 +35,8 @@ const envSchema = z
     DEMO_BOOTSTRAP_PASSWORD: z.string().optional(),
     GLOBAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(600),
     GLOBAL_RATE_LIMIT_WINDOW_SEC: z.coerce.number().int().positive().default(900),
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(15),
+    SESSION_DB_SYNC_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV !== 'production') return;

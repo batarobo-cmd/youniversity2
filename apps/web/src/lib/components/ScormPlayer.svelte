@@ -13,6 +13,12 @@
     scormPackageSignalsCompletionScreen,
   } from '@youniversity2/shared';
   import { prepareScormCmiForResume, type ScormLaunchConfig } from '$lib/scorm-config';
+  import {
+    claimScormApiOwner,
+    clearGlobalScormApi,
+    isScormApiOwner,
+    releaseScormApiOwner,
+  } from '$lib/scorm-runtime';
 
   export type ScormSessionState = {
     attemptId: string;
@@ -55,6 +61,8 @@
   let packageCompletionHandled = false;
   let iframeEl = $state<HTMLIFrameElement | null>(null);
   let activeFinishAttemptId: string | null = null;
+  let wasActive = false;
+  let iframeNeedsReload = $state(false);
 
   const sessionReady = $derived(Boolean(session?.attemptId && session?.iframeSrc && !session?.launching));
   const showIframe = $derived(
@@ -237,6 +245,13 @@
     }
   }
 
+  function releaseScormApi(attemptId: string) {
+    if (!isScormApiOwner(attemptId)) return;
+    clearStorylineParentHooks();
+    clearGlobalScormApi();
+    scormApiInstalledFor = null;
+  }
+
   async function handlePackageCompletionScreen(attemptId: string) {
     if (completionRecorded || packageCompletionHandled) return;
     const iframeText = readIframeText();
@@ -414,17 +429,33 @@
     }
 
     const attemptId = session.attemptId;
+    const shouldOwnApi = active || suspendPending;
+
     if (attemptId !== syncedAttemptId) {
       syncCmiFromSession(session);
       syncedAttemptId = attemptId;
       completionRecorded = false;
       packageCompletionHandled = false;
       commitQueue = Promise.resolve();
+      iframeNeedsReload = true;
+    }
+
+    if (!shouldOwnApi) {
+      releaseScormApi(attemptId);
+      apiReadyForAttempt = null;
+      registerFlush?.(config.lessonId, null);
+      return;
+    }
+
+    if (!claimScormApiOwner(attemptId)) {
+      apiReadyForAttempt = null;
+      return;
     }
 
     if (scormApiInstalledFor !== attemptId) {
       installScormApis(attemptId);
       scormApiInstalledFor = attemptId;
+      iframeNeedsReload = true;
     } else {
       installStorylineParentHooks(attemptId);
     }
@@ -433,12 +464,30 @@
     registerFlush?.(config.lessonId, flushProgress);
 
     if (active) {
+      if (!wasActive) {
+        iframeNeedsReload = true;
+      }
       void tryAutoComplete(attemptId);
     }
 
+    wasActive = active;
+
     return () => {
       registerFlush?.(config.lessonId, null);
+      releaseScormApiOwner(attemptId);
     };
+  });
+
+  $effect(() => {
+    if (!browser || !active || !showIframe || !iframeEl || !session?.iframeSrc) return;
+    if (!iframeNeedsReload) return;
+
+    iframeNeedsReload = false;
+    const src = session.iframeSrc;
+    iframeEl.src = 'about:blank';
+    requestAnimationFrame(() => {
+      if (iframeEl) iframeEl.src = src;
+    });
   });
 
   $effect(() => {
@@ -481,7 +530,10 @@
 
   onDestroy(() => {
     registerFlush?.(config.lessonId, null);
-    clearStorylineParentHooks();
+    if (session?.attemptId) {
+      releaseScormApi(session.attemptId);
+      releaseScormApiOwner(session.attemptId);
+    }
     if (active && session?.attemptId) {
       void flushProgress(false);
     }

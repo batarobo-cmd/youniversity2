@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { setCookie } from 'hono/cookie';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
@@ -8,6 +9,8 @@ import { canStudentUpdateProgress, canStudentViewCourse } from '../services/cour
 import { evaluateCourseCompletion } from '../services/completion';
 import { effectiveRole } from '../services/student-view';
 import { captivateIndicatesComplete, scormCmiIndicatesComplete, scormCmiReadyToFinalize } from '@youniversity2/shared';
+import { SCORM_ACCESS_COOKIE, signScormPackageAccessToken } from '../services/media-access';
+import { config } from '../config';
 
 type ScormVersion = 'scorm_12' | 'scorm_2004';
 
@@ -234,6 +237,15 @@ scormRoutes.post('/launch', async (c) => {
       set: { lastCommitAt: new Date(), terminatedAt: null },
     })
     .returning();
+
+  const scormAccessToken = await signScormPackageAccessToken(mod.courseId, body.data.packageId, user.id);
+  setCookie(c, SCORM_ACCESS_COOKIE, scormAccessToken, {
+    path: `/api/media/scorm/${mod.courseId}/${body.data.packageId}/`,
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'Lax',
+    maxAge: 4 * 60 * 60,
+  });
 
   return c.json({
     attemptId: attempt.id,

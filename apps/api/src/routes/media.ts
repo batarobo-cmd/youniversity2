@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
+import { authMiddleware, requireRole } from '../middleware/auth';
 import { canStudentViewCourse } from '../services/course-access';
 import {
   authorizePresentationFileAccess,
+  authorizeScormPackageAccess,
   signPresentationAccessToken,
 } from '../services/media-access';
 import {
@@ -321,16 +322,16 @@ mediaRoutes.post('/presentations', authMiddleware, requireRole('admin'), async (
   return c.json(uploaded, 201);
 });
 
-mediaRoutes.get('/scorm/:courseId/:packageId/:path{.+}', authMiddleware, async (c) => {
-  const user = c.get('user') as AuthUser;
+mediaRoutes.get('/scorm/:courseId/:packageId/:path{.+}', async (c) => {
   const courseId = c.req.param('courseId');
   const packageId = c.req.param('packageId');
   const rel = decodeURIComponent(c.req.param('path') ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
   if (!rel || rel.includes('..')) return c.json({ error: 'Invalid path' }, 400);
 
-  if (!(await canStudentViewCourse(user, courseId, c))) {
-    return c.json({ error: 'Not found' }, 404);
-  }
+  const allowed = await authorizeScormPackageAccess(c, courseId, packageId, (user) =>
+    canStudentViewCourse(user, courseId, c),
+  );
+  if (!allowed) return c.json({ error: 'Unauthorized' }, 401);
 
   const [pkg] = await db
     .select({ storagePrefix: scormPackages.storagePrefix })
@@ -340,15 +341,19 @@ mediaRoutes.get('/scorm/:courseId/:packageId/:path{.+}', authMiddleware, async (
   if (!pkg) return c.json({ error: 'Not found' }, 404);
 
   const fileKey = `${pkg.storagePrefix}${rel}`;
-  const object = await getScormAssetObject(fileKey);
+  const rangeHeader = c.req.header('Range');
+  const object = await getScormAssetObject(fileKey, rangeHeader);
   if (!object?.Body) return c.json({ error: 'Not found' }, 404);
 
   const headers = new Headers();
   headers.set('Content-Type', object.ContentType || inferScormContentType(fileKey));
   if (object.ContentLength != null) headers.set('Content-Length', String(object.ContentLength));
-  headers.set('Cache-Control', 'private, max-age=3600');
+  if (object.ContentRange) headers.set('Content-Range', object.ContentRange);
+  headers.set('Accept-Ranges', 'bytes');
+  headers.set('Cache-Control', 'private, max-age=86400');
 
-  return new Response(object.Body as ReadableStream, { headers });
+  const status = object.ContentRange ? 206 : 200;
+  return new Response(object.Body as ReadableStream, { status, headers });
 });
 
 mediaRoutes.get('/presentations/access-token', authMiddleware, async (c) => {

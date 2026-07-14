@@ -43,4 +43,6 @@ export const config = {
     max: env.GLOBAL_RATE_LIMIT_MAX,
     windowSec: env.GLOBAL_RATE_LIMIT_WINDOW_SEC,
   },
+  databasePoolMax: env.DATABASE_POOL_MAX,
+  sessionDbSyncMs: env.SESSION_DB_SYNC_MS,
 };

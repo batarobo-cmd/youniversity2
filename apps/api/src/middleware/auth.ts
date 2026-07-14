@@ -67,7 +67,7 @@ async function resolveUser(c: Context, isHeartbeat = false): Promise<AuthUser | 
 
   const tabId = extractTabId(c);
   const user = await touchSession(sessionId, { isHeartbeat, tabId });
-  if (user) return rejectSuspendedUser(user, sessionId);
+  if (user) return user;
 
   // Spätná kompatibilita: staré JWT v cookie/localStorage
   const jwtUser = await verifyToken(sessionId);

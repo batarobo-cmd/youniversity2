@@ -15,6 +15,9 @@ export interface SessionData {
   lastActivityAt: number;
   lastHeartbeatAt: number;
   browserTabId: string | null;
+  /** When user row was last synced from Postgres (ms). Optional for legacy sessions. */
+  lastDbSyncAt?: number;
+  isSuspended?: boolean;
 }
 
 let redis: Redis | null = null;
@@ -53,6 +56,7 @@ async function syncSessionWithDb(
       email: users.email,
       name: users.name,
       role: users.role,
+      isSuspended: users.isSuspended,
     })
     .from(users)
     .where(eq(users.id, session.userId))
@@ -63,9 +67,16 @@ async function syncSessionWithDb(
     return null;
   }
 
+  if (row.isSuspended) {
+    session.isSuspended = true;
+    await destroySession(sessionId);
+    return null;
+  }
+
   session.email = row.email;
   session.name = row.name;
   session.role = row.role;
+  session.isSuspended = false;
 
   if (persist) {
     await getRedis().setex(sessionKey(sessionId), redisTtlSeconds(), JSON.stringify(session));
@@ -86,6 +97,8 @@ export async function createSession(user: AuthUser, tabId?: string | null): Prom
     lastActivityAt: now,
     lastHeartbeatAt: now,
     browserTabId: tabId ?? null,
+    lastDbSyncAt: now,
+    isSuspended: false,
   };
   const r = getRedis();
   await r.setex(sessionKey(id), redisTtlSeconds(), JSON.stringify(data));
@@ -130,7 +143,22 @@ export async function touchSession(
     session.browserTabId = options.tabId;
   }
 
-  return syncSessionWithDb(session, sessionId, true);
+  const needsDbSync =
+    options.isHeartbeat ||
+    !session.lastDbSyncAt ||
+    now - session.lastDbSyncAt >= config.sessionDbSyncMs;
+
+  if (needsDbSync) {
+    session.lastDbSyncAt = now;
+    return syncSessionWithDb(session, sessionId, true);
+  }
+
+  await r.setex(sessionKey(sessionId), redisTtlSeconds(), JSON.stringify(session));
+  if (session.isSuspended) {
+    await destroySession(sessionId);
+    return null;
+  }
+  return toAuthUser(session);
 }
 
 export async function getSessionUser(sessionId: string): Promise<AuthUser | null> {
@@ -138,6 +166,20 @@ export async function getSessionUser(sessionId: string): Promise<AuthUser | null
   if (!raw) return null;
   const session = JSON.parse(raw) as SessionData;
   return syncSessionWithDb(session, sessionId, true);
+}
+
+/** Read session from Redis only — for static media (SCORM assets). No DB sync or Redis write. */
+export async function resolveSessionForStaticAsset(sessionId: string): Promise<AuthUser | null> {
+  const raw = await getRedis().get(sessionKey(sessionId));
+  if (!raw) return null;
+
+  const session: SessionData = JSON.parse(raw);
+  const now = Date.now();
+
+  if (now - session.lastActivityAt > config.sessionIdleMs) return null;
+  if (now - session.lastHeartbeatAt > config.sessionBrowserClosedMs) return null;
+
+  return toAuthUser(session);
 }
 
 export async function destroySession(sessionId: string): Promise<void> {

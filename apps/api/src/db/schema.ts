@@ -9,6 +9,7 @@ import {
   uuid,
   varchar,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('user_role', ['system_admin', 'admin', 'instructor', 'student']);
@@ -260,17 +261,23 @@ export const certificates = pgTable('certificates', {
   issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const activityEvents = pgTable('activity_events', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  courseId: uuid('course_id').references(() => courses.id, { onDelete: 'set null' }),
-  lessonId: uuid('lesson_id').references(() => lessons.id, { onDelete: 'set null' }),
-  eventType: varchar('event_type', { length: 100 }).notNull(),
-  payload: jsonb('payload').notNull().default({}),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const activityEvents = pgTable(
+  'activity_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id').references(() => courses.id, { onDelete: 'set null' }),
+    lessonId: uuid('lesson_id').references(() => lessons.id, { onDelete: 'set null' }),
+    eventType: varchar('event_type', { length: 100 }).notNull(),
+    payload: jsonb('payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    courseCreatedIdx: index('activity_events_course_created_idx').on(table.courseId, table.createdAt),
+  }),
+);
 
 export const scormPackages = pgTable('scorm_packages', {
   id: uuid('id').primaryKey().defaultRandom(),

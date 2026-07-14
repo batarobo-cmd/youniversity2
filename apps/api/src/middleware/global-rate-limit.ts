@@ -2,14 +2,16 @@ import type { MiddlewareHandler } from 'hono';
 import { config } from '../config';
 import { clientIpFromHeaders, consumeRateLimit } from '../services/rate-limit';
 
-function isRateLimitExemptPath(pathname: string): boolean {
+function isRateLimitExemptPath(pathname: string, method: string): boolean {
   if (pathname === '/health' || pathname.startsWith('/health/')) return true;
   if (pathname === '/ws') return true;
+  // SCORM balíky načítavajú desiatky–stovky súborov naraz; limit by zastavil načítanie v polovici.
+  if (method === 'GET' && pathname.startsWith('/api/media/')) return true;
   return false;
 }
 
 export const globalRateLimitMiddleware: MiddlewareHandler = async (c, next) => {
-  if (c.req.method === 'OPTIONS' || isRateLimitExemptPath(c.req.path)) {
+  if (c.req.method === 'OPTIONS' || isRateLimitExemptPath(c.req.path, c.req.method)) {
     await next();
     return;
   }

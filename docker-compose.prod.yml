@@ -31,8 +31,13 @@ services:
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://youniversity:${POSTGRES_PASSWORD}@postgres:5432/youniversity2
       S3_ENDPOINT: http://minio:9000
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-15}
+      SESSION_DB_SYNC_MS: ${SESSION_DB_SYNC_MS:-300000}
+      GLOBAL_RATE_LIMIT_MAX: ${GLOBAL_RATE_LIMIT_MAX:-2000}
+      GLOBAL_RATE_LIMIT_WINDOW_SEC: ${GLOBAL_RATE_LIMIT_WINDOW_SEC:-900}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+    mem_limit: 512m
     healthcheck:
       test:
         [
@@ -59,6 +64,7 @@ services:
         WEB_BUILD_HEAP_MB: ${WEB_BUILD_HEAP_MB:-512}
     container_name: you2-web
     shm_size: 256mb
+    mem_limit: 512m
     environment:
       API_URL: http://api:3001
       PORT: 3000
@@ -74,12 +80,29 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: you2-postgres
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=80
+      - -c
+      - wal_buffers=4MB
+      - -c
+      - random_page_cost=1.1
     environment:
       POSTGRES_USER: youniversity
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: youniversity2
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    mem_limit: 512m
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U youniversity -d youniversity2']
       interval: 5s
@@ -90,8 +113,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: you2-redis
+    command: ['redis-server', '--maxmemory', '128mb', '--maxmemory-policy', 'allkeys-lru']
     volumes:
       - redis_data:/data
+    mem_limit: 192m
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -108,6 +133,7 @@ services:
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
     volumes:
       - minio_data:/data
+    mem_limit: 384m
     restart: unless-stopped
 
 volumes:

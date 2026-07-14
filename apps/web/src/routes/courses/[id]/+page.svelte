@@ -88,7 +88,7 @@
 
   const PRESENTATION_PROGRESS_SYNC_MS = 800;
 
-  const VIDEO_PROGRESS_SYNC_MS = 1000;
+  const VIDEO_PROGRESS_SYNC_MS = 3000;
   const WATCH_COMPLETE_TOLERANCE_S = 0.35;
   const WATCH_TICK_MS = 250;
 
@@ -702,6 +702,9 @@
         : null;
     if (leavingScormId) {
       await scormFlushFns.get(leavingScormId)?.(false);
+      const nextMounted = new Set(mountedScormIds);
+      nextMounted.delete(leavingScormId);
+      mountedScormIds = nextMounted;
     }
 
     const nextLesson = lessonById(lessonId) ?? lesson;
@@ -916,7 +919,7 @@
     if (syncingVideoProgress) return;
     syncingVideoProgress = true;
     try {
-      await serverMutate('apiMutation', '/api/progress', 'POST', {
+      await api.updateProgress({
         lessonId,
         percentComplete: payload.percentComplete,
         ...(payload.isComplete !== undefined ? { isComplete: payload.isComplete } : {}),
