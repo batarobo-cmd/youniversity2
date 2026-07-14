@@ -22,7 +22,7 @@
 
   function toggleAuthMode() {
     isRegister = !isRegister;
-    if (hasOAuth) manualDetailsOpen = true;
+    if (hasOAuth && !isRegister) manualDetailsOpen = true;
   }
 
   const error = $derived(
@@ -33,16 +33,6 @@
     ),
   );
 </script>
-
-<svelte:head>
-  {#if registrationEnabled && turnstileSiteKey}
-    <script
-      src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-      async
-      defer
-    ></script>
-  {/if}
-</svelte:head>
 
 <div class="login-page">
   <aside class="login-brand">
@@ -120,81 +110,74 @@
         </div>
       {/if}
 
-      {#if hasOAuth}
+      {#if isRegister && registrationEnabled}
+        {#if hasOAuth}
+          <p class="manual-login-heading">{t('auth.manualRegister', $locale)}</p>
+        {/if}
+        <RegisterManualForm {turnstileSiteKey} />
+      {:else if hasOAuth}
         <details class="manual-login-details" bind:open={manualDetailsOpen}>
-          <summary>
-            {isRegister && registrationEnabled
-              ? t('auth.manualRegister', $locale)
-              : t('auth.manualLogin', $locale)}
-          </summary>
+          <summary>{t('auth.manualLogin', $locale)}</summary>
           <div class="manual-login-body">
-            {#if isRegister && registrationEnabled}
-              <RegisterManualForm {turnstileSiteKey} />
-            {:else}
-              <form class="manual-form" method="POST" action="?/login">
-                <div class="form-field">
-                  <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
-                  <input
-                    id="email"
-                    name="email"
-                    type={dev ? 'text' : 'email'}
-                    value={form?.email ?? ''}
-                    autocomplete="username"
-                    placeholder={dev ? 'admin' : ''}
-                    required
-                  />
-                </div>
-                <div class="form-field">
-                  <label for="password">{t('auth.password', $locale)}</label>
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autocomplete="current-password"
-                    placeholder={dev ? 'admin' : ''}
-                    required
-                  />
-                </div>
-                <button type="submit" class="login-submit">
-                  {t('auth.submit', $locale)}
-                </button>
-              </form>
-            {/if}
+            <form class="manual-form" method="POST" action="?/login">
+              <div class="form-field">
+                <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
+                <input
+                  id="email"
+                  name="email"
+                  type={dev ? 'text' : 'email'}
+                  value={form?.email ?? ''}
+                  autocomplete="username"
+                  placeholder={dev ? 'admin' : ''}
+                  required
+                />
+              </div>
+              <div class="form-field">
+                <label for="password">{t('auth.password', $locale)}</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder={dev ? 'admin' : ''}
+                  required
+                />
+              </div>
+              <button type="submit" class="login-submit">
+                {t('auth.submit', $locale)}
+              </button>
+            </form>
           </div>
         </details>
       {:else}
-        {#if isRegister && registrationEnabled}
-          <RegisterManualForm {turnstileSiteKey} />
-        {:else}
-          <form class="manual-form" method="POST" action="?/login">
-            <div class="form-field">
-              <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
-              <input
-                id="email"
-                name="email"
-                type={dev ? 'text' : 'email'}
-                value={form?.email ?? ''}
-                autocomplete="username"
-                placeholder={dev ? 'admin' : ''}
-                required
-              />
-            </div>
-            <div class="form-field">
-              <label for="password">{t('auth.password', $locale)}</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                placeholder={dev ? 'admin' : ''}
-                required
-              />
-            </div>
-            <button type="submit" class="login-submit">
-              {t('auth.submit', $locale)}
-            </button>
-          </form>
-        {/if}
+        <form class="manual-form" method="POST" action="?/login">
+          <div class="form-field">
+            <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
+            <input
+              id="email"
+              name="email"
+              type={dev ? 'text' : 'email'}
+              value={form?.email ?? ''}
+              autocomplete="username"
+              placeholder={dev ? 'admin' : ''}
+              required
+            />
+          </div>
+          <div class="form-field">
+            <label for="password">{t('auth.password', $locale)}</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder={dev ? 'admin' : ''}
+              required
+            />
+          </div>
+          <button type="submit" class="login-submit">
+            {t('auth.submit', $locale)}
+          </button>
+        </form>
       {/if}
 
       {#if registrationEnabled}

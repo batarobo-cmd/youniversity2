@@ -20,12 +20,30 @@ export const load: PageServerLoad = async () => {
   try {
     const res = await fetch(`${API_URL}/api/auth/config`);
     if (res.ok) {
-      return { authConfig: await res.json() };
+      const authConfig = (await res.json()) as {
+        manualLoginEnabled: boolean;
+        manualRegistrationEnabled: boolean;
+        turnstileSiteKey?: string | null;
+        oauth: { google: { enabled: boolean }; microsoft: { enabled: boolean } };
+      };
+      const envSiteKey = process.env.TURNSTILE_SITE_KEY?.trim();
+      return {
+        authConfig: {
+          ...authConfig,
+          turnstileSiteKey: authConfig.turnstileSiteKey || envSiteKey || null,
+        },
+      };
     }
   } catch {
     // API unavailable during load — fall back to safe defaults
   }
-  return { authConfig: defaultAuthConfig };
+  const envSiteKey = process.env.TURNSTILE_SITE_KEY?.trim();
+  return {
+    authConfig: {
+      ...defaultAuthConfig,
+      turnstileSiteKey: envSiteKey || null,
+    },
+  };
 };
 
 function setSessionCookie(cookies: import('@sveltejs/kit').Cookies, sessionId: string) {

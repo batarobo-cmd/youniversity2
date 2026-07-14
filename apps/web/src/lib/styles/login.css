@@ -227,6 +227,14 @@
   overflow: hidden;
 }
 
+.manual-login-heading {
+  margin: 1.25rem 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
 .manual-login-details summary {
   display: flex;
   align-items: center;
@@ -295,6 +303,11 @@
 .login-submit:hover:not(:disabled) {
   filter: brightness(1.08);
   box-shadow: var(--shadow-glow);
+}
+
+.login-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .login-error {
