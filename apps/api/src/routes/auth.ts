@@ -15,19 +15,32 @@ import {
   isEmailDomainAllowed,
 } from '../services/auth-settings';
 import { resolveLoginIdentifier, useLocalDevCredentials } from '../services/demo-users';
-import { SUPPORTED_LOCALES } from '@youniversity2/shared';
+import { SUPPORTED_LOCALES, composePersonDisplayName, normalizePersonName, isSafePersonName } from '@youniversity2/shared';
 import {
   getAuthorizationUrl,
   handleOAuthCallback,
   serializeUser,
   type OAuthProvider,
 } from '../services/oauth';
+import { verifyTurnstileToken } from '../services/turnstile';
+import { clientIpFromHeaders, consumeRateLimit } from '../services/rate-limit';
+
+const personNameField = z
+  .string()
+  .min(1)
+  .max(100)
+  .transform(normalizePersonName)
+  .refine(isSafePersonName, { message: 'Invalid name' });
 
 const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(2),
+  email: z.string().trim().email().max(255),
+  password: z.string().min(8).max(128),
+  givenName: personNameField,
+  familyName: personNameField,
   preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
+  turnstileToken: z.string().max(2048).optional(),
+  /** Honeypot — must stay empty. */
+  companyWebsite: z.string().max(0).optional(),
 });
 
 const loginSchema = useLocalDevCredentials()
@@ -176,7 +189,26 @@ authRoutes.post('/register', async (c) => {
     return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
   }
 
-  const { email, password, name, preferredLocale } = body.data;
+  if (body.data.companyWebsite) {
+    return c.json({ error: 'Invalid input' }, 400);
+  }
+
+  const clientIp = clientIpFromHeaders(
+    c.req.header('X-Forwarded-For'),
+    c.req.header('X-Real-IP'),
+  );
+  const rateKey = `register:${clientIp ?? 'unknown'}`;
+  if (!(await consumeRateLimit(rateKey, 5, 3600))) {
+    return c.json({ error: 'Too many registration attempts', code: 'rate_limited' }, 429);
+  }
+
+  const captcha = await verifyTurnstileToken(body.data.turnstileToken, clientIp);
+  if (!captcha.ok) {
+    return c.json({ error: 'Captcha verification failed', code: captcha.code }, 403);
+  }
+
+  const { email, password, givenName, familyName, preferredLocale } = body.data;
+  const name = composePersonDisplayName(givenName, familyName);
 
   if (!isEmailDomainAllowed(email, settings.allowedRegistrationDomains)) {
     return c.json({ error: 'Email domain is not allowed', code: 'domain_not_allowed' }, 403);
@@ -194,6 +226,9 @@ authRoutes.post('/register', async (c) => {
       email,
       passwordHash,
       name,
+      givenName,
+      familyName,
+      companyDomain: email.includes('@') ? email.split('@')[1]?.toLowerCase() : undefined,
       preferredLocale: preferredLocale ?? 'sk',
       role: 'student',
     })

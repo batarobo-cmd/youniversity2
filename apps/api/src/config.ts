@@ -20,6 +20,10 @@ export const config = {
     secretKey: process.env.S3_SECRET_KEY ?? 'minioadmin',
     region: process.env.S3_REGION ?? 'eu-central-1',
   },
+  turnstile: {
+    siteKey: process.env.TURNSTILE_SITE_KEY ?? '',
+    secretKey: process.env.TURNSTILE_SECRET_KEY ?? '',
+  },
   oauth: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',

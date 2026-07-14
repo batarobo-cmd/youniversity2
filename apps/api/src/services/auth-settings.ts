@@ -25,6 +25,7 @@ export type AuthSettingsData = {
 export type PublicAuthConfig = {
   manualLoginEnabled: boolean;
   manualRegistrationEnabled: boolean;
+  turnstileSiteKey: string | null;
   oauth: Record<OAuthProviderKey, { enabled: boolean }>;
 };
 
@@ -109,9 +110,11 @@ export async function getAuthSettings(): Promise<AuthSettingsData> {
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   const settings = await getAuthSettings();
+  const siteKey = config.turnstile.siteKey.trim();
   return {
     manualLoginEnabled: true,
     manualRegistrationEnabled: settings.manualRegistrationEnabled,
+    turnstileSiteKey: siteKey || null,
     oauth: {
       google: {
         enabled: settings.google.enabled && Boolean(settings.google.clientId && settings.google.clientSecret),

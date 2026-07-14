@@ -5,6 +5,7 @@
   import { authErrorMessage, t } from '$lib/i18n';
   import type { ActionData, PageData } from './$types';
   import LocaleMenu from '$lib/components/LocaleMenu.svelte';
+  import RegisterManualForm from '$lib/components/RegisterManualForm.svelte';
   import '$lib/styles/login.css';
 
   let { data, form = null }: { data: PageData; form?: ActionData | null } = $props();
@@ -16,6 +17,7 @@
   const oauthMicrosoft = $derived(authConfig.oauth.microsoft.enabled);
   const hasOAuth = $derived(oauthGoogle || oauthMicrosoft);
   const registrationEnabled = $derived(authConfig.manualRegistrationEnabled);
+  const turnstileSiteKey = $derived(authConfig.turnstileSiteKey ?? null);
 
   const error = $derived(
     authErrorMessage(
@@ -99,23 +101,7 @@
           <summary>{t('auth.manualLogin', $locale)}</summary>
           <div class="manual-login-body">
             {#if isRegister && registrationEnabled}
-              <form class="manual-form" method="POST" action="?/register">
-                <div class="form-field">
-                  <label for="name">{t('auth.name', $locale)}</label>
-                  <input id="name" name="name" autocomplete="name" required />
-                </div>
-                <div class="form-field">
-                  <label for="email">{t('auth.email', $locale)}</label>
-                  <input id="email" name="email" type="email" autocomplete="email" required />
-                </div>
-                <div class="form-field">
-                  <label for="password">{t('auth.password', $locale)}</label>
-                  <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
-                </div>
-                <button type="submit" class="login-submit">
-                  {t('auth.register', $locale)}
-                </button>
-              </form>
+              <RegisterManualForm {turnstileSiteKey} />
             {:else}
               <form class="manual-form" method="POST" action="?/login">
                 <div class="form-field">
@@ -150,23 +136,7 @@
         </details>
       {:else}
         {#if isRegister && registrationEnabled}
-          <form class="manual-form" method="POST" action="?/register">
-            <div class="form-field">
-              <label for="name">{t('auth.name', $locale)}</label>
-              <input id="name" name="name" autocomplete="name" required />
-            </div>
-            <div class="form-field">
-              <label for="email">{t('auth.email', $locale)}</label>
-              <input id="email" name="email" type="email" autocomplete="email" required />
-            </div>
-            <div class="form-field">
-              <label for="password">{t('auth.password', $locale)}</label>
-              <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
-            </div>
-            <button type="submit" class="login-submit">
-              {t('auth.register', $locale)}
-            </button>
-          </form>
+          <RegisterManualForm {turnstileSiteKey} />
         {:else}
           <form class="manual-form" method="POST" action="?/login">
             <div class="form-field">

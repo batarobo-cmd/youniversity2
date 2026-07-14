@@ -116,7 +116,15 @@ export const api = {
       },
     ),
 
-  register: (data: { email: string; password: string; name: string; preferredLocale?: string }) =>
+  register: (data: {
+    email: string;
+    password: string;
+    givenName: string;
+    familyName: string;
+    preferredLocale?: string;
+    turnstileToken?: string;
+    companyWebsite?: string;
+  }) =>
     request<{ sessionId: string; accessToken: string; user: import('@youniversity2/shared').User }>(
       '/api/auth/register',
       {

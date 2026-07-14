@@ -9,6 +9,7 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 const defaultAuthConfig = {
   manualLoginEnabled: true,
   manualRegistrationEnabled: true,
+  turnstileSiteKey: null as string | null,
   oauth: {
     google: { enabled: false },
     microsoft: { enabled: false },
@@ -82,18 +83,37 @@ export const actions = {
     const form = await request.formData();
     const email = String(form.get('email') ?? '').trim();
     const password = String(form.get('password') ?? '');
-    const name = String(form.get('name') ?? '').trim();
+    const givenName = String(form.get('givenName') ?? '').trim();
+    const familyName = String(form.get('familyName') ?? '').trim();
+    const turnstileToken = String(form.get('turnstileToken') ?? '').trim();
+    const companyWebsite = String(form.get('companyWebsite') ?? '').trim();
 
-    if (!email || !password || !name) {
+    if (!email || !password || !givenName || !familyName) {
       return fail(400, { error: 'Vyplňte všetky polia' });
+    }
+
+    if (companyWebsite) {
+      return fail(400, { error: 'Registrácia zlyhala' });
     }
 
     let res: Response;
     try {
       res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, preferredLocale: 'sk' }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Forwarded-For': request.headers.get('x-forwarded-for') ?? '',
+          'X-Real-IP': request.headers.get('x-real-ip') ?? '',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          givenName,
+          familyName,
+          preferredLocale: 'sk',
+          turnstileToken: turnstileToken || undefined,
+          companyWebsite: companyWebsite || undefined,
+        }),
       });
     } catch {
       return fail(503, { error: 'Nepodarilo sa spojiť so serverom.' });

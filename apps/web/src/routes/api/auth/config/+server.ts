@@ -6,6 +6,7 @@ const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 const defaultAuthConfig = {
   manualLoginEnabled: true,
   manualRegistrationEnabled: true,
+  turnstileSiteKey: null as string | null,
   oauth: {
     google: { enabled: false },
     microsoft: { enabled: false },
