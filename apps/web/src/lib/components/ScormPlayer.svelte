@@ -10,6 +10,7 @@
     applyScormCompletionMarkers,
     scormCmiIndicatesComplete,
     scormCmiReadyToFinalize,
+    scormPackageSignalsCompletionScreen,
   } from '@youniversity2/shared';
   import { prepareScormCmiForResume, type ScormLaunchConfig } from '$lib/scorm-config';
 
@@ -51,6 +52,9 @@
   let apiReadyForAttempt = $state<string | null>(null);
   let completionRecorded = $state(false);
   let scormApiInstalledFor: string | null = null;
+  let packageCompletionHandled = false;
+  let iframeEl = $state<HTMLIFrameElement | null>(null);
+  let activeFinishAttemptId: string | null = null;
 
   const sessionReady = $derived(Boolean(session?.attemptId && session?.iframeSrc && !session?.launching));
   const showIframe = $derived(
@@ -152,7 +156,7 @@
   function queueCmiCommit(attemptId: string, terminatedFlag = false) {
     enqueueCommit(async () => {
       const payload = { ...cmiData };
-      const terminate = shouldTerminateSession(payload);
+      const terminate = shouldTerminateSession(payload) || terminatedFlag;
       if (terminate) {
         applyScormCompletionMarkers(config.version, payload);
       }
@@ -160,11 +164,11 @@
     });
   }
 
-  async function tryAutoComplete(attemptId: string, terminated = true) {
+  async function tryAutoComplete(attemptId: string) {
     if (completionRecorded) return;
     const canFinalize =
       scormCmiIndicatesComplete(config.version, cmiData) ||
-      (terminated && scormCmiReadyToFinalize(config.version, cmiData));
+      scormCmiReadyToFinalize(config.version, cmiData);
     if (!canFinalize) return;
 
     const payload = { ...cmiData };
@@ -183,6 +187,68 @@
     await completionCommitInFlight;
   }
 
+  function readIframeText() {
+    try {
+      return iframeEl?.contentDocument?.body?.innerText ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  function requestPackageExit() {
+    const win = iframeEl?.contentWindow as (Window & Record<string, unknown>) | null;
+    if (!win) return;
+    for (const name of ['DoExit', 'doExit', 'DoClose', 'ClosePlayer', 'ExitActivity']) {
+      const fn = win[name];
+      if (typeof fn === 'function') {
+        try {
+          fn.call(win);
+          return;
+        } catch {
+          // continue
+        }
+      }
+    }
+  }
+
+  function invokeLmsFinish(attemptId: string) {
+    queueCmiCommit(attemptId, true);
+    void tryAutoComplete(attemptId);
+  }
+
+  function installStorylineParentHooks(attemptId: string) {
+    activeFinishAttemptId = attemptId;
+    const finish = () => {
+      if (activeFinishAttemptId) invokeLmsFinish(activeFinishAttemptId);
+    };
+    const w = window as unknown as Record<string, unknown>;
+    w.doLMSFinish = finish;
+    w.doClose = finish;
+    w.ExitActivity = finish;
+    w.ExitCourse = finish;
+  }
+
+  function clearStorylineParentHooks() {
+    activeFinishAttemptId = null;
+    const w = window as unknown as Record<string, unknown>;
+    for (const key of ['doLMSFinish', 'doClose', 'ExitActivity', 'ExitCourse']) {
+      if (w[key] === undefined) continue;
+      delete w[key];
+    }
+  }
+
+  async function handlePackageCompletionScreen(attemptId: string) {
+    if (completionRecorded || packageCompletionHandled) return;
+    const iframeText = readIframeText();
+    if (!scormPackageSignalsCompletionScreen(iframeText)) return;
+
+    packageCompletionHandled = true;
+    requestPackageExit();
+    document.getElementById('scorm-exit-activity')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    invokeLmsFinish(attemptId);
+  }
+
   function installScormApis(currentAttemptId: string) {
     const scorm12Base = makeScorm12ErrorApi();
     const scorm2004Base = makeScorm2004ErrorApi();
@@ -196,7 +262,7 @@
       }
       if (config.version === 'scorm_12' && element === 'cmi.core.lesson_status' && value === 'completed') {
         queueCmiCommit(currentAttemptId, false);
-        void tryAutoComplete(currentAttemptId, true);
+        void tryAutoComplete(currentAttemptId);
         return;
       }
       if (config.version === 'scorm_2004' && element === 'cmi.success_status' && value === 'passed') {
@@ -209,10 +275,10 @@
         element === 'cmi.suspend_data'
       ) {
         queueCmiCommit(currentAttemptId, false);
-        void tryAutoComplete(currentAttemptId, true);
+        void tryAutoComplete(currentAttemptId);
         return;
       }
-      void tryAutoComplete(currentAttemptId, true);
+      void tryAutoComplete(currentAttemptId);
     }
 
     (window as any).API = {
@@ -274,6 +340,8 @@
         return 'true';
       },
     };
+
+    installStorylineParentHooks(currentAttemptId);
   }
 
   function syncCmiFromSession(next: ScormSessionState | null | undefined) {
@@ -286,16 +354,6 @@
   async function flushProgress(terminated = false) {
     const id = untrack(() => session?.attemptId ?? syncedAttemptId);
     if (!id || !get(token)) return;
-
-    if (terminated) {
-      const api = (window as any).API;
-      const api2004 = (window as any).API_1484_11;
-      if (config.version === 'scorm_12' && typeof api?.LMSFinish === 'function') {
-        api.LMSFinish('');
-      } else if (config.version === 'scorm_2004' && typeof api2004?.Terminate === 'function') {
-        api2004.Terminate('');
-      }
-    }
 
     await waitForCommitQueue();
     await suspendSession(terminated);
@@ -310,7 +368,7 @@
       try {
         await waitForCommitQueue();
         const payload = buildSuspendCmi(terminated);
-        const terminate = shouldTerminateSession(payload);
+        const terminate = shouldTerminateSession(payload) || terminated;
         if (terminate) {
           applyScormCompletionMarkers(config.version, payload);
         }
@@ -338,7 +396,7 @@
     const id = untrack(() => session?.attemptId ?? syncedAttemptId);
     if (!id) return;
     const payload = buildSuspendCmi(terminated);
-    const terminate = shouldTerminateSession(payload);
+    const terminate = shouldTerminateSession(payload) || terminated;
     if (terminate) {
       applyScormCompletionMarkers(config.version, payload);
     }
@@ -360,19 +418,22 @@
       syncCmiFromSession(session);
       syncedAttemptId = attemptId;
       completionRecorded = false;
+      packageCompletionHandled = false;
       commitQueue = Promise.resolve();
     }
 
     if (scormApiInstalledFor !== attemptId) {
       installScormApis(attemptId);
       scormApiInstalledFor = attemptId;
+    } else {
+      installStorylineParentHooks(attemptId);
     }
 
     apiReadyForAttempt = attemptId;
     registerFlush?.(config.lessonId, flushProgress);
 
     if (active) {
-      void tryAutoComplete(attemptId, true);
+      void tryAutoComplete(attemptId);
     }
 
     return () => {
@@ -385,8 +446,9 @@
 
     const attemptId = session.attemptId;
     const interval = setInterval(() => {
-      void tryAutoComplete(attemptId, true);
-    }, 3000);
+      void handlePackageCompletionScreen(attemptId);
+      void tryAutoComplete(attemptId);
+    }, 2000);
 
     return () => clearInterval(interval);
   });
@@ -419,6 +481,7 @@
 
   onDestroy(() => {
     registerFlush?.(config.lessonId, null);
+    clearStorylineParentHooks();
     if (active && session?.attemptId) {
       void flushProgress(false);
     }
@@ -426,6 +489,20 @@
 </script>
 
 <div class="scorm-player" class:scorm-player--inactive={!active && !suspendPending}>
+  <!-- Hidden hook for Articulate/Storyline packages that look for an LMS exit target (not shown in UI). -->
+  <a
+    id="scorm-exit-activity"
+    href="#"
+    class="scorm-exit-hook"
+    aria-hidden="true"
+    tabindex="-1"
+    onclick={(e) => {
+      e.preventDefault();
+      if (syncedAttemptId) invokeLmsFinish(syncedAttemptId);
+    }}
+  >
+    Exit
+  </a>
   {#if !active && !suspendPending}
     <!-- paused -->
   {:else if session?.error}
@@ -434,6 +511,7 @@
     <p class="scorm-player-loading">{t('course.scormLoading', locale)}</p>
   {:else if showIframe}
     <iframe
+      bind:this={iframeEl}
       class="course-embed-iframe"
       src={session.iframeSrc}
       title="SCORM"
@@ -443,6 +521,22 @@
 </div>
 
 <style>
+  .scorm-player {
+    position: relative;
+  }
+
+  .scorm-exit-hook {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .scorm-player--inactive {
     display: none;
   }

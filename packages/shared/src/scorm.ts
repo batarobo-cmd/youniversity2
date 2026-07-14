@@ -57,6 +57,14 @@ export function scormCmiReadyToFinalize(
   return !Number.isNaN(progress) && progress >= 1;
 }
 
+export function scormPackageSignalsCompletionScreen(text: string): boolean {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+  return /activity complete|course complete|lesson complete|you have (successfully )?completed|content has ended/i.test(
+    normalized,
+  );
+}
+
 export function applyScormCompletionMarkers(
   version: ScormVersion,
   cmi: Record<string, unknown>,

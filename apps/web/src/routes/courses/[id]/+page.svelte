@@ -574,11 +574,6 @@
     else scormFlushFns.delete(lessonId);
   }
 
-  async function exitScormActivity(lessonId: string) {
-    await scormFlushFns.get(lessonId)?.(true);
-    await invalidate('student:course');
-  }
-
   function reloadScormPlayer(lessonId: string) {
     scormLaunchTokens = {
       ...scormLaunchTokens,
@@ -1211,17 +1206,6 @@
         {/if}
 
         {#if mountedScormIds.size > 0}
-          {#if activeLesson && activityType(activeLesson) === 'scorm'}
-            <div class="scorm-activity-toolbar">
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm"
-                onclick={() => void exitScormActivity(activeLesson.id as string)}
-              >
-                {t('course.scormExit', $locale)}
-              </button>
-            </div>
-          {/if}
           <div class="scorm-viewers">
             {#each scormActivities() as scormLesson (scormLesson.id)}
               {@const scormConfig = scormLaunchConfig(scormLesson)}
