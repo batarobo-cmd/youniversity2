@@ -93,5 +93,9 @@ grep -E '^PUBLIC_URL=' .env | cut -d= -f2- || grep -E '^WEB_URL=' .env | cut -d=
 
 echo ""
 echo "==> Rýchly test..."
-curl -sL -o /dev/null -w "health=%{http_code} " http://127.0.0.1/health || true
-curl -sL -o /dev/null -w "web=%{http_code}\n" --max-time 15 http://127.0.0.1/ || true
+HEALTH_BASE="http://127.0.0.1"
+if grep -qE '^(PUBLIC_URL|WEB_URL)=https://' .env 2>/dev/null; then
+  HEALTH_BASE="https://127.0.0.1"
+fi
+curl -skL -o /dev/null -w "health=%{http_code} " "${HEALTH_BASE}/health" || true
+curl -skL -o /dev/null -w "web=%{http_code}\n" --max-time 15 "${HEALTH_BASE}/" || true

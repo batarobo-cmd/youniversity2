@@ -15,6 +15,13 @@
       "when": 1784067900000,
       "tag": "0001_system_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784071200000,
+      "tag": "0002_scorm_tables",
+      "breakpoints": true
     }
   ]
 }

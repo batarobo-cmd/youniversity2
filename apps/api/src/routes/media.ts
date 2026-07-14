@@ -179,7 +179,8 @@ mediaRoutes.post('/videos', authMiddleware, requireRole('admin'), async (c) => {
 });
 
 mediaRoutes.post('/scorm', authMiddleware, requireRole('admin'), async (c) => {
-  const form = await c.req.formData();
+  try {
+    const form = await c.req.formData();
   const file = form.get('file');
   const courseId = form.get('courseId')?.toString().trim();
   const forcedVersion = form.get('version')?.toString().trim();
@@ -290,6 +291,11 @@ mediaRoutes.post('/scorm', authMiddleware, requireRole('admin'), async (c) => {
     },
     201,
   );
+  } catch (err) {
+    console.error('[media/scorm] upload failed:', err);
+    const message = err instanceof Error ? err.message : 'SCORM upload failed';
+    return c.json({ error: message }, 500);
+  }
 });
 
 mediaRoutes.post('/presentations', authMiddleware, requireRole('admin'), async (c) => {

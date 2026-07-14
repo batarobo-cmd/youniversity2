@@ -27,6 +27,7 @@ import { startPublicationScheduler } from './services/publication-scheduler';
 import { migrateLegacyRoles } from './db/migrate-legacy-roles';
 import { ensureSystemAdminExists } from './db/ensure-system-admin-exists';
 import { ensureSystemSettingsTable } from './db/ensure-system-settings-table';
+import { ensureScormTables } from './db/ensure-scorm-tables';
 
 const app = new Hono();
 
@@ -81,6 +82,11 @@ try {
   await ensureSystemSettingsTable();
 } catch (err) {
   console.error('[startup] ensureSystemSettingsTable failed:', err);
+}
+try {
+  await ensureScormTables();
+} catch (err) {
+  console.error('[startup] ensureScormTables failed:', err);
 }
 startPublicationScheduler();
 
