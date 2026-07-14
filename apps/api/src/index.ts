@@ -67,6 +67,8 @@ const wsHandlers = createWebSocketHandlers();
 
 const server = Bun.serve({
   port: config.port,
+  // Default Bun limit is 128 MB; SCORM/video uploads allow up to 500 MB.
+  maxRequestBodySize: 524_288_000,
   async fetch(req, server) {
     const url = new URL(req.url);
 
