@@ -184,6 +184,15 @@
         scheduleCommit(true);
         return;
       }
+      if (
+        element === 'cmi.core.lesson_location' ||
+        element === 'cmi.location' ||
+        element === 'cmi.suspend_data'
+      ) {
+        scheduleCommit(false);
+        void tryAutoComplete(currentAttemptId, true);
+        return;
+      }
       void tryAutoComplete(currentAttemptId, true);
     }
 
