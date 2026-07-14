@@ -166,7 +166,7 @@
     }
 
     function afterCmiMutation(element: string, value: string) {
-      if (config.version === 'scorm_12' && element === 'cmi.core.lesson_status' && value === 'passed') {
+      if (config.version === 'scorm_12' && element === 'cmi.core.lesson_status' && (value === 'passed' || value === 'completed')) {
         scheduleCommit(true);
         return;
       }

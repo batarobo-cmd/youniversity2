@@ -17,7 +17,7 @@ export function scormCmiIndicatesComplete(
 
   if (version === 'scorm_12') {
     const status = String(cmi['cmi.core.lesson_status'] ?? '').toLowerCase();
-    return status === 'passed';
+    return status === 'passed' || status === 'completed';
   }
 
   const success = String(cmi['cmi.success_status'] ?? '').toLowerCase();

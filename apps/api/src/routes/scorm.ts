@@ -144,7 +144,9 @@ async function upsertLessonProgress(
           : Math.min(existing.percentComplete, Math.round(payload.percentComplete))
         : existing.percentComplete;
     const nextIsComplete =
-      payload.isComplete !== undefined ? payload.isComplete : existing.isComplete;
+      payload.isComplete !== undefined
+        ? existing.isComplete || payload.isComplete
+        : existing.isComplete;
 
     await db
       .update(lessonProgress)
