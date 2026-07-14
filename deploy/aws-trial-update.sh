@@ -68,8 +68,14 @@ docker compose -f docker-compose.prod.yml run --rm --no-deps api bun run db:migr
   echo "WARN: db:migrate zlyhal — skontrolujte logy nižšie"
 }
 
-echo "==> Reštart kontajnerov..."
-docker compose -f docker-compose.prod.yml up -d --force-recreate web api nginx
+echo "==> Reštart kontajnerov (vrátane MinIO — potrebné pre SCORM upload)..."
+docker compose -f docker-compose.prod.yml up -d --force-recreate
+
+if ! docker compose -f docker-compose.prod.yml ps minio --status running -q 2>/dev/null | grep -q .; then
+  echo "WARN: MinIO nebeží — spúšťam..."
+  docker compose -f docker-compose.prod.yml up -d minio
+  sleep 3
+fi
 
 echo "==> Stav kontajnerov..."
 docker compose -f docker-compose.prod.yml ps

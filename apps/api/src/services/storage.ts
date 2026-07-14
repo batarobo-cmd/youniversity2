@@ -75,8 +75,16 @@ async function ensureBucket() {
   if (bucketReady) return;
   try {
     await s3.send(new HeadBucketCommand({ Bucket: config.s3.bucket }));
-  } catch {
-    await s3.send(new CreateBucketCommand({ Bucket: config.s3.bucket }));
+  } catch (headErr) {
+    try {
+      await s3.send(new CreateBucketCommand({ Bucket: config.s3.bucket }));
+    } catch (createErr) {
+      const msg = (createErr instanceof Error ? createErr.message : String(createErr)) ||
+        (headErr instanceof Error ? headErr.message : String(headErr));
+      throw new Error(
+        `Storage unavailable at ${config.s3.endpoint} (bucket: ${config.s3.bucket}): ${msg}`,
+      );
+    }
   }
   bucketReady = true;
 }
