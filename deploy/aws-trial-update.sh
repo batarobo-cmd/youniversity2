@@ -8,7 +8,12 @@ cd "$ROOT"
 echo "==> Git pull..."
 git fetch origin main
 # Ignore local chmod-only edits to deploy scripts from older pulls.
-git restore deploy/aws-trial-update.sh deploy/aws-trial-bootstrap.sh 2>/dev/null || true
+git restore \
+  deploy/aws-trial-update.sh \
+  deploy/aws-trial-bootstrap.sh \
+  deploy/aws-harden-secrets.sh \
+  deploy/aws-change-demo-passwords.sh \
+  2>/dev/null || true
 git pull --ff-only origin main
 
 if grep -qE '^(PUBLIC_URL|WEB_URL|API_URL)=https://' .env 2>/dev/null; then
