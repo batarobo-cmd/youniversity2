@@ -71,7 +71,11 @@ export const actions = {
     try {
       res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Forwarded-For': request.headers.get('x-forwarded-for') ?? '',
+          'X-Real-IP': request.headers.get('x-real-ip') ?? '',
+        },
         body: JSON.stringify({ email, password }),
       });
     } catch {

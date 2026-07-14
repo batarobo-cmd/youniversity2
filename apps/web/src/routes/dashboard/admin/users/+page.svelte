@@ -21,6 +21,8 @@
   import UserCertificatesCell from '$lib/components/UserCertificatesCell.svelte';
   import UserRoleSelect from '$lib/components/UserRoleSelect.svelte';
   import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
+  import { focusTrap } from '$lib/actions/focus-trap';
   import { subscribeUsersTableRefresh } from '$lib/live-admin-users';
   import { localizeAdminUserError } from '$lib/admin-user-errors';
   import type { PageData } from './$types';
@@ -427,6 +429,8 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && modalOpen && closeModal()} />
+
 <div class="admin-manage-header">
   <h1>{t('admin.usersTitle', $locale)}</h1>
   <p>{t('admin.usersSub', $locale)}</p>
@@ -452,7 +456,7 @@
 </div>
 
 {#if loading}
-  <p class="loading-text">...</p>
+  <PageSkeleton variant="table" ariaLabel={t('a11y.loading', $locale)} />
 {:else if filtered.length === 0}
   <div class="empty-state panel">{t('admin.usersEmpty', $locale)}</div>
 {:else}
@@ -631,10 +635,10 @@
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && closeModal()}
   >
-    <div class="users-modal" role="dialog" aria-modal="true">
+    <div class="users-modal" role="dialog" aria-modal="true" aria-labelledby="users-modal-title" use:focusTrap={modalOpen}>
       <div class="users-modal-header">
-        <h2>{editing ? t('admin.usersEdit', $locale) : t('admin.usersCreate', $locale)}</h2>
-        <button type="button" class="users-modal-close" onclick={closeModal} aria-label="Close">×</button>
+        <h2 id="users-modal-title">{editing ? t('admin.usersEdit', $locale) : t('admin.usersCreate', $locale)}</h2>
+        <button type="button" class="users-modal-close" onclick={closeModal} aria-label={t('a11y.close', $locale)}>×</button>
       </div>
       <form class="users-modal-body" onsubmit={saveUser}>
         {#if error}

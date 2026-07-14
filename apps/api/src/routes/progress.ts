@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
-import { z } from 'zod';
 import { db } from '../db';
 import { lessonProgress, activityEvents, lessons, courseModules, courses } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
@@ -8,18 +7,11 @@ import { evaluateCourseCompletion } from '../services/completion';
 import { broadcastToCourse } from '../realtime/hub';
 import { canStudentViewCourse, canStudentUpdateProgress, getStudentEnrollment } from '../services/course-access';
 import { effectiveRole } from '../services/student-view';
+import { updateProgressSchema } from '@youniversity2/shared';
 
 export const progressRoutes = new Hono();
 
 progressRoutes.use('*', authMiddleware);
-
-const updateProgressSchema = z.object({
-  lessonId: z.string().uuid(),
-  percentComplete: z.number().min(0).max(100).optional(),
-  isComplete: z.boolean().optional(),
-  score: z.number().min(0).max(100).optional(),
-  state: z.record(z.unknown()).optional(),
-});
 
 progressRoutes.get('/course/:courseId', async (c) => {
   const user = c.get('user') as AuthUser;

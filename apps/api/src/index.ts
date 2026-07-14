@@ -13,6 +13,10 @@ import { mediaRoutes } from './routes/media';
 import { certificateRoutes } from './routes/certificates';
 import { scormRoutes } from './routes/scorm';
 import { config } from './config';
+import { apiSecurityHeaders } from './middleware/security-headers';
+import { requestIdMiddleware } from './middleware/request-id';
+import { globalRateLimitMiddleware } from './middleware/global-rate-limit';
+import { getReadiness } from './services/health';
 import {
   initRealtimeHub,
   createWebSocketHandlers,
@@ -22,21 +26,33 @@ import { startPublicationScheduler } from './services/publication-scheduler';
 
 import { migrateLegacyRoles } from './db/migrate-legacy-roles';
 import { ensureSystemAdminExists } from './db/ensure-system-admin-exists';
+import { ensureSystemSettingsTable } from './db/ensure-system-settings-table';
 
 const app = new Hono();
 
 app.use('*', logger());
+app.use('*', requestIdMiddleware);
+app.use('*', apiSecurityHeaders);
 app.use(
   '*',
   cors({
     origin: config.corsOrigin,
     credentials: true,
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Tab-Session'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Tab-Session', 'X-Request-Id', 'X-Student-View-Mode'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
 );
+app.use('*', globalRateLimitMiddleware);
 
 app.get('/health', (c) => c.json({ status: 'ok', service: 'youniversity2-api' }));
+app.get('/health/live', (c) => c.json({ status: 'ok', service: 'youniversity2-api' }));
+app.get('/health/ready', async (c) => {
+  const readiness = await getReadiness();
+  return c.json(
+    { status: readiness.ok ? 'ok' : 'degraded', service: 'youniversity2-api', checks: readiness.checks },
+    readiness.ok ? 200 : 503,
+  );
+});
 
 app.route('/api/auth', authRoutes);
 app.route('/api/dashboard', dashboardRoutes);
@@ -60,6 +76,11 @@ try {
   await ensureSystemAdminExists();
 } catch (err) {
   console.error('[startup] ensureSystemAdminExists failed:', err);
+}
+try {
+  await ensureSystemSettingsTable();
+} catch (err) {
+  console.error('[startup] ensureSystemSettingsTable failed:', err);
 }
 startPublicationScheduler();
 

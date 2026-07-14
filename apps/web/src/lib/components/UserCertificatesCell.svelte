@@ -148,7 +148,7 @@
       type="button"
       class="users-cert-count"
       aria-expanded={open}
-      aria-haspopup="dialog"
+      aria-haspopup="true"
       onclick={(e) => togglePopover(e.currentTarget)}
       title={t('admin.usersCertificatesShowAll', $locale)}
     >
@@ -174,7 +174,7 @@
       <div
         class="users-popover users-popover--fixed users-popover--wide"
         style={popoverStyle}
-        role="dialog"
+        role="region"
         aria-label={t('admin.usersCertificatesPopover', $locale)}
       >
         <div class="users-popover-head">
@@ -187,7 +187,7 @@
               })}
             </span>
           </div>
-          <button type="button" class="users-popover-close" onclick={closePopover} aria-label="Close">
+          <button type="button" class="users-popover-close" onclick={closePopover} aria-label={t('a11y.close', $locale)}>
             ×
           </button>
         </div>

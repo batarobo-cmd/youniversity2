@@ -3,6 +3,9 @@
   import { goto } from '$app/navigation';
   import { isAuthenticated, isAdmin } from '$lib/stores/auth';
   import AdminDashboard from '$lib/components/AdminDashboard.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
+  import { locale } from '$lib/stores/auth';
+  import { t } from '$lib/i18n';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -35,7 +38,7 @@
 {/if}
 
 {#if loading}
-  <p style="color: var(--color-muted);">Načítavam...</p>
+  <PageSkeleton variant="dashboard" ariaLabel={t('a11y.loading', $locale)} />
 {:else if dashboard}
   <AdminDashboard data={dashboard} />
 {/if}

@@ -2,6 +2,7 @@
   import { locale, user, token } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { api } from '$lib/api';
+  import { focusTrap } from '$lib/actions/focus-trap';
   import '$lib/styles/admin-users.css';
 
   let password = $state('');
@@ -39,8 +40,8 @@
 
 {#if open}
   <div class="user-role-password-backdrop" role="presentation">
-    <div class="user-role-password-modal" role="dialog" aria-modal="true">
-      <h3>{t('admin.systemAdminAssignedTitle', $locale)}</h3>
+    <div class="user-role-password-modal" role="dialog" aria-modal="true" aria-labelledby="sysadmin-password-title" use:focusTrap={open}>
+      <h3 id="sysadmin-password-title">{t('admin.systemAdminAssignedTitle', $locale)}</h3>
       <p class="user-role-password-lead">{t('admin.systemAdminAssignedLead', $locale)}</p>
 
       {#if error}

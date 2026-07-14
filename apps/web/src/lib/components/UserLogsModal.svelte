@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import { focusTrap } from '$lib/actions/focus-trap';
   import { queryApi } from '$lib/client/form-action';
   import { describeUserLog } from '$lib/user-log-labels';
   import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
@@ -61,7 +62,7 @@
         total: number;
         retentionFrom: string;
       }>('apiQuery', `/api/admin/users/${user.id}/logs?${sp}`);
-      if (result.error || !result.data) throw new Error(result.error ?? 'Chyba');
+      if (result.error || !result.data) throw new Error(result.error ?? t('error.unknown', $locale));
       items = result.data.items;
       total = result.data.total;
       retentionFrom = result.data.retentionFrom;
@@ -103,7 +104,7 @@
 {#if open && user}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="admin-history-backdrop" onclick={handleBackdrop} role="presentation">
-    <div class="admin-history-modal admin-history-modal--wide" role="dialog" aria-modal="true">
+    <div class="admin-history-modal admin-history-modal--wide" role="dialog" aria-modal="true" aria-labelledby="user-logs-title" use:focusTrap={open}>
       <div class="admin-history-header">
         <div>
           <h2 id="user-logs-title">{t('admin.userLogsTitle', $locale)}</h2>
@@ -112,7 +113,7 @@
             <p class="admin-history-sub">{t('admin.userLogsRetention', $locale)}</p>
           {/if}
         </div>
-        <button type="button" class="admin-history-close" aria-label={t('admin.cancel', $locale)} onclick={onClose}>
+        <button type="button" class="admin-history-close" aria-label={t('a11y.close', $locale)} onclick={onClose}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>

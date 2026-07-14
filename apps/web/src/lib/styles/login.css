@@ -137,10 +137,13 @@
   padding: 2rem;
 }
 
-.login-locale {
+.login-toolbar {
   position: absolute;
   top: 1.5rem;
   right: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   z-index: 2;
 }
 

@@ -9,8 +9,8 @@
   import { get } from 'svelte/store';
   import StudentCourseCard from '$lib/components/StudentCourseCard.svelte';
   import StudentCompletedCourseTile from '$lib/components/StudentCompletedCourseTile.svelte';
-  import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
-  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
+  import CertHistoryModal from '$lib/components/CertHistoryModal.svelte';
   import type { PageData } from './$types';
   import '$lib/styles/courses.css';
   import '$lib/styles/dashboard.css';
@@ -101,7 +101,7 @@
 {#if data.loadError}
   <div class="form-error">{data.loadError}</div>
 {:else if loading}
-  <p class="loading-text">...</p>
+  <PageSkeleton variant="list" ariaLabel={t('a11y.loading', $locale)} />
 {:else if !hasAny}
   <div class="empty-state">{t('courses.empty', $locale)}</div>
 {:else}
@@ -144,45 +144,10 @@
   }}
 />
 
-{#if certHistoryModal}
-  <div class="dash-cert-modal-overlay" role="presentation" onclick={() => (certHistoryModal = null)}>
-    <div
-      class="dash-cert-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('dash.certificateHistory', $locale)}
-      onclick={(e) => e.stopPropagation()}
-    >
-      <div class="dash-cert-modal-head">
-        <h3>{t('dash.certificateHistory', $locale)} — {certHistoryModal.courseTitle}</h3>
-        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>
-          {t('admin.cancel', $locale)}
-        </button>
-      </div>
-      <ViewportPaginator
-        items={certHistoryModal.certificates}
-        availableHeight={certModalListHeight}
-        rowHeight={52}
-        minPageSize={3}
-      >
-        {#snippet children(pageItems)}
-          <div class="dash-cert-modal-list">
-            {#each pageItems as cert}
-              <div class="dash-cert-modal-row">
-                <span>#{cert.certificateNumber}</span>
-                <span>{formatCertificateIssuedAt(cert.issuedAt, $locale)}</span>
-                <a
-                  class="btn btn-ghost btn-sm"
-                  href={certificateDownloadUrl(cert.id)}
-                  download={certificateDownloadFileName(cert.certificateNumber)}
-                >
-                  {t('dash.downloadCertificate', $locale)}
-                </a>
-              </div>
-            {/each}
-          </div>
-        {/snippet}
-      </ViewportPaginator>
-    </div>
-  </div>
-{/if}
+<CertHistoryModal
+  open={Boolean(certHistoryModal)}
+  courseTitle={certHistoryModal?.courseTitle ?? ''}
+  certificates={certHistoryModal?.certificates ?? []}
+  listHeight={certModalListHeight}
+  onClose={() => (certHistoryModal = null)}
+/>

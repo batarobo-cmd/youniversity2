@@ -1,6 +1,6 @@
 {
   "name": "youniversity2",
-  "version": "0.8.0",
+  "version": "2.0.0",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
@@ -12,11 +12,17 @@
     "db:migrate": "bun run --filter @youniversity2/api db:migrate",
     "db:push": "bun run --filter @youniversity2/api db:push",
     "db:seed": "bun run --filter @youniversity2/api db:seed",
+    "test": "bun run --filter @youniversity2/shared test && bun run --filter @youniversity2/api test && bun run --filter @youniversity2/web test",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:prod:up": "docker compose -f docker-compose.prod.yml up -d --build",
     "docker:prod:down": "docker compose -f docker-compose.prod.yml down",
     "docker:prod:logs": "docker compose -f docker-compose.prod.yml logs -f",
-    "docker:prod:init-db": "docker compose -f docker-compose.prod.yml exec api bun run db:push && docker compose -f docker-compose.prod.yml exec api bun run db:ensure-demo"
+    "docker:prod:init-db": "docker compose -f docker-compose.prod.yml exec api bun run db:migrate && docker compose -f docker-compose.prod.yml exec api bun run db:ensure-demo"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
   }
 }

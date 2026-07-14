@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import { focusTrap } from '$lib/actions/focus-trap';
   import { queryApi } from '$lib/client/form-action';
   import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
 
@@ -58,7 +59,7 @@
           ? `/api/admin/registrations/history?${sp}`
           : `/api/admin/logins/history?${sp}`;
       const result = await queryApi<{ items: Array<Record<string, unknown>> }>('apiQuery', path);
-      if (result.error || !result.data) throw new Error(result.error ?? 'Chyba');
+      if (result.error || !result.data) throw new Error(result.error ?? t('error.unknown', $locale));
       items = result.data.items;
     } catch (e) {
       error = (e as Error).message;
@@ -97,10 +98,10 @@
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="admin-history-backdrop" onclick={handleBackdrop} role="presentation">
-    <div class="admin-history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <div class="admin-history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" use:focusTrap={open}>
       <div class="admin-history-header">
         <h2 id="history-title">{title}</h2>
-        <button type="button" class="admin-history-close" aria-label={t('admin.cancel', $locale)} onclick={onClose}>
+        <button type="button" class="admin-history-close" aria-label={t('a11y.close', $locale)} onclick={onClose}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>

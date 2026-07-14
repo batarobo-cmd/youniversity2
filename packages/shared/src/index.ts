@@ -3,3 +3,4 @@ export * from './constants';
 export * from './events';
 export * from './scorm';
 export * from './validation';
+export * from './schemas';

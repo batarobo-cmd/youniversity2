@@ -111,7 +111,7 @@ Alebo manuálne:
 cd ~/youniversity2
 git pull
 docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec -T api bun run db:push
+docker compose -f docker-compose.prod.yml exec -T api bun run db:migrate
 ```
 
 ## Užitočné príkazy na serveri

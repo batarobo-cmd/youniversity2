@@ -16,6 +16,7 @@ import { recordUserActivity } from '../services/activity-log';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { USER_ROLES, SUPPORTED_LOCALES, isSystemAdminRole } from '@youniversity2/shared';
 import { getAdminAuthSettings, updateAuthSettings } from '../services/auth-settings';
+import { getSystemSettings, updateSystemSettings } from '../services/system-settings';
 import {
   canAssignSystemAdminRole,
   validateActiveSystemAdminRemains,
@@ -770,4 +771,35 @@ adminRoutes.patch('/auth-settings', requireRole('admin'), async (c) => {
     payload: { fields: Object.keys(body.data) },
   });
   return c.json(updated);
+});
+
+adminRoutes.get('/system-settings', requireRole('admin'), async (c) => {
+  try {
+    return c.json(await getSystemSettings());
+  } catch (err) {
+    console.error('[admin] GET /system-settings failed:', err);
+    return c.json({ error: 'Failed to load system settings' }, 500);
+  }
+});
+
+adminRoutes.patch('/system-settings', requireRole('admin'), async (c) => {
+  try {
+    const body = z
+      .object({
+        commandPaletteEnabled: z.boolean().optional(),
+      })
+      .safeParse(await c.req.json());
+
+    if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
+
+    const authUser = c.get('user') as AuthUser;
+    const updated = await updateSystemSettings(body.data);
+    void recordUserActivity(authUser.id, 'system.settings.updated', {
+      payload: { fields: Object.keys(body.data) },
+    });
+    return c.json(updated);
+  } catch (err) {
+    console.error('[admin] PATCH /system-settings failed:', err);
+    return c.json({ error: 'Failed to update system settings' }, 500);
+  }
 });

@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import { eq, asc } from 'drizzle-orm';
-import { z } from 'zod';
 import { db } from '../db';
 import { courseCategories, courses } from '../db/schema';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
+import { createCategorySchema, updateCategorySchema, WS_EVENTS } from '@youniversity2/shared';
 import { broadcastToAdmin } from '../realtime/hub';
-import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity } from '../services/activity-log';
 
 export const categoryRoutes = new Hono();
@@ -22,14 +21,7 @@ categoryRoutes.get('/', requireRole('admin'), async (c) => {
 
 categoryRoutes.post('/', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
-  const body = z
-    .object({
-      slug: z.string().min(2).max(255),
-      name: z.string().min(2).max(255),
-      sortOrder: z.number().int().optional(),
-      parentId: z.string().uuid().nullable().optional(),
-    })
-    .safeParse(await c.req.json());
+  const body = createCategorySchema.safeParse(await c.req.json());
 
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 
@@ -68,14 +60,7 @@ categoryRoutes.post('/', requireRole('admin'), async (c) => {
 categoryRoutes.patch('/:id', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const id = c.req.param('id');
-  const body = z
-    .object({
-      slug: z.string().min(2).max(255).optional(),
-      name: z.string().min(2).max(255).optional(),
-      sortOrder: z.number().int().optional(),
-      parentId: z.string().uuid().nullable().optional(),
-    })
-    .safeParse(await c.req.json());
+  const body = updateCategorySchema.safeParse(await c.req.json());
 
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 

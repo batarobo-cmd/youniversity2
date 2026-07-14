@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import { focusTrap } from '$lib/actions/focus-trap';
 
   type Category = { id: string; slug: string; name: string };
 
@@ -53,10 +54,10 @@
 {#if open && category}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="cat-modal-backdrop" onclick={handleBackdrop} role="presentation">
-    <div class="cat-modal" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
-      <div class="cat-modal-header">
+    <div class="cat-modal" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title" use:focusTrap={open}>
+        <div class="cat-modal-header">
         <h2 id="cat-modal-title">{t('admin.editCategory', $locale)}</h2>
-        <button type="button" class="cat-modal-close" aria-label={t('admin.cancel', $locale)} onclick={onClose}>
+        <button type="button" class="cat-modal-close" aria-label={t('a11y.close', $locale)} onclick={onClose}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>

@@ -4,17 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
+    "dev": "bun run --watch src/dev.ts",
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "bun run src/db/run-migrations.ts",
     "db:push": "drizzle-kit push",
     "db:seed": "bun run src/db/seed.ts",
     "db:ensure-demo": "bun run src/db/ensure-demo-users.ts",
     "db:migrate-cert-numbers": "bun run src/db/migrate-certificate-numbers.ts",
     "db:generate-cert-pdfs": "bun run src/db/migrate-certificate-pdfs.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test": "bun test --preload ./src/test-setup.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

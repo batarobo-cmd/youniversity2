@@ -7,8 +7,12 @@
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
+  import AutosaveStatus from '$lib/components/AutosaveStatus.svelte';
   import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
+  import { createAutosave, type AutosaveStatus as AutosaveState } from '$lib/autosave';
   import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
+  import { focusTrap } from '$lib/actions/focus-trap';
   import { moduleActivities, normalizeActivityType, isEvaluableActivity } from '$lib/activity-types';
   import { certificateDownloadFileName, certificateDownloadUrl } from '$lib/certificate-download';
   import type { PageData } from './$types';
@@ -103,6 +107,33 @@
   let completionRulesSynced = $state(false);
   let hydratedCourseId = $state<string | null>(null);
   let previousCourseId = $state<string | null>(null);
+  let settingsBaseline = $state<string | null>(null);
+  let settingsAutosaveStatus = $state<AutosaveState>('idle');
+  let settingsAutosaveError = $state('');
+
+  const settingsAutosave = createAutosave({
+    debounceMs: 800,
+    onStatus: (status, err) => {
+      settingsAutosaveStatus = status;
+      settingsAutosaveError = err ?? '';
+    },
+    onSave: async () => {
+      await persistSettings();
+      return true;
+    },
+  });
+
+  const settingsDraftKey = $derived(
+    JSON.stringify({
+      title,
+      slug,
+      description,
+      publicationMode,
+      publishManual,
+      publishStartsAt,
+      publishEndsAt,
+    }),
+  );
 
   const sortedIssuedCerts = $derived(
     [...issuedCerts].sort(
@@ -182,6 +213,10 @@
 
   function resetCourseEditorState() {
     hydratedCourseId = null;
+    settingsBaseline = null;
+    settingsAutosave.cancel();
+    settingsAutosaveStatus = 'idle';
+    settingsAutosaveError = '';
     completionRulesSynced = false;
     enrollmentsLoaded = false;
     certsLoaded = false;
@@ -284,6 +319,21 @@
     if (activeTab === 'reporting') {
       void loadReporting();
     }
+  });
+
+  $effect(() => {
+    if (!hydratedCourseId) {
+      settingsBaseline = null;
+      return;
+    }
+
+    const key = settingsDraftKey;
+    if (settingsBaseline === null) {
+      settingsBaseline = key;
+      return;
+    }
+    if (key === settingsBaseline) return;
+    settingsAutosave.schedule();
   });
 
   function hasPersistedCertificateRule(rules: CompletionRule[]) {
@@ -396,47 +446,34 @@
     }
   }
 
-  async function saveSettings(e: Event) {
-    e.preventDefault();
-    saving = true;
-    message = '';
-    error = '';
-    try {
-      const savedPublicationMode = publicationMode;
-      const savedPublishManual = publishManual;
-      const savedPublishStartsAt = publishStartsAt;
-      const savedPublishEndsAt = publishEndsAt;
-      const startsAt = publicationMode === 'schedule' ? toIsoOrNull(publishStartsAt) : null;
-      const endsAt = publicationMode === 'schedule' ? toIsoOrNull(publishEndsAt) : null;
-      if (publicationMode === 'schedule' && !startsAt) {
-        throw new Error(t('admin.publishStartRequired', $locale));
-      }
-      if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
-        throw new Error(t('admin.publishDateRangeInvalid', $locale));
-      }
-
-      await serverMutate('apiMutation', `/api/courses/${courseId}/content`, 'PATCH', {
-        title: title.trim(),
-        description,
-        slug: slug.trim(),
-        isPublished: publicationMode === 'schedule' ? true : publishManual,
-        startsAt,
-        endsAt,
-        locale: $locale,
-      });
-
-      publicationMode = savedPublicationMode;
-      publishManual = savedPublishManual;
-      publishStartsAt = savedPublishStartsAt;
-      publishEndsAt = savedPublishEndsAt;
-
-      message = t('admin.saved', $locale);
-      await refreshCourse();
-    } catch (e) {
-      error = (e as Error).message;
-    } finally {
-      saving = false;
+  async function persistSettings() {
+    const trimmedTitle = title.trim();
+    const trimmedSlug = slug.trim();
+    if (!trimmedTitle || !trimmedSlug) {
+      throw new Error(t('admin.error', $locale));
     }
+
+    const startsAt = publicationMode === 'schedule' ? toIsoOrNull(publishStartsAt) : null;
+    const endsAt = publicationMode === 'schedule' ? toIsoOrNull(publishEndsAt) : null;
+    if (publicationMode === 'schedule' && !startsAt) {
+      throw new Error(t('admin.publishStartRequired', $locale));
+    }
+    if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
+      throw new Error(t('admin.publishDateRangeInvalid', $locale));
+    }
+
+    await serverMutate('apiMutation', `/api/courses/${courseId}/content`, 'PATCH', {
+      title: trimmedTitle,
+      description,
+      slug: trimmedSlug,
+      isPublished: publicationMode === 'schedule' ? true : publishManual,
+      startsAt,
+      endsAt,
+      locale: $locale,
+    });
+
+    settingsBaseline = settingsDraftKey;
+    await refreshCourse();
   }
 
   async function saveEvaluation(e: Event) {
@@ -775,7 +812,7 @@
   {#if error}<div class="admin-flash admin-flash--err">{error}</div>{/if}
 
   {#if loading}
-    <p class="loading-text">...</p>
+    <PageSkeleton variant="generic" ariaLabel={t('a11y.loading', $locale)} />
   {:else if !course}
     <p class="empty-state">{t('admin.courseNotFound', $locale)}</p>
   {:else}
@@ -802,9 +839,12 @@
 
     {#if activeTab === 'settings'}
       <section class="panel course-edit-panel">
-        <div class="panel-header"><h2>{t('admin.tabSettings', $locale)}</h2></div>
+        <div class="panel-header">
+          <h2>{t('admin.tabSettings', $locale)}</h2>
+          <AutosaveStatus status={settingsAutosaveStatus} error={settingsAutosaveError} />
+        </div>
         <div class="panel-body">
-          <form class="course-edit-form" onsubmit={saveSettings}>
+          <form class="course-edit-form" onsubmit={(e) => e.preventDefault()}>
             <div class="cat-tree-field">
               <label for="course-title">{t('admin.courseTitle', $locale)}</label>
               <input id="course-title" bind:value={title} required />
@@ -845,7 +885,6 @@
               </div>
               <p class="course-edit-hint">{t('admin.publishScheduleHint', $locale)}</p>
             {/if}
-            <button type="submit" class="btn btn-sm" disabled={saving}>{t('admin.saveChanges', $locale)}</button>
           </form>
         </div>
       </section>
@@ -934,7 +973,7 @@
         <div class="panel-header"><h2>{t('admin.tabStudents', $locale)}</h2></div>
         <div class="panel-body">
           {#if enrollmentsLoading}
-            <p class="loading-text">...</p>
+            <PageSkeleton variant="inline" ariaLabel={t('a11y.loading', $locale)} />
           {:else}
           <div class="course-edit-enroll-row">
             <StudentSearchPicker
@@ -1031,7 +1070,7 @@
         <div class="panel-header"><h2>{t('admin.tabCertificate', $locale)}</h2></div>
         <div class="panel-body">
           {#if certsLoading}
-            <p class="loading-text">...</p>
+            <PageSkeleton variant="inline" ariaLabel={t('a11y.loading', $locale)} />
           {:else}
           <form class="course-edit-form" onsubmit={saveCertificate}>
             <label class="course-edit-check">
@@ -1089,7 +1128,7 @@
         <div class="panel-body">
           <p class="course-edit-hint">{t('admin.reportingHint', $locale)}</p>
           {#if reportingLoading}
-            <p class="loading-text">...</p>
+            <PageSkeleton variant="inline" ariaLabel={t('a11y.loading', $locale)} />
           {:else if reportingRows.length === 0}
             <p class="cat-tree-empty">{t('admin.reportingEmpty', $locale)}</p>
           {:else}
@@ -1244,10 +1283,10 @@
 
 {#if certHistoryModal}
   <div class="reporting-modal-overlay" role="presentation" onclick={() => (certHistoryModal = null)}>
-    <div class="reporting-modal" role="dialog" aria-modal="true" aria-label={t('admin.reportingCertificateHistory', $locale)} onclick={(e) => e.stopPropagation()}>
+    <div class="reporting-modal" role="dialog" aria-modal="true" tabindex="-1" aria-label={t('admin.reportingCertificateHistory', $locale)} use:focusTrap={Boolean(certHistoryModal)} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="reporting-modal-head">
         <h3>{t('admin.reportingCertificateHistory', $locale)} — {certHistoryModal.userName}</h3>
-        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>{t('admin.cancel', $locale)}</button>
+        <button type="button" class="btn btn-ghost btn-sm" aria-label={t('a11y.close', $locale)} onclick={() => (certHistoryModal = null)}>{t('a11y.close', $locale)}</button>
       </div>
       <ViewportPaginator
         items={certHistoryModal.completions}

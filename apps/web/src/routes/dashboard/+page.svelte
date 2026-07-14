@@ -4,6 +4,9 @@
   import { get } from 'svelte/store';
   import StudentDashboard from '$lib/components/StudentDashboard.svelte';
   import AdminDashboard from '$lib/components/AdminDashboard.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
+  import { locale } from '$lib/stores/auth';
+  import { t } from '$lib/i18n';
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
   import { scheduleNextPublicationRefresh } from '$lib/publication-refresh';
   import { user as authUser } from '$lib/stores/auth';
@@ -59,6 +62,6 @@
     <AdminDashboard data={dashboard} />
   {/if}
 {:else}
-  <p class="loading-text">Načítavam dashboard...</p>
+  <PageSkeleton variant="dashboard" ariaLabel={t('a11y.loading', $locale)} />
 {/if}
 

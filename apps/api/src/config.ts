@@ -1,40 +1,46 @@
+import { env } from './env';
+
 export const config = {
-  port: Number(process.env.PORT ?? 3001),
-  jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
-  /** Neaktivita (žiadna interakcia) — odhlásenie po 1 hodine */
-  sessionIdleMs: Number(process.env.SESSION_IDLE_MS ?? 60 * 60 * 1000),
-  /** Zatvorený prehliadač (žiadny heartbeat) — odhlásenie po 30 minútach */
-  sessionBrowserClosedMs: Number(process.env.SESSION_BROWSER_CLOSED_MS ?? 30 * 60 * 1000),
-  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
-  redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
+  port: env.PORT,
+  jwtSecret: env.JWT_SECRET,
+  jwtExpiresIn: env.JWT_EXPIRES_IN,
+  sessionIdleMs: env.SESSION_IDLE_MS,
+  sessionBrowserClosedMs: env.SESSION_BROWSER_CLOSED_MS,
+  corsOrigin: env.CORS_ORIGIN,
+  redisUrl: env.REDIS_URL,
   aiTranslation: {
-    apiUrl: process.env.AI_TRANSLATION_API_URL ?? 'https://api.openai.com/v1',
-    apiKey: process.env.AI_TRANSLATION_API_KEY ?? '',
-    model: process.env.AI_TRANSLATION_MODEL ?? 'gpt-4o-mini',
+    apiUrl: env.AI_TRANSLATION_API_URL,
+    apiKey: env.AI_TRANSLATION_API_KEY,
+    model: env.AI_TRANSLATION_MODEL,
   },
   s3: {
-    endpoint: process.env.S3_ENDPOINT ?? 'http://localhost:9000',
-    bucket: process.env.S3_BUCKET ?? 'youniversity2',
-    accessKey: process.env.S3_ACCESS_KEY ?? 'minioadmin',
-    secretKey: process.env.S3_SECRET_KEY ?? 'minioadmin',
-    region: process.env.S3_REGION ?? 'eu-central-1',
+    endpoint: env.S3_ENDPOINT,
+    bucket: env.S3_BUCKET,
+    accessKey: env.S3_ACCESS_KEY,
+    secretKey: env.S3_SECRET_KEY,
+    region: env.S3_REGION,
   },
   turnstile: {
-    siteKey: process.env.TURNSTILE_SITE_KEY ?? '',
-    secretKey: process.env.TURNSTILE_SECRET_KEY ?? '',
+    siteKey: env.TURNSTILE_SITE_KEY,
+    secretKey: env.TURNSTILE_SECRET_KEY,
   },
   oauth: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
     },
     microsoft: {
-      clientId: process.env.MICROSOFT_CLIENT_ID ?? '',
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
-      tenantId: process.env.MICROSOFT_TENANT_ID ?? 'common',
+      clientId: env.MICROSOFT_CLIENT_ID,
+      clientSecret: env.MICROSOFT_CLIENT_SECRET,
+      tenantId: env.MICROSOFT_TENANT_ID,
     },
-    apiUrl: process.env.API_URL ?? 'http://localhost:3001',
-    webUrl: process.env.WEB_URL ?? 'http://localhost:5173',
+    apiUrl: env.API_URL,
+    webUrl: env.WEB_URL,
+  },
+  nodeEnv: env.NODE_ENV,
+  databaseUrl: env.DATABASE_URL,
+  globalRateLimit: {
+    max: env.GLOBAL_RATE_LIMIT_MAX,
+    windowSec: env.GLOBAL_RATE_LIMIT_WINDOW_SEC,
   },
 };

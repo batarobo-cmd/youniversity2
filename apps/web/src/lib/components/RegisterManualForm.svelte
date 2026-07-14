@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import { parseRegisterForm, zodFormMessage } from '$lib/auth-client-validation';
 
   let {
     turnstileSiteKey = null,
@@ -11,6 +12,24 @@
   let turnstileToken = $state('');
   let captchaReady = $state(!turnstileSiteKey);
   let captchaError = $state(false);
+  let clientError = $state('');
+
+  function handleSubmit(event: SubmitEvent) {
+    clientError = '';
+    const formEl = event.currentTarget as HTMLFormElement;
+    const fd = new FormData(formEl);
+    const parsed = parseRegisterForm({
+      email: String(fd.get('email') ?? ''),
+      password: String(fd.get('password') ?? ''),
+      givenName: String(fd.get('givenName') ?? ''),
+      familyName: String(fd.get('familyName') ?? ''),
+      companyWebsite: String(fd.get('companyWebsite') ?? ''),
+      turnstileToken: String(fd.get('cf-turnstile-response') ?? '') || undefined,
+    });
+    if (parsed.success) return;
+    event.preventDefault();
+    clientError = zodFormMessage(parsed.error);
+  }
 
   function loadTurnstileScript(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -99,7 +118,10 @@
   }
 </script>
 
-<form class="manual-form" method="POST" action="?/register">
+<form class="manual-form" method="POST" action="?/register" onsubmit={handleSubmit}>
+  {#if clientError}
+    <div class="login-error" role="alert">{clientError}</div>
+  {/if}
   <div class="form-field">
     <label for="givenName">{t('auth.givenName', $locale)}</label>
     <input

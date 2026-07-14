@@ -20,7 +20,13 @@ function pageTitleForPath(pathname: string, loc: string): string {
   if (pathname === '/dashboard') return t('nav.dashboard', loc);
   if (pathname === '/courses') return t('nav.courses', loc);
   if (pathname.startsWith('/dashboard/admin/users')) return t('admin.usersTitle', loc);
-  if (pathname.startsWith('/dashboard/admin/auth')) return t('admin.authTitle', loc);
+  if (pathname.startsWith('/dashboard/admin/settings/auth') || pathname.startsWith('/dashboard/admin/auth'))
+    return t('admin.authTitle', loc);
+  if (pathname.startsWith('/dashboard/admin/settings/email')) return t('admin.settingsEmailTitle', loc);
+  if (pathname.startsWith('/dashboard/admin/settings/branding')) return t('admin.settingsBrandingTitle', loc);
+  if (pathname.startsWith('/dashboard/admin/reporting') || pathname.startsWith('/dashboard/admin/settings/reporting'))
+    return t('admin.settingsReportingTitle', loc);
+  if (pathname.startsWith('/dashboard/admin/settings/privacy')) return t('admin.settingsPrivacyTitle', loc);
   if (pathname.startsWith('/dashboard/admin/manage')) return t('admin.manageTitle', loc);
   if (pathname.match(/^\/dashboard\/admin\/courses\/[^/]+/)) return t('admin.editCourse', loc);
   if (pathname.startsWith('/dashboard/admin')) return t('nav.administration', loc);

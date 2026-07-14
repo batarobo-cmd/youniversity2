@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { z } from 'zod';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
@@ -15,7 +14,7 @@ import {
   isEmailDomainAllowed,
 } from '../services/auth-settings';
 import { resolveLoginIdentifier, useLocalDevCredentials } from '../services/demo-users';
-import { SUPPORTED_LOCALES, composePersonDisplayName, normalizePersonName, isSafePersonName } from '@youniversity2/shared';
+import { composePersonDisplayName, createLoginSchema, registerSchema, systemAdminPasswordSchema } from '@youniversity2/shared';
 import {
   getAuthorizationUrl,
   handleOAuthCallback,
@@ -23,35 +22,19 @@ import {
   type OAuthProvider,
 } from '../services/oauth';
 import { verifyTurnstileToken } from '../services/turnstile';
-import { clientIpFromHeaders, consumeRateLimit } from '../services/rate-limit';
+import {
+  clientIpFromHeaders,
+  consumeRateLimit,
+  isRateLimited,
+  recordRateLimitFailure,
+} from '../services/rate-limit';
+import { config } from '../config';
 
-const personNameField = z
-  .string()
-  .min(1)
-  .max(100)
-  .transform(normalizePersonName)
-  .refine(isSafePersonName, { message: 'Invalid name' });
+const LOGIN_RATE_WINDOW_SEC = 15 * 60;
+const LOGIN_RATE_IP_LIMIT = 10;
+const LOGIN_RATE_EMAIL_LIMIT = 10;
 
-const registerSchema = z.object({
-  email: z.string().trim().email().max(255),
-  password: z.string().min(8).max(128),
-  givenName: personNameField,
-  familyName: personNameField,
-  preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
-  turnstileToken: z.string().max(2048).optional(),
-  /** Honeypot — must stay empty. */
-  companyWebsite: z.string().max(0).optional(),
-});
-
-const loginSchema = useLocalDevCredentials()
-  ? z.object({
-      email: z.string().min(1),
-      password: z.string(),
-    })
-  : z.object({
-      email: z.string().email(),
-      password: z.string(),
-    });
+const loginSchema = createLoginSchema({ devCredentials: useLocalDevCredentials() });
 
 export const authRoutes = new Hono();
 
@@ -92,7 +75,7 @@ authRoutes.get('/oauth/:provider/callback', async (c) => {
   const error = c.req.query('error');
 
   if (error || !code || !state) {
-    return c.redirect(`${process.env.WEB_URL ?? 'http://localhost:5173'}/login?error=oauth_denied`);
+    return c.redirect(`${config.oauth.webUrl}/login?error=oauth_denied`);
   }
 
   const { redirectUrl } = await handleOAuthCallback(provider, code, state);
@@ -139,17 +122,9 @@ authRoutes.post('/heartbeat', async (c) => {
 
 authRoutes.post('/system-admin-password', authMiddleware, async (c) => {
   const authUser = c.get('user') as AuthUser;
-  const body = z
-    .object({
-      password: z.string().min(8),
-      confirmPassword: z.string().min(8),
-    })
-    .safeParse(await c.req.json());
+  const body = systemAdminPasswordSchema.safeParse(await c.req.json());
 
   if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
-  if (body.data.password !== body.data.confirmPassword) {
-    return c.json({ error: 'Protection passwords do not match' }, 400);
-  }
 
   const [existing] = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
   if (!existing) return c.json({ error: 'User not found' }, 404);
@@ -260,21 +235,44 @@ authRoutes.post('/login', async (c) => {
   const email = resolveLoginIdentifier(body.data.email);
   const { password } = body.data;
 
+  const clientIp = clientIpFromHeaders(
+    c.req.header('X-Forwarded-For'),
+    c.req.header('X-Real-IP'),
+  );
+  const loginIpKey = `login:ip:${clientIp ?? 'unknown'}`;
+  const loginEmailKey = `login:email:${email.toLowerCase()}`;
+
+  if (
+    (await isRateLimited(loginIpKey, LOGIN_RATE_IP_LIMIT)) ||
+    (await isRateLimited(loginEmailKey, LOGIN_RATE_EMAIL_LIMIT))
+  ) {
+    return c.json({ error: 'Too many login attempts', code: 'rate_limited' }, 429);
+  }
+
+  const recordFailedLogin = async () => {
+    await recordRateLimitFailure(loginIpKey, LOGIN_RATE_WINDOW_SEC);
+    await recordRateLimitFailure(loginEmailKey, LOGIN_RATE_WINDOW_SEC);
+  };
+
   if (!isEmailDomainAllowed(email, settings.allowedLoginDomains)) {
+    await recordFailedLogin();
     return c.json({ error: 'Email domain is not allowed', code: 'domain_not_allowed' }, 403);
   }
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
   if (!user) {
+    await recordFailedLogin();
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
   if (!user.passwordHash) {
+    await recordFailedLogin();
     const provider = user.oauthProvider === 'google' ? 'Google' : 'Microsoft 365';
     return c.json({ error: `Použite prihlásenie cez ${provider}` }, 401);
   }
 
   if (!(await bcrypt.compare(password, user.passwordHash))) {
+    await recordFailedLogin();
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 

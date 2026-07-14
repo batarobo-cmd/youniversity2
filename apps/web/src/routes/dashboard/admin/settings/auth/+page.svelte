@@ -7,6 +7,7 @@
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
+  import '$lib/styles/admin-settings.css';
 
   type ProviderForm = {
     enabled: boolean;

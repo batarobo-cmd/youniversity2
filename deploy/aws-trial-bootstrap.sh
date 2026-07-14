@@ -26,8 +26,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 echo "==> Čakám na PostgreSQL..."
 sleep 12
 
-echo "==> DB schéma + seed..."
-docker compose -f docker-compose.prod.yml exec -T api bun run db:push
+echo "==> DB migrácie + seed..."
+docker compose -f docker-compose.prod.yml exec -T api bun run db:migrate
 docker compose -f docker-compose.prod.yml exec -T api bun run db:ensure-demo
 
 echo ""

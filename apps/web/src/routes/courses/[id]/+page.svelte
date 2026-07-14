@@ -8,7 +8,7 @@
   import { t } from '$lib/i18n';
   import { joinCourse, trackActivity, lastMessage } from '$lib/stores/realtime';
   import { WS_EVENTS } from '@youniversity2/shared';
-  import { moduleActivities, normalizeActivityType, countsForCourseCompletion, isProgressFullyComplete } from '$lib/activity-types';
+  import { moduleActivities, normalizeActivityType, isProgressFullyComplete } from '$lib/activity-types';
   import {
     buildPresentationView,
     isLegacyPptPresentation,
@@ -22,6 +22,8 @@
   import PresentationPptxViewer from '$lib/components/PresentationPptxViewer.svelte';
   import PresentationPdfViewer from '$lib/components/PresentationPdfViewer.svelte';
   import ScormPlayer, { type ScormFlushFn, type ScormSessionState } from '$lib/components/ScormPlayer.svelte';
+  import CourseOutline from '$lib/components/CourseOutline.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
   import { api } from '$lib/api';
   import {
     buildScormAssetUrl,
@@ -81,6 +83,7 @@
   let mountedScormIds = $state<Set<string>>(new Set());
   let scormLaunchTokens = $state<Record<string, number>>({});
   let scormSessions = $state<Record<string, ScormSessionState>>({});
+  let outlineMobileOpen = $state(false);
   const scormFlushFns = new Map<string, ScormFlushFn>();
 
   const PRESENTATION_PROGRESS_SYNC_MS = 800;
@@ -468,34 +471,9 @@
     );
   }
 
-  function selectableActivities(mod: Record<string, unknown>) {
-    return sortedModuleActivities(mod).filter((item) => activityType(item) !== 'text');
-  }
-
   function isLessonComplete(lessonId: string) {
     return isProgressFullyComplete(getLessonProgress(lessonId));
   }
-
-  function requiredActivities(mod: Record<string, unknown>) {
-    return selectableActivities(mod).filter((item) => countsForCourseCompletion(item as { type?: string; isRequired?: boolean }));
-  }
-
-  function moduleCompletion(mod: Record<string, unknown>) {
-    const activities = requiredActivities(mod);
-    const total = activities.length;
-    const completed = activities.filter((a) => isLessonComplete(a.id as string)).length;
-    return { total, completed, done: total > 0 && completed === total };
-  }
-
-  function courseCompletion() {
-    const allActivities = sortedModules().flatMap((mod) => requiredActivities(mod));
-    const total = allActivities.length;
-    const completed = allActivities.filter((a) => isLessonComplete(a.id as string)).length;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, percent, done: total > 0 && completed === total };
-  }
-
-  const sidebarCourseState = $derived(courseCompletion());
 
   function moduleTextBlocks(mod: Record<string, unknown>) {
     return sortedModuleActivities(mod).filter((item) => activityType(item) === 'text');
@@ -1042,86 +1020,22 @@
 </script>
 
 {#if loading}
-  <p class="loading-text">Načítavam kurz...</p>
+  <PageSkeleton variant="course" ariaLabel={t('a11y.loading', $locale)} />
 {:else if !course}
-  <div class="empty-state">Kurz nebol nájdený.</div>
+  <div class="empty-state">{t('course.notFound', $locale)}</div>
 {:else}
   <div class="course-layout">
-    <aside class="course-sidebar">
-      <div class="course-sidebar-header">
-        <h1>{course.title as string}</h1>
-        <p>{course.description as string}</p>
-        <div class="course-inline-progress">
-          <div class="course-inline-progress__label">
-            <span>{t('course.progress', $locale)}</span>
-            <span>{sidebarCourseState.completed}/{sidebarCourseState.total} ({sidebarCourseState.percent}%)</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-bar-fill" style="width: {sidebarCourseState.percent}%"></div>
-          </div>
-          {#if sidebarCourseState.done}
-            <span class="course-complete-chip">✓ {t('courses.statusCompleted', $locale)}</span>
-          {/if}
-        </div>
-      </div>
-
-      {#if $showStaffNav}
-        <div class="course-admin-actions">
-          <button class="btn btn-ghost btn-sm" onclick={() => translateCourse('en')}>
-            {t('admin.translate', $locale)} → EN
-          </button>
-          <button class="btn btn-ghost btn-sm" onclick={() => translateCourse('de')}>
-            {t('admin.translate', $locale)} → DE
-          </button>
-        </div>
-      {/if}
-
-      <h2 style="font-size: 0.75rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem;">
-        {t('course.activities', $locale)}
-      </h2>
-
-      {#each sortedModules() as mod}
-        {#if isTextOnlyModule(mod)}
-          <button
-            type="button"
-            class="module-block module-block--clickable"
-            class:active={activeModuleId === mod.id}
-            onclick={() => openModule(mod)}
-          >
-            <h3>{mod.title as string}</h3>
-          </button>
-        {:else}
-          <div class="module-block">
-            <h3 class="module-title-row">
-              <span>{mod.title as string}</span>
-              {#if moduleCompletion(mod).done}
-                <span class="module-complete-chip">✓</span>
-              {:else if moduleCompletion(mod).total > 0}
-                <span class="module-progress-chip">{moduleCompletion(mod).completed}/{moduleCompletion(mod).total}</span>
-              {/if}
-            </h3>
-            {#each sortedModuleActivities(mod) as lesson (lesson.id)}
-              {@const prog = getLessonProgress(lesson.id as string)}
-              {@const type = activityType(lesson)}
-              {#if type !== 'text'}
-                <button
-                  class="lesson-btn"
-                  class:lesson-btn--done={prog?.isComplete}
-                  class:active={activeLesson?.id === lesson.id}
-                  onclick={() => void openLesson(lesson)}
-                >
-                  <span class="lesson-btn-type">{t(`activity.type.${type}`, $locale)}</span>
-                  {lesson.title as string}
-                  {#if prog?.isComplete}
-                    <span class="check">✓</span>
-                  {/if}
-                </button>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-      {/each}
-    </aside>
+    <CourseOutline
+      {course}
+      {progress}
+      {activeLesson}
+      {activeModuleId}
+      showStaffNav={$showStaffNav}
+      bind:mobileOpen={outlineMobileOpen}
+      onOpenLesson={(lesson) => void openLesson(lesson)}
+      onOpenModule={(mod) => void openModule(mod)}
+      onTranslate={translateCourse}
+    />
 
     <section class="lesson-content-panel">
       {#if activeModuleId}

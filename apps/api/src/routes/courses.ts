@@ -17,10 +17,15 @@ import {
   activityEvents,
 } from '../db/schema';
 import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
-import { SUPPORTED_LOCALES } from '@youniversity2/shared';
+import {
+  SUPPORTED_LOCALES,
+  createCourseSchema,
+  publishCourseSchema,
+  translateCourseSchema,
+  WS_EVENTS,
+} from '@youniversity2/shared';
 import { translateContent } from '../services/translation';
 import { broadcastToCourse, broadcastToAdmin, broadcastToCourseEnrollees, broadcastToUser } from '../realtime/hub';
-import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
 import { isCourseVisibleToStudents } from '../services/course-visibility';
 import { canStudentViewCourse, isEnrollmentListedForStudent } from '../services/course-access';
@@ -28,14 +33,6 @@ import { effectiveRole } from '../services/student-view';
 import { getReportingProgressState } from '../services/enrollment-achievement';
 import { evaluateCourseCompletion } from '../services/completion';
 import { clearCourseLessonProgress } from '../services/enrollment-progress';
-
-const createCourseSchema = z.object({
-  slug: z.string().min(2).max(255),
-  defaultLocale: z.enum(SUPPORTED_LOCALES).default('sk'),
-  title: z.string().min(2),
-  description: z.string().optional(),
-  categoryId: z.string().uuid().optional().nullable(),
-});
 
 export const courseRoutes = new Hono();
 
@@ -270,7 +267,7 @@ courseRoutes.post('/', requireRole('admin'), async (c) => {
 
 courseRoutes.post('/:id/translate', requireRole('admin'), async (c) => {
   const courseId = c.req.param('id');
-  const body = z.object({ targetLocale: z.enum(SUPPORTED_LOCALES) }).safeParse(await c.req.json());
+  const body = translateCourseSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid locale' }, 400);
 
   const { targetLocale } = body.data;
@@ -328,7 +325,7 @@ courseRoutes.post('/:id/translate', requireRole('admin'), async (c) => {
 courseRoutes.patch('/:id/publish', requireRole('admin'), async (c) => {
   const actor = c.get('user') as AuthUser;
   const courseId = c.req.param('id');
-  const body = z.object({ isPublished: z.boolean() }).safeParse(await c.req.json());
+  const body = publishCourseSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 
   const [updated] = await db

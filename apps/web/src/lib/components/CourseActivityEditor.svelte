@@ -3,6 +3,8 @@
   import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
   import { normalizeActivityType } from '$lib/activity-types';
+  import { createAutosave, type AutosaveStatus as AutosaveState } from '$lib/autosave';
+  import AutosaveStatus from '$lib/components/AutosaveStatus.svelte';
   import VideoActivityFields from '$lib/components/VideoActivityFields.svelte';
   import PresentationActivityFields from '$lib/components/PresentationActivityFields.svelte';
   import ScormActivityFields from '$lib/components/ScormActivityFields.svelte';
@@ -83,6 +85,38 @@
   let dropTargetModuleId = $state<string | null>(null);
   let dropBeforeActivityId = $state<string | null>(null);
   let dropBeforeModuleId = $state<string | null>(null);
+  let autosaveStatus = $state<AutosaveState>('idle');
+  let autosaveError = $state('');
+  let editBaseline = $state<string | null>(null);
+
+  const moduleTitleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const activityAutosave = createAutosave({
+    debounceMs: 800,
+    onStatus: (status, err) => {
+      autosaveStatus = status;
+      autosaveError = err ?? '';
+    },
+    onSave: async () => {
+      if (!editingId) return false;
+      const activity = findActivityById(editingId);
+      if (!activity) return false;
+      if (!isTextType(activity.type) && !editTitle.trim()) return false;
+      await persistActivity(activity, { closeAfterSave: false });
+      return true;
+    },
+  });
+
+  const editDraftKey = $derived.by(() =>
+    JSON.stringify({
+      editTitle,
+      editContent,
+      editConfigUrl,
+      editVideoForm,
+      editPresentationForm,
+      editScormForm,
+    }),
+  );
 
   function isDraggingModule() {
     return dragModuleId !== null;
@@ -229,6 +263,42 @@
     return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
   }
 
+  function findActivityById(activityId: string): ActivityRow | null {
+    for (const mod of orderedModules) {
+      const match = mod.activities.find((item) => item.id === activityId);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  function queueModuleTitleSave(moduleId: string, title: string) {
+    const existing = moduleTitleTimers.get(moduleId);
+    if (existing) clearTimeout(existing);
+    moduleTitleTimers.set(
+      moduleId,
+      setTimeout(() => {
+        moduleTitleTimers.delete(moduleId);
+        void saveModuleTitle(moduleId, title);
+      }, 800),
+    );
+  }
+
+  $effect(() => {
+    if (!editingId) {
+      editBaseline = null;
+      activityAutosave.cancel();
+      return;
+    }
+
+    const key = editDraftKey;
+    if (editBaseline === null) {
+      editBaseline = key;
+      return;
+    }
+    if (key === editBaseline) return;
+    activityAutosave.schedule();
+  });
+
   async function run(action: () => Promise<void>) {
     saving = true;
     error = '';
@@ -344,6 +414,7 @@
   }
 
   function startEdit(activity: ActivityRow) {
+    activityAutosave.cancel();
     editingId = activity.id;
     editTitle = activity.title;
     editContent = activity.content ?? '';
@@ -387,7 +458,7 @@
     return normalized === 'audio';
   }
 
-  async function saveActivity(activity: ActivityRow) {
+  async function persistActivity(activity: ActivityRow, options?: { closeAfterSave?: boolean }) {
     const normalized = normalizeActivityType(activity.type);
     let config: Record<string, unknown> | undefined;
 
@@ -395,7 +466,7 @@
       const videoError = validateVideoForm(editVideoForm, videoValidationMessages());
       if (videoError) {
         error = videoError;
-        return;
+        throw new Error(videoError);
       }
       config = configFromVideoForm(editVideoForm);
     } else if (isPresentationType(activity.type)) {
@@ -405,14 +476,14 @@
       );
       if (presentationError) {
         error = presentationError;
-        return;
+        throw new Error(presentationError);
       }
       config = configFromPresentationForm(editPresentationForm);
     } else if (isScormType(activity.type)) {
       const scormError = validateScormForm(editScormForm, scormValidationMessages());
       if (scormError) {
         error = scormError;
-        return;
+        throw new Error(scormError);
       }
       config = configFromScormForm(editScormForm);
     } else {
@@ -426,12 +497,14 @@
           config,
         }),
       );
-      editingId = null;
+      editBaseline = editDraftKey;
+      if (options?.closeAfterSave) editingId = null;
       return;
     }
 
     const title = editTitle.trim();
     if (!title) return;
+
     await run(() =>
       serverMutate('apiMutation', `/api/activities/${activity.id}`, 'PATCH', {
         title,
@@ -442,13 +515,22 @@
           : undefined,
       }),
     );
+    editBaseline = editDraftKey;
+    if (options?.closeAfterSave) editingId = null;
+  }
+
+  function cancelEdit() {
+    activityAutosave.cancel();
     editingId = null;
+    editBaseline = null;
+    autosaveStatus = 'idle';
+    autosaveError = '';
   }
 
   async function deleteActivity(activityId: string) {
     if (!confirm(t('admin.deleteActivityConfirm', locale))) return;
     await run(() => serverMutate('apiMutation', `/api/activities/${activityId}`, 'DELETE'));
-    if (editingId === activityId) editingId = null;
+    if (editingId === activityId) cancelEdit();
   }
 
   function clearDragState() {
@@ -547,6 +629,9 @@
 
   <p class="course-edit-hint">{t('admin.activitiesHint', locale)}</p>
   <p class="course-edit-hint activity-editor-dnd-hint">{t('admin.dragToReorder', locale)}</p>
+  <div class="activity-editor-toolbar">
+    <AutosaveStatus status={autosaveStatus} error={autosaveError} />
+  </div>
 
   {#if modules.length === 0}
     <div class="activity-editor-empty">
@@ -618,7 +703,7 @@
             class="activity-module-title"
             value={mod.title}
             disabled={saving}
-            onchange={(e) => saveModuleTitle(mod.id, (e.currentTarget as HTMLInputElement).value)}
+            oninput={(e) => queueModuleTitleSave(mod.id, (e.currentTarget as HTMLInputElement).value)}
           />
           <button
             type="button"
@@ -679,10 +764,7 @@
                 {/if}
                 <div class="activity-row-actions">
                   {#if editingId === activity.id}
-                    <button type="button" class="btn btn-sm" disabled={saving} onclick={() => saveActivity(activity)}>
-                      {t('admin.saveChanges', locale)}
-                    </button>
-                    <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={() => (editingId = null)}>
+                    <button type="button" class="btn btn-ghost btn-sm" disabled={saving} onclick={cancelEdit}>
                       {t('admin.cancel', locale)}
                     </button>
                   {:else}

@@ -1,4 +1,8 @@
 import { deserialize, type ActionResult } from '$app/forms';
+import { get } from 'svelte/store';
+import { locale } from '$lib/stores/auth';
+import { t } from '$lib/i18n';
+import type { Locale } from '@youniversity2/shared';
 
 export async function submitAction(
   action: string,
@@ -22,18 +26,18 @@ export async function submitAction(
   return deserialize(await res.text());
 }
 
-export function actionErrorMessage(result: ActionResult): string | null {
+export function actionErrorMessage(result: ActionResult, loc: Locale = get(locale) as Locale): string | null {
   if (result.type === 'success') return null;
   if (result.type === 'failure') {
-    return String((result.data as { error?: string } | undefined)?.error ?? 'Chyba');
+    return String((result.data as { error?: string } | undefined)?.error ?? t('error.unknown', loc));
   }
   if (result.type === 'redirect') {
-    return 'Relácia vypršala. Prihláste sa znova.';
+    return t('error.sessionExpired', loc);
   }
   if (result.type === 'error') {
-    return result.error?.message ?? 'Neočakávaná chyba servera.';
+    return result.error?.message ?? t('error.serverUnexpected', loc);
   }
-  return 'Operácia zlyhala.';
+  return t('error.actionFailed', loc);
 }
 
 export function isActionSuccess(result: ActionResult): boolean {
@@ -47,7 +51,7 @@ export async function queryApi<T = unknown>(
   const result = await submitAction(action, { path });
   const err = actionErrorMessage(result);
   if (!isActionSuccess(result) || err) {
-    return { data: null, error: err ?? 'Operácia zlyhala.' };
+    return { data: null, error: err ?? t('error.actionFailed', get(locale) as Locale) };
   }
   const data = (result.data as { data?: T } | undefined)?.data ?? null;
   return { data, error: null };

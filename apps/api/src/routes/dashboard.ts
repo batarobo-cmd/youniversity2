@@ -1,38 +1,29 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
-import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { getStudentDashboard, getAdminDashboard, getStudentCourseOverview } from '../services/dashboard';
-import { effectiveRole } from '../services/student-view';
+import { getPublicSystemFeatures } from '../services/system-settings';
+import { effectiveRole, hasStaffPrivileges } from '../services/student-view';
+import { isPlatformAdminRole } from '@youniversity2/shared';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { serializeUser } from '../services/user-serializer';
-import { SUPPORTED_LOCALES } from '@youniversity2/shared';
-
-const optionalProfileString = (max: number) => z.string().max(max).optional().nullable();
-
-const profilePatchSchema = z.object({
-  name: z.string().min(2).optional(),
-  preferredLocale: z.enum(SUPPORTED_LOCALES).optional(),
-  givenName: optionalProfileString(255),
-  familyName: optionalProfileString(255),
-  jobTitle: optionalProfileString(255),
-  department: optionalProfileString(255),
-  employeeId: optionalProfileString(64),
-  companyName: optionalProfileString(255),
-  officeLocation: optionalProfileString(255),
-  mobilePhone: optionalProfileString(64),
-  businessPhone: optionalProfileString(64),
-  city: optionalProfileString(128),
-  country: optionalProfileString(128),
-  currentPassword: z.string().optional(),
-  newPassword: z.string().min(8).optional(),
-});
+import { profilePatchSchema } from '@youniversity2/shared';
 
 export const dashboardRoutes = new Hono();
 
 dashboardRoutes.use('*', authMiddleware);
+
+dashboardRoutes.get('/system-features', async (c) => {
+  const user = c.get('user') as AuthUser;
+  const settings = await getPublicSystemFeatures();
+  const allowed =
+    settings.commandPaletteEnabled &&
+    isPlatformAdminRole(user.role) &&
+    hasStaffPrivileges(user, c);
+  return c.json({ commandPaletteEnabled: allowed });
+});
 
 dashboardRoutes.get('/', async (c) => {
   const user = c.get('user') as AuthUser;

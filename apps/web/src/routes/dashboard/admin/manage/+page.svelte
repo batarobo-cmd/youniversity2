@@ -6,6 +6,7 @@
   import { subscribeDashboardRefresh } from '$lib/live-dashboard';
   import { submitAction, actionErrorMessage, isActionSuccess } from '$lib/client/form-action';
   import CategoryCourseTree from '$lib/components/CategoryCourseTree.svelte';
+  import PageSkeleton from '$lib/components/PageSkeleton.svelte';
   import type { PageData } from './$types';
   import '$lib/styles/dashboard.css';
   import '$lib/styles/admin-manage.css';
@@ -152,7 +153,7 @@
 {/if}
 
 {#if loading}
-  <p class="loading-text">...</p>
+  <PageSkeleton variant="tree" ariaLabel={t('a11y.loading', $locale)} />
 {:else}
   <CategoryCourseTree
     {categories}

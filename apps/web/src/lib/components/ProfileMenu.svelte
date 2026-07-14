@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale, isAdminUser, isPlatformAdminUser, isActingAsStudent } from '$lib/stores/auth';
-  import { page } from '$app/stores';
-  import { t } from '$lib/i18n';
+  import { themePreference, setThemePreference, type ThemePreference } from '$lib/stores/theme';
+  import { page } from '$app/stores';  import { t } from '$lib/i18n';
   import type { User } from '@youniversity2/shared';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
 
@@ -26,6 +26,7 @@
 
   const showAdminLinks = $derived(isAdminUser(user) && !$isActingAsStudent);
   const showPlatformAdminLinks = $derived(isPlatformAdminUser(user) && !$isActingAsStudent);
+  const themeOptions: ThemePreference[] = ['light', 'dark', 'system'];
 
   function toggle() {
     open = !open;
@@ -160,7 +161,43 @@
           </svg>
           {t('admin.menuUsers', $locale)}
         </a>
+        <a href="/dashboard/admin/settings/auth" class="profile-menu-item" role="menuitem" onclick={close}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          {t('admin.menuSettings', $locale)}
+        </a>
       {/if}
+
+      <div class="profile-menu-divider"></div>
+
+      <div class="profile-menu-theme">
+        <span class="profile-menu-theme-label" id="profile-theme-label">{t('theme.label', $locale)}</span>
+        <div
+          class="profile-menu-theme-options"
+          role="radiogroup"
+          aria-labelledby="profile-theme-label"
+        >
+          {#each themeOptions as option}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={$themePreference === option}
+              class="profile-menu-theme-btn"
+              class:profile-menu-theme-btn--active={$themePreference === option}
+              onclick={() => setThemePreference(option)}
+            >
+              {t(`theme.${option}`, $locale)}
+            </button>
+          {/each}
+        </div>
+      </div>
 
       <div class="profile-menu-divider"></div>
 

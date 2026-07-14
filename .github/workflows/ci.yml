@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
+        env:
+          NODE_ENV: development
+
+      - name: Build
+        run: bun run build
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Start Postgres and Redis
+        run: docker compose up -d postgres redis
+
+      - name: Migrate database and ensure demo users
+        run: bun run db:migrate && bun run --filter @youniversity2/api db:ensure-demo
+        env:
+          DATABASE_URL: postgresql://youniversity:youniversity@localhost:5432/youniversity2
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: development
+
+      - name: Start API
+        run: bun run --filter @youniversity2/api start &
+        env:
+          DATABASE_URL: postgresql://youniversity:youniversity@localhost:5432/youniversity2
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: development
+          CORS_ORIGIN: http://localhost:4173
+
+      - name: Wait for API readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/health/ready; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become ready in time"
+          exit 1
+
+      - name: Install Playwright browser
+        run: bun run test:e2e:install
+
+      - name: API smoke tests
+        run: bun run test:e2e -- e2e/api-health.e2e.ts
+        env:
+          PLAYWRIGHT_API_URL: http://localhost:3001
+
+      - name: Build web app
+        run: bun run --filter @youniversity2/web build
+        env:
+          NODE_ENV: production
+
+      - name: Start web preview
+        run: bun run --filter @youniversity2/web preview -- --port 4173 --host 127.0.0.1 &
+        env:
+          API_URL: http://localhost:3001
+          PORT: 4173
+          HOST: 127.0.0.1
+
+      - name: Wait for web
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4173/; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Web preview did not start in time"
+          exit 1
+
+      - name: Web smoke tests
+        run: bun run test:e2e -- e2e/auth-smoke.e2e.ts
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+          PLAYWRIGHT_API_URL: http://localhost:3001

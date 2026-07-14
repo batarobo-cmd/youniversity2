@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { SESSION_COOKIE } from '$lib/session';
-import { readStudentViewCookie } from '$lib/server/api';
+import { readStudentViewCookie, studentViewApiHeaders } from '$lib/server/api';
 import { STUDENT_VIEW_DEPENDS } from '$lib/student-view';
 import { dev } from '$app/environment';
 import { execSync } from 'node:child_process';
@@ -44,6 +44,7 @@ async function fetchSessionUser(sessionId: string, fetch: typeof globalThis.fetc
 }
 
 export const load: LayoutServerLoad = async ({ cookies, url, fetch, depends }) => {
+  depends('app:system-features');
   depends(STUDENT_VIEW_DEPENDS);
   const sessionId = cookies.get(SESSION_COOKIE) ?? null;
   const pathname = url.pathname;
@@ -81,5 +82,28 @@ export const load: LayoutServerLoad = async ({ cookies, url, fetch, depends }) =
     isAuthPage: isAuthPath(pathname),
     appVersion: resolveAppVersion(),
     studentViewMode: readStudentViewCookie(cookies),
+    systemFeatures: sessionId
+      ? await fetchSystemFeatures(sessionId, fetch, cookies)
+      : { commandPaletteEnabled: false },
   };
 };
+
+async function fetchSystemFeatures(
+  sessionId: string,
+  fetch: typeof globalThis.fetch,
+  cookies: { get: (name: string) => string | undefined },
+) {
+  try {
+    const res = await fetch(`${API_URL}/api/dashboard/system-features`, {
+      headers: {
+        Authorization: `Bearer ${sessionId}`,
+        ...studentViewApiHeaders(cookies),
+      },
+    });
+    if (!res.ok) return { commandPaletteEnabled: false };
+    const data = (await res.json()) as { commandPaletteEnabled?: boolean };
+    return { commandPaletteEnabled: Boolean(data.commandPaletteEnabled) };
+  } catch {
+    return { commandPaletteEnabled: false };
+  }
+}

@@ -512,10 +512,9 @@
   {:else if showIframe}
     <iframe
       bind:this={iframeEl}
-      class="course-embed-iframe"
+      class="course-embed-iframe scorm-player-iframe"
       src={session.iframeSrc}
       title="SCORM"
-      style="width:100%; min-height: 70vh; border: 0; background: white;"
     ></iframe>
   {/if}
 </div>
@@ -545,5 +544,15 @@
     margin: 0;
     color: var(--color-text-secondary);
     font-size: 0.875rem;
+  }
+
+  .scorm-player-iframe {
+    width: 100%;
+    min-height: 70vh;
+    border: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+    /* SCORM balíky väčšinou počítajú so svetlým plátnom */
+    background: #fff;
   }
 </style>

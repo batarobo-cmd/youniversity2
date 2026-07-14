@@ -45,8 +45,8 @@ docker compose up -d
 # 4. Inštalujte závislosti
 bun install
 
-# 5. Push DB schémy + seed
-bun run db:push
+# 5. DB migrácie + seed
+bun run db:migrate
 bun run db:seed
 
 # 6. Spustite dev servery
@@ -67,6 +67,27 @@ bun run dev
 | System admin | `sysadmin` / `sysadmin` (guard: `sysadmin-guard`) |
 
 Pri existujúcej lokálnej DB spustite `bun run db:ensure-demo`, aby sa účty aktualizovali.
+
+### DB migrácie
+
+Schéma je verzovaná v `apps/api/drizzle/` (Drizzle Kit). Po úprave `schema.ts`:
+
+```bash
+bun run db:generate -- --name popis_zmeny   # vygeneruje SQL migráciu
+bun run db:migrate                          # aplikuje neaplikované migrácie
+```
+
+Existujúce databázy vytvorené cez starý `db:push` sa pri prvom `db:migrate` automaticky označia ako baseline (bez opätovného CREATE).
+
+`db:push` zostáva len pre rýchle lokálne experimenty — v produkcii používajte `db:migrate`.
+
+### Testy
+
+```bash
+bun run test
+```
+
+Vyžaduje bežiaci PostgreSQL a Redis (`docker compose up -d`). Integračné auth testy používajú demo účet `student` / `student`.
 
 **Produkcia (AWS):** heslá demo účtov nie sú v gite — nastavte cez `deploy/aws-change-demo-passwords.sh`.
 

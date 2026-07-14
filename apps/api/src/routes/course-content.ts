@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { z } from 'zod';
 import { db } from '../db';
 import {
   courses,
@@ -10,44 +9,14 @@ import {
   lessonTranslations,
 } from '../db/schema';
 import { authMiddleware, requireRole } from '../middleware/auth';
-import { ACTIVITY_TYPES, WS_EVENTS } from '@youniversity2/shared';
+import {
+  WS_EVENTS,
+  createActivitySchema,
+  createModuleSchema,
+  updateActivitySchema,
+  updateModuleSchema,
+} from '@youniversity2/shared';
 import { broadcastToCourse, broadcastToAdmin } from '../realtime/hub';
-
-const activityTypeSchema = z.enum(ACTIVITY_TYPES);
-
-const createModuleSchema = z.object({
-  title: z.string().min(1).max(500),
-  sortOrder: z.number().int().min(0).optional(),
-});
-
-const updateModuleSchema = z.object({
-  title: z.string().min(1).max(500).optional(),
-  sortOrder: z.number().int().min(0).optional(),
-  isRequired: z.boolean().optional(),
-});
-
-const createActivitySchema = z
-  .object({
-    type: activityTypeSchema,
-    title: z.string().min(1).max(500).optional(),
-    content: z.string().optional(),
-    sortOrder: z.number().int().min(0).optional(),
-    isRequired: z.boolean().optional(),
-    config: z.record(z.unknown()).optional(),
-  })
-  .refine((data) => data.type === 'text' || Boolean(data.title?.trim()), {
-    message: 'title required',
-  });
-
-const updateActivitySchema = z.object({
-  type: activityTypeSchema.optional(),
-  title: z.string().min(1).max(500).optional(),
-  content: z.string().optional().nullable(),
-  moduleId: z.string().uuid().optional(),
-  sortOrder: z.number().int().min(0).optional(),
-  isRequired: z.boolean().optional(),
-  config: z.record(z.unknown()).optional(),
-});
 
 function defaultTextTitle(content?: string) {
   const line = content?.trim().split('\n')[0]?.trim();

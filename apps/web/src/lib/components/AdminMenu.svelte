@@ -1,41 +1,39 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { locale, ensureStudentViewCookie } from '$lib/stores/auth';
-  import { isAdminUser, isPlatformAdminUser } from '$lib/stores/auth';
+  import { isAdminUser, isPlatformAdminUser, user as authUser } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { portal } from '$lib/actions/portal';
+  import AdminNavTiles from '$lib/components/AdminNavTiles.svelte';
+  import {
+    isAdminPath,
+    isAdminNavActive,
+  } from '$lib/admin-nav';
   import type { User } from '@youniversity2/shared';
+  import '$lib/styles/admin-nav.css';
 
   let { user = null }: { user?: User | null } = $props();
 
   let open = $state(false);
   let rootEl: HTMLDivElement | undefined = $state();
-  let triggerEl: HTMLButtonElement | undefined = $state();
-  let popoverStyle = $state('');
 
   const showAdmin = $derived(isAdminUser(user));
   const showPlatformAdmin = $derived(isPlatformAdminUser(user));
-
-  function updatePopoverPosition() {
-    if (!triggerEl) return;
-    const rect = triggerEl.getBoundingClientRect();
-    popoverStyle = `top:${rect.bottom + 6}px;left:${rect.left + rect.width / 2}px;`;
-  }
+  const navTiles = $derived(getMainAdminNavTiles(showPlatformAdmin));
+  const onAdminPage = $derived(isAdminPath($page.url.pathname));
+  const adminSectionActive = $derived(isAdminNavActive($page.url.pathname, showPlatformAdmin));
 
   function toggle(e: MouseEvent) {
     e.stopPropagation();
+    if (onAdminPage) return;
     open = !open;
-    if (open) {
-      updatePopoverPosition();
-    }
   }
 
   function close() {
     open = false;
   }
 
-  function handleMenuItemClick(e: MouseEvent) {
-    e.stopPropagation();
+  function handleTileNavigate() {
     ensureStudentViewCookie();
     queueMicrotask(() => close());
   }
@@ -44,19 +42,14 @@
     if (!open || !rootEl) return;
     const target = e.target as Node;
     if (rootEl.contains(target)) return;
-    if ((target as HTMLElement).closest?.('.admin-menu-popover')) return;
+    if ((target as HTMLElement).closest?.('.admin-menu-panel')) return;
+    if ((target as HTMLElement).closest?.('.admin-menu-backdrop')) return;
     open = false;
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') open = false;
   }
-
-  function isActive(path: string) {
-    return $page.url.pathname === path || $page.url.pathname.startsWith(path + '/');
-  }
-
-  const adminSectionActive = $derived(isActive('/dashboard/admin'));
 
   let previousPathname = $page.url.pathname;
 
@@ -67,14 +60,20 @@
       close();
     }
   });
+
+  $effect(() => {
+    if (!open || typeof document === 'undefined') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('admin-menu-open');
+    return () => {
+      document.body.style.overflow = prev;
+      document.body.classList.remove('admin-menu-open');
+    };
+  });
 </script>
 
-<svelte:window
-  onclick={handleWindowClick}
-  onkeydown={handleKeydown}
-  onresize={updatePopoverPosition}
-  onscroll={updatePopoverPosition}
-/>
+<svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
 
 {#if showAdmin}
   <div class="admin-menu" bind:this={rootEl}>
@@ -82,9 +81,8 @@
       type="button"
       class="admin-menu-trigger"
       class:admin-menu-trigger--active={open || adminSectionActive}
-      aria-haspopup="menu"
-      aria-expanded={open}
-      bind:this={triggerEl}
+      aria-haspopup="dialog"
+      aria-expanded={open || onAdminPage}
       onclick={toggle}
     >
       <svg class="admin-menu-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -103,42 +101,18 @@
     </button>
   </div>
 
-  {#if open}
+  {#if open && !onAdminPage}
+    <div use:portal class="admin-menu-backdrop" aria-hidden="true" onclick={close}></div>
     <div
       use:portal
-      class="admin-menu-popover admin-menu-popover--fixed"
-      style={popoverStyle}
-      role="menu"
+      class="admin-menu-panel"
+      role="dialog"
+      aria-label={t('nav.administration', $locale)}
     >
-      <a
-        href="/dashboard/admin/manage"
-        class="admin-menu-item"
-        class:admin-menu-item--active={isActive('/dashboard/admin/manage')}
-        role="menuitem"
-        onclick={handleMenuItemClick}
-      >
-        {t('admin.menuCoursesCategories', $locale)}
-      </a>
-      {#if showPlatformAdmin}
-        <a
-          href="/dashboard/admin/users"
-          class="admin-menu-item"
-          class:admin-menu-item--active={isActive('/dashboard/admin/users')}
-          role="menuitem"
-          onclick={handleMenuItemClick}
-        >
-          {t('admin.menuUsers', $locale)}
-        </a>
-        <a
-          href="/dashboard/admin/auth"
-          class="admin-menu-item"
-          class:admin-menu-item--active={isActive('/dashboard/admin/auth')}
-          role="menuitem"
-          onclick={handleMenuItemClick}
-        >
-          {t('admin.menuAuth', $locale)}
-        </a>
-      {/if}
+      <div class="admin-menu-panel-inner">
+        <p class="admin-menu-panel-sub">{t('dash.welcomeAdminSub', $locale)}</p>
+        <AdminNavTiles onNavigate={handleTileNavigate} />
+      </div>
     </div>
   {/if}
 {/if}

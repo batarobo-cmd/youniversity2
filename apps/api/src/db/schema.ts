@@ -327,6 +327,12 @@ export const authSettings = pgTable('auth_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const systemSettings = pgTable('system_settings', {
+  id: integer('id').primaryKey().default(1),
+  settings: jsonb('settings').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type CourseCategory = typeof courseCategories.$inferSelect;
 export type Course = typeof courses.$inferSelect;

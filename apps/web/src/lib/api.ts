@@ -1,7 +1,8 @@
 import { get } from 'svelte/store';
 import { token, locale, studentViewMode, API_BASE } from './stores/auth';
 import { getTabSessionId } from './session';
-import { STUDENT_VIEW_HEADER } from '@youniversity2/shared';
+import { STUDENT_VIEW_HEADER, type Locale } from '@youniversity2/shared';
+import { clientErrorMessage, t } from './i18n';
 
 export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const t = get(token);
@@ -21,6 +22,7 @@ export function authHeaders(extra: Record<string, string> = {}): Record<string, 
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const loc = get(locale) as Locale;
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -32,16 +34,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (import.meta.env.DEV) {
       console.error('API fetch failed:', `${API_BASE}${path}`, e);
     }
-    throw new Error('Nepodarilo sa spojiť so serverom. Spustite API (bun run dev) a Docker.');
+    throw new Error(t('error.network', loc));
   }
 
   if (res.status === 401) {
-    throw new Error('Relácia vypršala. Prihláste sa znova.');
+    throw new Error(t('error.sessionExpired', loc));
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error: string }).error ?? `Chyba ${res.status}`);
+    throw new Error(clientErrorMessage(err as { error?: string; code?: string }, res.status, loc));
   }
 
   return res.json() as Promise<T>;

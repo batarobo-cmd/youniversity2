@@ -52,6 +52,45 @@
   --glass: rgba(255, 255, 255, 0.88);
   --glass-border: rgba(15, 23, 42, 0.06);
   --blur: 16px;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --color-bg: #0b1120;
+  --color-bg-elevated: #111827;
+  --color-surface: #1e293b;
+  --color-surface-hover: #334155;
+  --color-border: rgba(248, 250, 252, 0.08);
+  --color-border-strong: rgba(248, 250, 252, 0.14);
+
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-muted: #94a3b8;
+
+  --color-primary: #818cf8;
+  --color-primary-hover: #6366f1;
+  --color-primary-muted: rgba(129, 140, 248, 0.14);
+  --color-accent: #a78bfa;
+  --gradient-brand: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #f472b6 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(129, 140, 248, 0.1), rgba(167, 139, 250, 0.06));
+
+  --color-success: #22c55e;
+  --color-success-muted: rgba(34, 197, 94, 0.12);
+  --color-warning: #fbbf24;
+  --color-warning-muted: rgba(251, 191, 36, 0.12);
+  --color-danger: #f87171;
+  --color-danger-muted: rgba(248, 113, 113, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 32px rgba(129, 140, 248, 0.18);
+
+  --glass: rgba(15, 23, 42, 0.88);
+  --glass-border: rgba(248, 250, 252, 0.06);
+
+  color-scheme: dark;
 }
 
 *,
@@ -64,6 +103,26 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 body {
@@ -233,8 +292,8 @@ input:disabled {
   color: var(--color-warning);
 }
 .badge-primary {
-  background: color-mix(in srgb, var(--color-primary) 12%, white);
-  color: var(--color-primary-hover);
+  background: color-mix(in srgb, var(--color-primary) 15%, var(--color-surface));
+  color: var(--color-primary);
 }
 .badge-muted {
   background: var(--color-surface-hover);
@@ -288,6 +347,12 @@ input:disabled {
 
 .page-enter {
   animation: fadeIn 180ms var(--ease-out) both;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease-out);
 }
 
 .stagger-1 {

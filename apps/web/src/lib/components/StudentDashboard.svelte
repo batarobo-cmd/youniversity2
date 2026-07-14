@@ -4,8 +4,7 @@
   import StudentCourseCard from './StudentCourseCard.svelte';
   import StudentCompletedCourseTile from './StudentCompletedCourseTile.svelte';
   import CalendarWidget from './CalendarWidget.svelte';
-  import { certificateDownloadFileName, certificateDownloadUrl, formatCertificateIssuedAt } from '$lib/certificate-download';
-  import ViewportPaginator from '$lib/components/ViewportPaginator.svelte';
+  import CertHistoryModal from './CertHistoryModal.svelte';
   import '$lib/styles/dashboard.css';
 
   interface Props {
@@ -138,45 +137,10 @@
   }}
 />
 
-{#if certHistoryModal}
-  <div class="dash-cert-modal-overlay" role="presentation" onclick={() => (certHistoryModal = null)}>
-    <div
-      class="dash-cert-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('dash.certificateHistory', $locale)}
-      onclick={(e) => e.stopPropagation()}
-    >
-      <div class="dash-cert-modal-head">
-        <h3>{t('dash.certificateHistory', $locale)} — {certHistoryModal.courseTitle}</h3>
-        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (certHistoryModal = null)}>
-          {t('admin.cancel', $locale)}
-        </button>
-      </div>
-      <ViewportPaginator
-        items={certHistoryModal.certificates}
-        availableHeight={certModalListHeight}
-        rowHeight={52}
-        minPageSize={3}
-      >
-        {#snippet children(pageItems)}
-          <div class="dash-cert-modal-list">
-            {#each pageItems as cert}
-              <div class="dash-cert-modal-row">
-                <span>#{cert.certificateNumber}</span>
-                <span>{formatCertificateIssuedAt(cert.issuedAt, $locale)}</span>
-                <a
-                  class="btn btn-ghost btn-sm"
-                  href={certificateDownloadUrl(cert.id)}
-                  download={certificateDownloadFileName(cert.certificateNumber)}
-                >
-                  {t('dash.downloadCertificate', $locale)}
-                </a>
-              </div>
-            {/each}
-          </div>
-        {/snippet}
-      </ViewportPaginator>
-    </div>
-  </div>
-{/if}
+<CertHistoryModal
+  open={Boolean(certHistoryModal)}
+  courseTitle={certHistoryModal?.courseTitle ?? ''}
+  certificates={certHistoryModal?.certificates ?? []}
+  listHeight={certModalListHeight}
+  onClose={() => (certHistoryModal = null)}
+/>

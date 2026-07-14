@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { USER_ROLES, type UserRole } from '@youniversity2/shared';
   import { portal } from '$lib/actions/portal';
+  import { focusTrap } from '$lib/actions/focus-trap';
   import { floatingMenuStyle } from '$lib/viewport-pagination';
 
   let {
@@ -220,8 +221,8 @@
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && closePasswordModal()}
   >
-    <div class="user-role-password-modal" role="dialog" aria-modal="true">
-      <h3>{t('admin.systemAdminPasswordConfirmTitle', $locale)}</h3>
+    <div class="user-role-password-modal" role="dialog" aria-modal="true" aria-labelledby="user-role-password-title" use:focusTrap={passwordModal}>
+      <h3 id="user-role-password-title">{t('admin.systemAdminPasswordConfirmTitle', $locale)}</h3>
       <p class="user-role-password-lead">{t('admin.systemAdminPasswordConfirmLead', $locale)}</p>
 
       {#if passwordError}

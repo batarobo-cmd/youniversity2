@@ -40,9 +40,9 @@ echo "    Tip: na 1 GB Lightsail môže web build trvať 3–8 min; 'exporting l
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" api
 docker compose -f docker-compose.prod.yml build --progress=plain "${BUILD_FLAGS[@]}" web
 
-echo "==> DB schéma (pred reštartom API — nový image, bez bežiaceho kontajnera)..."
-docker compose -f docker-compose.prod.yml run --rm --no-deps api bun run db:push || {
-  echo "WARN: db:push zlyhal — skontrolujte logy nižšie"
+echo "==> DB migrácie (pred reštartom API — nový image, bez bežiaceho kontajnera)..."
+docker compose -f docker-compose.prod.yml run --rm --no-deps api bun run db:migrate || {
+  echo "WARN: db:migrate zlyhal — skontrolujte logy nižšie"
 }
 
 echo "==> Reštart kontajnerov..."
@@ -62,11 +62,6 @@ fi
 echo "==> Migrácia čísel certifikátov (pred zmenou schémy)..."
 docker compose -f docker-compose.prod.yml exec -T api bun run db:migrate-cert-numbers || {
   echo "WARN: db:migrate-cert-numbers zlyhal — skontrolujte API logy"
-}
-
-echo "==> DB schéma..."
-docker compose -f docker-compose.prod.yml exec -T api bun run db:push || {
-  echo "WARN: db:push zlyhal — skontrolujte API logy"
 }
 
 echo ""

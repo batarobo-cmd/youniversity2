@@ -5,6 +5,7 @@
   import { actionErrorMessage, isActionSuccess, submitAction } from '$lib/client/form-action';
   import { t, SUPPORTED_LOCALES } from '$lib/i18n';
   import type { Locale, User } from '@youniversity2/shared';
+  import { firstZodIssue, profilePatchSchema } from '@youniversity2/shared';
   import { SESSION_STORAGE_KEY } from '$lib/session';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
   import '$lib/styles/dashboard.css';
@@ -86,8 +87,13 @@
         payload.newPassword = newPassword;
       }
 
+      const parsed = profilePatchSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new Error(firstZodIssue(parsed.error));
+      }
+
       const result = await submitAction('saveProfile', {
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify(parsed.data),
       });
       const err = actionErrorMessage(result);
       if (!isActionSuccess(result) || err) throw new Error(err ?? 'Uloženie zlyhalo.');

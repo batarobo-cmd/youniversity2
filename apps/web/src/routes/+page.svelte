@@ -3,8 +3,11 @@
   import { page } from '$app/state';
   import { locale } from '$lib/stores/auth';
   import { authErrorMessage, t } from '$lib/i18n';
+  import { parseLoginForm, zodFormMessage } from '$lib/auth-client-validation';
   import type { ActionData, PageData } from './$types';
   import LocaleMenu from '$lib/components/LocaleMenu.svelte';
+  import ThemeMenu from '$lib/components/ThemeMenu.svelte';
+  import SkipLink from '$lib/components/SkipLink.svelte';
   import RegisterManualForm from '$lib/components/RegisterManualForm.svelte';
   import '$lib/styles/login.css';
 
@@ -12,6 +15,7 @@
 
   let isRegister = $state(false);
   let manualDetailsOpen = $state(false);
+  let clientError = $state('');
 
   const authConfig = $derived(data.authConfig);
   const oauthGoogle = $derived(authConfig.oauth.google.enabled);
@@ -26,15 +30,33 @@
   }
 
   const error = $derived(
-    authErrorMessage(
-      form?.errorCode ?? page.url.searchParams.get('error'),
-      form?.error,
-      $locale,
-    ),
+    clientError ||
+      authErrorMessage(
+        form?.errorCode ?? page.url.searchParams.get('error'),
+        form?.error,
+        $locale,
+      ),
   );
+
+  function handleLoginSubmit(event: SubmitEvent) {
+    clientError = '';
+    const formEl = event.currentTarget as HTMLFormElement;
+    const fd = new FormData(formEl);
+    const parsed = parseLoginForm(
+      {
+        email: String(fd.get('email') ?? ''),
+        password: String(fd.get('password') ?? ''),
+      },
+      dev,
+    );
+    if (parsed.success) return;
+    event.preventDefault();
+    clientError = zodFormMessage(parsed.error);
+  }
 </script>
 
 <div class="login-page">
+  <SkipLink targetId="login-main" />
   <aside class="login-brand">
     <div class="login-brand-content">
       <h1>YOUniversity2</h1>
@@ -56,8 +78,9 @@
     </div>
   </aside>
 
-  <main class="login-panel">
-    <div class="login-locale">
+  <main class="login-panel" id="login-main">
+    <div class="login-toolbar">
+      <ThemeMenu />
       <LocaleMenu />
     </div>
 
@@ -119,7 +142,7 @@
         <details class="manual-login-details" bind:open={manualDetailsOpen}>
           <summary>{t('auth.manualLogin', $locale)}</summary>
           <div class="manual-login-body">
-            <form class="manual-form" method="POST" action="?/login">
+            <form class="manual-form" method="POST" action="?/login" onsubmit={handleLoginSubmit}>
               <div class="form-field">
                 <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
                 <input
@@ -150,7 +173,7 @@
           </div>
         </details>
       {:else}
-        <form class="manual-form" method="POST" action="?/login">
+        <form class="manual-form" method="POST" action="?/login" onsubmit={handleLoginSubmit}>
           <div class="form-field">
             <label for="email">{dev ? t('auth.loginId', $locale) : t('auth.email', $locale)}</label>
             <input

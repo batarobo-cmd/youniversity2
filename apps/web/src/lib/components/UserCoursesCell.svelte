@@ -69,7 +69,7 @@
       type="button"
       class="users-course-count"
       aria-expanded={open}
-      aria-haspopup="dialog"
+      aria-haspopup="true"
       onclick={(e) => togglePopover(e.currentTarget)}
       title={t('admin.usersCoursesShowAll', $locale)}
     >
@@ -88,7 +88,7 @@
       <div
         class="users-popover users-popover--fixed"
         style={popoverStyle}
-        role="dialog"
+        role="region"
         aria-label={t('admin.usersCoursesPopover', $locale)}
       >
         <div class="users-popover-head">
@@ -96,7 +96,7 @@
             <strong>{userName}</strong>
             <span>{t('admin.usersCoursesCount', $locale, { count: enrollments.length })}</span>
           </div>
-          <button type="button" class="users-popover-close" onclick={closePopover} aria-label="Close">
+          <button type="button" class="users-popover-close" onclick={closePopover} aria-label={t('a11y.close', $locale)}>
             ×
           </button>
         </div>
