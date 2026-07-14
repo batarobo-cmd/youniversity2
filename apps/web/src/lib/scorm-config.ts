@@ -117,7 +117,20 @@ export function prepareScormCmiForResume(
     (typeof location12 === 'string' && location12.length > 0) ||
     (typeof location2004 === 'string' && location2004.length > 0);
 
-  if (!hasSuspendData && !hasLocation) return next;
+  if (!hasSuspendData && !hasLocation) {
+    if (version === 'scorm_12') {
+      const status = String(next['cmi.core.lesson_status'] ?? '').toLowerCase();
+      if (status === 'completed') {
+        next['cmi.core.lesson_status'] = 'incomplete';
+      }
+    } else {
+      const completion = String(next['cmi.completion_status'] ?? '').toLowerCase();
+      if (completion === 'completed') {
+        next['cmi.completion_status'] = 'incomplete';
+      }
+    }
+    return next;
+  }
 
   if (version === 'scorm_12') {
     const wasSuspended = next['cmi.core.exit'] === 'suspend';

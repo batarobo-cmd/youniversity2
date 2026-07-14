@@ -9,6 +9,7 @@
   import {
     applyScormCompletionMarkers,
     scormCmiIndicatesComplete,
+    scormCmiReadyToFinalize,
   } from '@youniversity2/shared';
   import { prepareScormCmiForResume, type ScormLaunchConfig } from '$lib/scorm-config';
 
@@ -127,7 +128,11 @@
   }
 
   async function tryAutoComplete(attemptId: string, terminated = true) {
-    if (completionRecorded || !scormCmiIndicatesComplete(config.version, cmiData)) return;
+    if (completionRecorded) return;
+    const canFinalize =
+      scormCmiIndicatesComplete(config.version, cmiData) ||
+      (terminated && scormCmiReadyToFinalize(config.version, cmiData));
+    if (!canFinalize) return;
 
     const payload = { ...cmiData };
     applyScormCompletionMarkers(config.version, payload);
@@ -166,8 +171,13 @@
     }
 
     function afterCmiMutation(element: string, value: string) {
-      if (config.version === 'scorm_12' && element === 'cmi.core.lesson_status' && (value === 'passed' || value === 'completed')) {
+      if (config.version === 'scorm_12' && element === 'cmi.core.lesson_status' && value === 'passed') {
         scheduleCommit(true);
+        return;
+      }
+      if (config.version === 'scorm_12' && element === 'cmi.core.lesson_status' && value === 'completed') {
+        scheduleCommit(false);
+        void tryAutoComplete(currentAttemptId, true);
         return;
       }
       if (config.version === 'scorm_2004' && element === 'cmi.success_status' && value === 'passed') {

@@ -7,7 +7,7 @@ import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { canStudentUpdateProgress, canStudentViewCourse } from '../services/course-access';
 import { evaluateCourseCompletion } from '../services/completion';
 import { effectiveRole } from '../services/student-view';
-import { captivateIndicatesComplete, scormCmiIndicatesComplete } from '@youniversity2/shared';
+import { captivateIndicatesComplete, scormCmiIndicatesComplete, scormCmiReadyToFinalize } from '@youniversity2/shared';
 
 type ScormVersion = 'scorm_12' | 'scorm_2004';
 
@@ -23,7 +23,20 @@ function prepareScormCmiForResume(version: ScormVersion, cmi: Record<string, unk
     (typeof location12 === 'string' && location12.length > 0) ||
     (typeof location2004 === 'string' && location2004.length > 0);
 
-  if (!hasSuspendData && !hasLocation) return next;
+  if (!hasSuspendData && !hasLocation) {
+    if (version === 'scorm_12') {
+      const status = String(next['cmi.core.lesson_status'] ?? '').toLowerCase();
+      if (status === 'completed') {
+        next['cmi.core.lesson_status'] = 'incomplete';
+      }
+    } else {
+      const completion = String(next['cmi.completion_status'] ?? '').toLowerCase();
+      if (completion === 'completed') {
+        next['cmi.completion_status'] = 'incomplete';
+      }
+    }
+    return next;
+  }
 
   if (version === 'scorm_12') {
     const wasSuspended = next['cmi.core.exit'] === 'suspend';
@@ -80,7 +93,8 @@ function scormDerivedProgress(
     } else {
       isComplete =
         !suspended &&
-        (lessonStatus === 'passed' || (lessonStatus === 'completed' && terminated));
+        (lessonStatus === 'passed' ||
+          (lessonStatus === 'completed' && terminated && scormCmiReadyToFinalize(version, cmi)));
     }
     if (!Number.isNaN(rawScore)) score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
@@ -107,7 +121,8 @@ function scormDerivedProgress(
     } else {
       isComplete =
         !suspended &&
-        (successStatus === 'passed' || (completionStatus === 'completed' && terminated));
+        (successStatus === 'passed' ||
+          (completionStatus === 'completed' && terminated && scormCmiReadyToFinalize(version, cmi)));
     }
     if (!Number.isNaN(rawScore)) score = Math.max(0, Math.min(100, Math.round(rawScore)));
     else if (!Number.isNaN(scaled)) score = Math.max(0, Math.min(100, Math.round(scaled * 100)));

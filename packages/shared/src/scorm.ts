@@ -8,7 +8,15 @@ export function captivateIndicatesComplete(cmi: Record<string, unknown>): boolea
   return /P100/i.test(suspend);
 }
 
-/** Best-effort detection that a SCORM package reached the end (no manual exit button). */
+function scormCmiHasResumeProgress(cmi: Record<string, unknown>): boolean {
+  const location = String(cmi['cmi.core.lesson_location'] ?? cmi['cmi.location'] ?? '');
+  const suspend = String(cmi['cmi.suspend_data'] ?? '');
+  if (location.length > 0 || suspend.length > 0) return true;
+  const sessionTime = String(cmi['cmi.core.session_time'] ?? cmi['cmi.session_time'] ?? '');
+  return /[1-9]/.test(sessionTime);
+}
+
+/** Strong completion signals (passed / Captivate P100 / SCORM 2004 success). */
 export function scormCmiIndicatesComplete(
   version: ScormVersion,
   cmi: Record<string, unknown>,
@@ -17,7 +25,7 @@ export function scormCmiIndicatesComplete(
 
   if (version === 'scorm_12') {
     const status = String(cmi['cmi.core.lesson_status'] ?? '').toLowerCase();
-    return status === 'passed' || status === 'completed';
+    return status === 'passed';
   }
 
   const success = String(cmi['cmi.success_status'] ?? '').toLowerCase();
@@ -28,11 +36,32 @@ export function scormCmiIndicatesComplete(
   return completion === 'completed' && !Number.isNaN(progress) && progress >= 1;
 }
 
+/**
+ * Some SCORM 1.2 packages (e.g. NLM PubMed) set lesson_status to "completed" at the end screen.
+ * Require saved playback progress so a bare "completed" on launch does not mark the lesson done.
+ */
+export function scormCmiReadyToFinalize(
+  version: ScormVersion,
+  cmi: Record<string, unknown>,
+): boolean {
+  if (scormCmiIndicatesComplete(version, cmi)) return true;
+
+  if (version === 'scorm_12') {
+    const status = String(cmi['cmi.core.lesson_status'] ?? '').toLowerCase();
+    return status === 'completed' && scormCmiHasResumeProgress(cmi);
+  }
+
+  const completion = String(cmi['cmi.completion_status'] ?? '').toLowerCase();
+  if (completion !== 'completed') return false;
+  const progress = Number(cmi['cmi.progress_measure'] ?? NaN);
+  return !Number.isNaN(progress) && progress >= 1;
+}
+
 export function applyScormCompletionMarkers(
   version: ScormVersion,
   cmi: Record<string, unknown>,
 ): boolean {
-  if (!scormCmiIndicatesComplete(version, cmi)) return false;
+  if (!scormCmiReadyToFinalize(version, cmi)) return false;
 
   if (version === 'scorm_12') {
     const status = String(cmi['cmi.core.lesson_status'] ?? '').toLowerCase();
