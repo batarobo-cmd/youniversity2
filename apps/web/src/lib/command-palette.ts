@@ -1,6 +1,6 @@
 import type { Locale } from '@youniversity2/shared';
-import { getMainAdminNavTiles, getSettingsNavTiles } from './admin-nav';
-import { t } from './i18n';
+import { getMainAdminNavTiles, getSettingsNavTiles } from '$lib/admin-nav';
+import { t } from '$lib/i18n';
 
 export type CommandPaletteItem = {
   id: string;
