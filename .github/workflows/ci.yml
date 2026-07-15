@@ -21,7 +21,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Start Postgres and Redis
-        run: docker compose up -d --wait postgres redis
+        run: |
+          docker compose down -v --remove-orphans 2>/dev/null || true
+          docker compose up -d --wait postgres redis
 
       - name: Migrate database and ensure demo users
         run: bun run db:migrate && bun run --filter @youniversity2/api db:ensure-demo
@@ -54,7 +56,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Start Postgres and Redis
-        run: docker compose up -d postgres redis
+        run: |
+          docker compose down -v --remove-orphans 2>/dev/null || true
+          docker compose up -d --wait postgres redis
 
       - name: Migrate database and ensure demo users
         run: bun run db:migrate && bun run --filter @youniversity2/api db:ensure-demo
