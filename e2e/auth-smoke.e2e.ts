@@ -15,6 +15,7 @@ test.describe('Web smoke', () => {
   test('login action accepts demo credentials', async ({ request }) => {
     const res = await request.post(`${webUrl}/?/login`, {
       form: { email: 'student@local', password: 'student' },
+      headers: { Accept: 'text/html,application/xhtml+xml' },
       maxRedirects: 0,
     });
     expect(res.status()).toBe(303);
