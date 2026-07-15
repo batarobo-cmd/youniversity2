@@ -96,6 +96,7 @@ export const courses = pgTable('courses', {
   isPublished: boolean('is_published').notNull().default(false),
   startsAt: timestamp('starts_at', { withTimezone: true }),
   endsAt: timestamp('ends_at', { withTimezone: true }),
+  notificationSettings: jsonb('notification_settings').notNull().default({}),
   createdById: uuid('created_by_id')
     .notNull()
     .references(() => users.id),
@@ -366,6 +367,29 @@ export const systemSettings = pgTable('system_settings', {
   settings: jsonb('settings').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const emailSettings = pgTable('email_settings', {
+  id: integer('id').primaryKey().default(1),
+  settings: jsonb('settings').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const emailSendLog = pgTable(
+  'email_send_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    notificationId: varchar('notification_id', { length: 64 }).notNull(),
+    recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    courseId: uuid('course_id').references(() => courses.id, { onDelete: 'set null' }),
+    status: varchar('status', { length: 16 }).notNull(),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    createdIdx: index('email_send_log_created_idx').on(table.createdAt),
+  }),
+);
 
 export type User = typeof users.$inferSelect;
 export type CourseCategory = typeof courseCategories.$inferSelect;

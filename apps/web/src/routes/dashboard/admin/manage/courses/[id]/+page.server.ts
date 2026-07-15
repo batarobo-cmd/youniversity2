@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import type { PlatformNotificationId } from '@youniversity2/shared';
 import { handleApiMutation, handleApiQuery } from '$lib/server/api-action';
 import { requireAdmin, requireAuthToken, serverApiJson } from '$lib/server/api';
 
@@ -17,10 +18,15 @@ export const load: PageServerLoad = async ({ parent, fetch, params, depends }) =
     `/api/courses/${courseId}?locale=${locale}`,
   );
 
+  const emailSettings = await serverApiJson<{
+    platformNotifications?: Partial<Record<PlatformNotificationId, { enabled?: boolean }>>;
+  }>(fetch, token, '/api/admin/email-settings');
+
   const loadError = course.error ?? (course.data ? null : 'Nepodarilo sa načítať kurz.');
 
   return {
     course: course.data,
+    platformNotifications: emailSettings.data?.platformNotifications ?? {},
     loadError,
   };
 };

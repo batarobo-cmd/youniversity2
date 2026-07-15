@@ -4,3 +4,4 @@ export * from './events';
 export * from './scorm';
 export * from './validation';
 export * from './schemas';
+export * from './email-notifications';

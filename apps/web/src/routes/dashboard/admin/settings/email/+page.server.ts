@@ -1,0 +1,70 @@
+import { fail } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
+import { actionPlatformAdminOrFail, isActionFailure } from '$lib/server/actions';
+import { requireAuthToken, requirePlatformAdmin, serverApiJson } from '$lib/server/api';
+import { runServerApiMutation } from '$lib/server/mutations';
+
+export const load: PageServerLoad = async ({ parent, fetch, depends }) => {
+  depends('admin:email');
+  const { token, user } = await parent();
+  requireAuthToken(token);
+  requirePlatformAdmin(user);
+
+  const result = await serverApiJson<Record<string, unknown>>(fetch, token, '/api/admin/email-settings');
+
+  return {
+    emailSettings: result.data,
+    loadError: result.error,
+  };
+};
+
+export const actions = {
+  saveSettings: async ({ request, cookies, fetch }) => {
+    const auth = await actionPlatformAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
+
+    const payloadRaw = (await request.formData()).get('payload')?.toString();
+    if (!payloadRaw) return fail(400, { error: 'Neplatné údaje.' });
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(payloadRaw) as Record<string, unknown>;
+    } catch {
+      return fail(400, { error: 'Neplatné údaje.' });
+    }
+
+    const mutation = await runServerApiMutation(fetch, token, '/api/admin/email-settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (isActionFailure(mutation)) return mutation;
+
+    return { success: true };
+  },
+  sendTest: async ({ request, cookies, fetch }) => {
+    const auth = await actionPlatformAdminOrFail(fetch, cookies);
+    if (isActionFailure(auth)) return auth;
+    const { token } = auth;
+
+    const payloadRaw = (await request.formData()).get('payload')?.toString();
+    if (!payloadRaw) return fail(400, { error: 'Neplatné údaje.' });
+
+    let payload: { to?: string };
+    try {
+      payload = JSON.parse(payloadRaw) as { to?: string };
+    } catch {
+      return fail(400, { error: 'Neplatné údaje.' });
+    }
+
+    const mutation = await runServerApiMutation(fetch, token, '/api/admin/email-settings/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: payload.to }),
+    });
+    if (isActionFailure(mutation)) return mutation;
+
+    return { success: true, testSent: true };
+  },
+};

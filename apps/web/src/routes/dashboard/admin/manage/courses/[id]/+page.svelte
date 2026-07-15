@@ -7,6 +7,7 @@
   import { t } from '$lib/i18n';
   import StudentSearchPicker from '$lib/components/StudentSearchPicker.svelte';
   import CourseActivityEditor from '$lib/components/CourseActivityEditor.svelte';
+  import CourseReminderSettings from '$lib/components/CourseReminderSettings.svelte';
   import AutosaveStatus from '$lib/components/AutosaveStatus.svelte';
   import CoursePublicationBadge from '$lib/components/CoursePublicationBadge.svelte';
   import { createAutosave, type AutosaveStatus as AutosaveState } from '$lib/autosave';
@@ -21,7 +22,7 @@
   import '$lib/styles/admin-users.css';
   import '$lib/styles/course-edit.css';
 
-  type Tab = 'settings' | 'content' | 'evaluation' | 'students' | 'certificate' | 'reporting';
+  type Tab = 'settings' | 'content' | 'evaluation' | 'students' | 'certificate' | 'reporting' | 'reminders';
 
   type CompletionRule = {
     id?: string;
@@ -111,6 +112,13 @@
   let settingsBaseline = $state<string | null>(null);
   let settingsAutosaveStatus = $state<AutosaveState>('idle');
   let settingsAutosaveError = $state('');
+
+  const courseDefaultLocale = $derived(
+    ((course?.defaultLocale as string) === 'en' ? 'en' : 'sk') as 'sk' | 'en',
+  );
+  const courseStoredReminders = $derived(
+    (course?.notificationSettings as { reminders?: Record<string, unknown> } | undefined)?.reminders,
+  );
 
   const settingsAutosave = createAutosave({
     debounceMs: 800,
@@ -831,6 +839,7 @@
       <span class="course-edit-tabs-divider" aria-hidden="true"></span>
       <div class="course-edit-tabs-secondary">
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'settings'} onclick={() => (activeTab = 'settings')}>{t('admin.tabSettings', $locale)}</button>
+        <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'reminders'} onclick={() => (activeTab = 'reminders')}>{t('admin.tabReminders', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'students'} onclick={() => (activeTab = 'students')}>{t('admin.tabStudents', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'evaluation'} onclick={() => (activeTab = 'evaluation')}>{t('admin.tabEvaluation', $locale)}</button>
         <button type="button" class="course-edit-tab" class:course-edit-tab--active={activeTab === 'certificate'} onclick={() => (activeTab = 'certificate')}>{t('admin.tabCertificate', $locale)}</button>
@@ -889,6 +898,15 @@
           </form>
         </div>
       </section>
+    {:else if activeTab === 'reminders'}
+      <CourseReminderSettings
+        courseId={courseId}
+        locale={$locale}
+        courseLocale={courseDefaultLocale}
+        storedReminders={courseStoredReminders}
+        platformNotifications={data.platformNotifications}
+        onsaved={refreshCourse}
+      />
     {:else if activeTab === 'content'}
       <section class="panel course-edit-panel">
         <div class="panel-header"><h2>{t('admin.courseStructure', $locale)}</h2></div>

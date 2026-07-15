@@ -41,7 +41,7 @@ export const ADMIN_SETTINGS_SECTIONS: AdminSettingsSection[] = [
     titleKey: 'admin.settingsEmailTitle',
     descKey: 'admin.settingsEmailSub',
     icon: 'email',
-    ready: false,
+    ready: true,
   },
   {
     id: 'branding',

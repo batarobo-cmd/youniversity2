@@ -6,6 +6,7 @@ import { users } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { createSession, destroySession, touchSession } from '../services/session';
 import { recordLogin } from '../services/login-events';
+import { sendPlatformNotification } from '../services/email-notify';
 import { recordSecurityEvent } from '../services/security-events';
 import { recordUserActivity } from '../services/activity-log';
 import { SUSPENDED_ACCOUNT_CODE } from '../services/user-suspension';
@@ -229,6 +230,15 @@ authRoutes.post('/register', async (c) => {
   } catch (err) {
     console.warn('[auth] login event not recorded:', (err as Error).message);
   }
+
+  void sendPlatformNotification({
+    notificationId: 'account.welcome',
+    to: user.email,
+    userId: user.id,
+    userName: user.name,
+    userEmail: user.email,
+    locale: user.preferredLocale,
+  });
 
   return c.json({ sessionId, accessToken: sessionId, user: serializeUser(user) }, 201);
 });

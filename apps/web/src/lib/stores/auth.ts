@@ -105,6 +105,7 @@ export function setAuth(sessionId: string, authUser: User) {
 }
 
 export function clearAuth() {
+  const previousUser = get(user);
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     // Odstráň starý JWT ak existuje
@@ -113,6 +114,9 @@ export function clearAuth() {
   token.set(null);
   user.set(null);
   authReady.set(true);
+  if (previousUser?.preferredLocale) {
+    setLocale(previousUser.preferredLocale as Locale);
+  }
 }
 
 export function setStudentViewMode(enabled: boolean) {

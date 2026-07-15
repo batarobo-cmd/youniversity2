@@ -7,6 +7,7 @@ import {
   lessonProgress,
   lessons,
   certificates,
+  users,
 } from '../db/schema';
 import { broadcastToCourse, broadcastToUser } from '../realtime/hub';
 import {
@@ -16,6 +17,7 @@ import {
 import { allocateCertificateNumber } from './certificate-number';
 import { ensureCertificatePdf } from './certificate-document';
 import { hasCertificateForCurrentAttempt } from './enrollment-achievement';
+import { sendPlatformNotification } from './email-notify';
 
 async function isCourseCertificateEnabled(
   courseId: string,
@@ -98,6 +100,7 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
 
   let updatedEnrollment = enrollment;
   let changed = false;
+  let issuedCertificate: Awaited<ReturnType<typeof issueCourseCertificate>> | null = null;
 
   if (enrollment.status === 'active') {
     [updatedEnrollment] = await db
@@ -112,7 +115,7 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
     changed = true;
 
     if (certEnabled) {
-      await issueCourseCertificate(userId, courseId);
+      issuedCertificate = await issueCourseCertificate(userId, courseId);
     }
   } else if (enrollment.status === 'completed') {
     const hasCurrentCert = await hasCertificateForCurrentAttempt(
@@ -122,7 +125,7 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
     );
 
     if (certEnabled && !hasCurrentCert) {
-      await issueCourseCertificate(userId, courseId);
+      issuedCertificate = await issueCourseCertificate(userId, courseId);
       [updatedEnrollment] = await db
         .update(enrollments)
         .set({ completedAt: new Date() })
@@ -136,6 +139,38 @@ export async function evaluateCourseCompletion(userId: string, courseId: string)
 
   if (!changed) {
     return { passed, enrollment: updatedEnrollment };
+  }
+
+  const [student] = await db
+    .select({ name: users.name, email: users.email, preferredLocale: users.preferredLocale })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (student?.email) {
+    void sendPlatformNotification({
+      notificationId: 'progress.completed',
+      to: student.email,
+      userId,
+      courseId,
+      userName: student.name,
+      userEmail: student.email,
+      locale: student.preferredLocale,
+    });
+
+    if (issuedCertificate) {
+      void sendPlatformNotification({
+        notificationId: 'certificate.issued',
+        to: student.email,
+        userId,
+        courseId,
+        userName: student.name,
+        userEmail: student.email,
+        locale: student.preferredLocale,
+        certificateNumber: issuedCertificate.certificateNumber,
+        certificateId: issuedCertificate.id,
+      });
+    }
   }
 
   const payload = {

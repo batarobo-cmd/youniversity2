@@ -18,6 +18,11 @@ import { USER_ROLES, SUPPORTED_LOCALES, isSystemAdminRole } from '@youniversity2
 import { getAdminAuthSettings, updateAuthSettings } from '../services/auth-settings';
 import { getSystemSettings, updateSystemSettings } from '../services/system-settings';
 import {
+  getAdminEmailSettings,
+  updateEmailSettings,
+} from '../services/email-settings';
+import { sendTestEmail, verifySmtpConnection } from '../services/email-sender';
+import {
   canAssignSystemAdminRole,
   validateActiveSystemAdminRemains,
   validateRoleChange,
@@ -807,4 +812,74 @@ adminRoutes.patch('/system-settings', requireRole('admin'), async (c) => {
     console.error('[admin] PATCH /system-settings failed:', err);
     return c.json({ error: 'Failed to update system settings' }, 500);
   }
+});
+
+adminRoutes.get('/email-settings', requireRole('admin'), async (c) => {
+  try {
+    return c.json(await getAdminEmailSettings());
+  } catch (err) {
+    console.error('[admin] GET /email-settings failed:', err);
+    return c.json({ error: 'Failed to load email settings' }, 500);
+  }
+});
+
+adminRoutes.patch('/email-settings', requireRole('admin'), async (c) => {
+  try {
+    const body = z
+      .object({
+        platformName: z.string().max(120).optional(),
+        smtp: z
+          .object({
+            enabled: z.boolean().optional(),
+            host: z.string().max(255).optional(),
+            port: z.number().int().min(1).max(65535).optional(),
+            secure: z.boolean().optional(),
+            useStartTls: z.boolean().optional(),
+            username: z.string().max(255).optional(),
+            password: z.string().max(512).optional(),
+            fromEmail: z.string().max(255).optional(),
+            fromName: z.string().max(120).optional(),
+            replyTo: z.string().max(255).optional(),
+          })
+          .optional(),
+        platformNotifications: z
+          .record(
+            z.string(),
+            z.object({
+              enabled: z.boolean().optional(),
+              subject: z.string().max(500).optional(),
+              bodyHtml: z.string().max(20000).optional(),
+            }),
+          )
+          .optional(),
+      })
+      .safeParse(await c.req.json());
+
+    if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
+
+    const authUser = c.get('user') as AuthUser;
+    const updated = await updateEmailSettings(body.data);
+    void recordUserActivity(authUser.id, 'email.settings.updated', {
+      payload: { fields: Object.keys(body.data) },
+    });
+    return c.json(updated);
+  } catch (err) {
+    console.error('[admin] PATCH /email-settings failed:', err);
+    return c.json({ error: 'Failed to update email settings' }, 500);
+  }
+});
+
+adminRoutes.post('/email-settings/test', requireRole('admin'), async (c) => {
+  const body = z.object({ to: z.string().email() }).safeParse(await c.req.json());
+  if (!body.success) return c.json({ error: 'Invalid email address' }, 400);
+
+  const verify = await verifySmtpConnection();
+  if (!verify.ok) return c.json({ error: verify.error ?? 'SMTP verification failed' }, 400);
+
+  const result = await sendTestEmail(body.data.to);
+  if (!result.ok) return c.json({ error: result.error ?? 'Send failed' }, 400);
+
+  const authUser = c.get('user') as AuthUser;
+  void recordUserActivity(authUser.id, 'email.test.sent', { payload: { to: body.data.to } });
+  return c.json({ ok: true });
 });

@@ -177,7 +177,7 @@
         {/if}
         <StudentViewToggle {user} />
 
-        <LocaleMenu />
+        <LocaleMenu {user} />
 
         <ProfileMenu {user} />
 

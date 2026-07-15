@@ -3,6 +3,7 @@ import { db } from '../db';
 import { pingRedis } from './rate-limit';
 import { config } from '../config';
 import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import { getEmailSettings, isEmailConfigured } from './email-settings';
 
 export type HealthStatus = 'ok' | 'degraded' | 'error' | 'not_configured';
 
@@ -54,17 +55,28 @@ async function checkStorage(): Promise<HealthStatus> {
   }
 }
 
+async function checkEmail(): Promise<HealthStatus> {
+  try {
+    const settings = await getEmailSettings();
+    if (!settings.smtp.enabled) return 'not_configured';
+    return isEmailConfigured(settings) ? 'ok' : 'not_configured';
+  } catch {
+    return 'error';
+  }
+}
+
 export async function getAdminHealth() {
   const readiness = await getReadiness();
-  const [storage, realtime] = await Promise.all([
+  const [storage, email, realtime] = await Promise.all([
     checkStorage(),
+    checkEmail(),
     Promise.resolve(readiness.checks.redis === 'ok' ? ('ok' as const) : ('error' as const)),
   ]);
 
   const checks: AdminHealthChecks = {
     ...readiness.checks,
     storage,
-    email: 'not_configured',
+    email,
     realtime,
   };
 

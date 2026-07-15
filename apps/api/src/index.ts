@@ -23,12 +23,14 @@ import {
   authenticateWebSocket,
 } from './realtime/hub';
 import { startPublicationScheduler } from './services/publication-scheduler';
+import { startEmailReminderScheduler } from './services/course-email-notify';
 
 import { migrateLegacyRoles } from './db/migrate-legacy-roles';
 import { ensureSystemAdminExists } from './db/ensure-system-admin-exists';
 import { ensureSystemSettingsTable } from './db/ensure-system-settings-table';
 import { ensureScormTables } from './db/ensure-scorm-tables';
 import { ensureSecurityEventsTable } from './db/ensure-security-events-table';
+import { ensureEmailSettingsTable } from './db/ensure-email-settings-table';
 import { recordSecurityEvent } from './services/security-events';
 
 const app = new Hono();
@@ -114,7 +116,13 @@ try {
 } catch (err) {
   console.error('[startup] ensureSecurityEventsTable failed:', err);
 }
+try {
+  await ensureEmailSettingsTable();
+} catch (err) {
+  console.error('[startup] ensureEmailSettingsTable failed:', err);
+}
 startPublicationScheduler();
+startEmailReminderScheduler();
 
 const wsHandlers = createWebSocketHandlers();
 

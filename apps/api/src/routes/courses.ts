@@ -33,6 +33,11 @@ import { effectiveRole } from '../services/student-view';
 import { getReportingProgressState } from '../services/enrollment-achievement';
 import { evaluateCourseCompletion } from '../services/completion';
 import { clearCourseLessonProgress } from '../services/enrollment-progress';
+import {
+  normalizeCourseNotificationSettings,
+  parseCourseNotificationSettings,
+} from '../services/course-notification-settings';
+import { sendCoursePublishedEmailsIfEligible } from '../services/course-email-notify';
 
 export const courseRoutes = new Hono();
 
@@ -130,6 +135,62 @@ courseRoutes.patch('/:id', requireRole('admin'), async (c) => {
   });
 
   return c.json(updated);
+});
+
+courseRoutes.patch('/:id/notifications', requireRole('admin'), async (c) => {
+  const actor = c.get('user') as AuthUser;
+  const courseId = c.req.param('id');
+  const body = z
+    .object({
+      reminders: z
+        .record(
+          z.string(),
+          z.object({
+            enabled: z.boolean().optional(),
+            subject: z.string().max(500).optional(),
+            bodyHtml: z.string().max(20000).optional(),
+            daysBefore: z.number().int().min(0).max(365).optional(),
+            daysAfterEnrollment: z.number().int().min(0).max(365).optional(),
+            daysInactive: z.number().int().min(1).max(365).optional(),
+            repeatEveryDays: z.number().int().min(1).max(365).optional(),
+          }),
+        )
+        .optional(),
+    })
+    .safeParse(await c.req.json());
+
+  if (!body.success) return c.json({ error: 'Invalid input', details: body.error.flatten() }, 400);
+
+  const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+  if (!course) return c.json({ error: 'Course not found' }, 404);
+
+  const locale = (course.defaultLocale === 'en' ? 'en' : 'sk') as 'sk' | 'en';
+  const existing = parseCourseNotificationSettings(course.notificationSettings);
+  const patch = normalizeCourseNotificationSettings(
+    body.data.reminders ? { reminders: body.data.reminders } : undefined,
+    locale,
+  );
+
+  const merged = {
+    reminders: {
+      ...existing.reminders,
+      ...patch.reminders,
+    },
+  };
+
+  const [updated] = await db
+    .update(courses)
+    .set({ notificationSettings: merged, updatedAt: new Date() })
+    .where(eq(courses.id, courseId))
+    .returning();
+
+  const courseTitle = await getCourseTitle(courseId);
+  void recordUserActivity(actor.id, 'course.notifications.updated', {
+    courseId,
+    payload: { courseTitle, courseId },
+  });
+
+  return c.json({ notificationSettings: updated.notificationSettings });
 });
 
 courseRoutes.get('/:id', async (c) => {
@@ -328,6 +389,9 @@ courseRoutes.patch('/:id/publish', requireRole('admin'), async (c) => {
   const body = publishCourseSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'Invalid input' }, 400);
 
+  const [existing] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+  if (!existing) return c.json({ error: 'Course not found' }, 404);
+
   const [updated] = await db
     .update(courses)
     .set({ isPublished: body.data.isPublished, updatedAt: new Date() })
@@ -335,6 +399,10 @@ courseRoutes.patch('/:id/publish', requireRole('admin'), async (c) => {
     .returning();
 
   if (!updated) return c.json({ error: 'Course not found' }, 404);
+
+  if (updated.isPublished && !existing.isPublished) {
+    void sendCoursePublishedEmailsIfEligible(updated);
+  }
 
   const updateMessage = {
     type: WS_EVENTS.COURSE_UPDATED,
@@ -374,6 +442,7 @@ courseRoutes.patch('/:id/content', requireRole('admin'), async (c) => {
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return c.json({ error: 'Course not found' }, 404);
 
+  const wasPublished = course.isPublished;
   const loc = body.data.locale ?? course.defaultLocale;
 
   if (
@@ -450,6 +519,10 @@ courseRoutes.patch('/:id/content', requireRole('admin'), async (c) => {
 
   const [updated] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!updated) return c.json({ error: 'Course not found' }, 404);
+
+  if (updated.isPublished && !wasPublished) {
+    void sendCoursePublishedEmailsIfEligible(updated);
+  }
 
   return c.json({
     ok: true,

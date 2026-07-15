@@ -7,6 +7,7 @@ import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { broadcastToCourse, broadcastToUser, broadcastToAdmin } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
 import { recordUserActivity, getCourseTitle } from '../services/activity-log';
+import { sendPlatformNotification } from '../services/email-notify';
 import { clearCourseLessonProgress } from '../services/enrollment-progress';
 import { resolveEnrollmentStatusOnRestore } from '../services/enrollment-achievement';
 
@@ -159,7 +160,7 @@ enrollmentRoutes.post('/', requireRole('admin'), async (c) => {
   });
 
   const [student] = await db
-    .select({ name: users.name })
+    .select({ name: users.name, email: users.email, preferredLocale: users.preferredLocale })
     .from(users)
     .where(eq(users.id, body.data.userId))
     .limit(1);
@@ -173,6 +174,19 @@ enrollmentRoutes.post('/', requireRole('admin'), async (c) => {
       courseId: body.data.courseId,
     },
   });
+
+  if (student?.email) {
+    void sendPlatformNotification({
+      notificationId: 'enrollment.created',
+      to: student.email,
+      userId: body.data.userId,
+      courseId: body.data.courseId,
+      userName: student.name,
+      userEmail: student.email,
+      locale: student.preferredLocale,
+      courseTitle,
+    });
+  }
 
   return c.json(enrollment, 201);
 });
@@ -202,7 +216,7 @@ enrollmentRoutes.delete('/:id', requireRole('admin'), async (c) => {
   });
 
   const [student] = await db
-    .select({ name: users.name })
+    .select({ name: users.name, email: users.email, preferredLocale: users.preferredLocale })
     .from(users)
     .where(eq(users.id, enrollment.userId))
     .limit(1);
@@ -216,6 +230,19 @@ enrollmentRoutes.delete('/:id', requireRole('admin'), async (c) => {
       courseId: enrollment.courseId,
     },
   });
+
+  if (student?.email) {
+    void sendPlatformNotification({
+      notificationId: 'enrollment.removed',
+      to: student.email,
+      userId: enrollment.userId,
+      courseId: enrollment.courseId,
+      userName: student.name,
+      userEmail: student.email,
+      locale: student.preferredLocale,
+      courseTitle,
+    });
+  }
 
   return c.json(enrollment);
 });

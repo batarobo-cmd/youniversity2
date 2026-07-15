@@ -11,6 +11,7 @@
   import AppShell from '$lib/components/AppShell.svelte';
   import PageSkeleton from '$lib/components/PageSkeleton.svelte';
   import SystemAdminPasswordPrompt from '$lib/components/SystemAdminPasswordPrompt.svelte';
+  import AppToastHost from '$lib/components/AppToastHost.svelte';
   import type { LayoutData } from './$types';
   import type { User } from '@youniversity2/shared';
 
@@ -138,5 +139,8 @@
       </div>
     {/if}
     <SystemAdminPasswordPrompt />
+    {#if browser}
+      <AppToastHost />
+    {/if}
   </AppShell>
 {/if}
