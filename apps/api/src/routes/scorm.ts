@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import { scormAttempts, scormPackages, lessons, lessonProgress, courseModules } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
-import { canStudentUpdateProgress, canStudentViewCourse } from '../services/course-access';
+import { canStudentViewCourse } from '../services/course-access';
 import { evaluateCourseCompletion } from '../services/completion';
 import { effectiveRole } from '../services/student-view';
 import { captivateIndicatesComplete, scormCmiIndicatesComplete, scormCmiReadyToFinalize } from '@youniversity2/shared';
@@ -212,7 +212,6 @@ scormRoutes.post('/launch', async (c) => {
   if (!mod) return c.json({ error: 'Module not found' }, 404);
 
   if (!(await canStudentViewCourse(user, mod.courseId, c))) return c.json({ error: 'Course not found' }, 404);
-  if (!(await canStudentUpdateProgress(user, mod.courseId, c))) return c.json({ error: 'Course not found' }, 404);
 
   const [pkg] = await db
     .select({ id: scormPackages.id, storagePrefix: scormPackages.storagePrefix })
@@ -276,7 +275,7 @@ scormRoutes.post('/commit', async (c) => {
   if (!lesson) return c.json({ error: 'Lesson not found' }, 404);
   const [mod] = await db.select().from(courseModules).where(eq(courseModules.id, lesson.moduleId)).limit(1);
   if (!mod) return c.json({ error: 'Module not found' }, 404);
-  if (!(await canStudentUpdateProgress(user, mod.courseId, c))) return c.json({ error: 'Course not found' }, 404);
+  if (!(await canStudentViewCourse(user, mod.courseId, c))) return c.json({ error: 'Course not found' }, 404);
 
   const nextCmi = { ...(attempt.cmi as Record<string, unknown>), ...(body.data.cmi ?? {}) };
   const terminatedAt = body.data.terminated ? new Date() : attempt.terminatedAt;
