@@ -104,6 +104,7 @@ jobs:
         run: bun build/index.js &
         env:
           API_URL: http://localhost:3001
+          ORIGIN: http://127.0.0.1:4173
           PORT: 4173
           HOST: 127.0.0.1
           NODE_ENV: production
