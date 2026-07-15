@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "node build/index.js",
     "test": "svelte-kit sync && bun test src"
   },
   "dependencies": {

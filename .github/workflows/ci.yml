@@ -73,7 +73,7 @@ jobs:
           DATABASE_URL: postgresql://youniversity:youniversity@localhost:5432/youniversity2
           REDIS_URL: redis://localhost:6379
           NODE_ENV: development
-          CORS_ORIGIN: http://localhost:4173
+          CORS_ORIGIN: http://127.0.0.1:4173
 
       - name: Wait for API readiness
         run: |
@@ -100,11 +100,13 @@ jobs:
           NODE_ENV: production
 
       - name: Start web preview
-        run: bun run --filter @youniversity2/web preview -- --port 4173 --host 127.0.0.1 &
+        working-directory: apps/web
+        run: bun build/index.js &
         env:
           API_URL: http://localhost:3001
           PORT: 4173
           HOST: 127.0.0.1
+          NODE_ENV: production
 
       - name: Wait for web
         run: |
