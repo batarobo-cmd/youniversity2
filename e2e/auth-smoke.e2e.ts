@@ -11,7 +11,7 @@ test.describe('Web smoke', () => {
 
   test('student can sign in and reach dashboard', async ({ page }) => {
     await page.goto('/');
-    await page.locator('#email').fill('student');
+    await page.locator('#email').fill('student@local');
     await page.locator('#password').fill('student');
     await page.getByRole('button', { name: /prihlásiť|sign in/i }).click();
     await page.waitForURL('**/dashboard**', { timeout: 30_000 });
