@@ -20,9 +20,21 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Start Postgres and Redis
+        run: docker compose up -d --wait postgres redis
+
+      - name: Migrate database and ensure demo users
+        run: bun run db:migrate && bun run --filter @youniversity2/api db:ensure-demo
+        env:
+          DATABASE_URL: postgresql://youniversity:youniversity@localhost:5432/youniversity2
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: development
+
       - name: Run tests
         run: bun run test
         env:
+          DATABASE_URL: postgresql://youniversity:youniversity@localhost:5432/youniversity2
+          REDIS_URL: redis://localhost:6379
           NODE_ENV: development
 
       - name: Build
