@@ -14,7 +14,7 @@ test.describe('Web smoke', () => {
     await page.locator('#email').fill('student@local');
     await page.locator('#password').fill('student');
     await page.getByRole('button', { name: /prihlásiť|sign in/i }).click();
-    await page.waitForURL('**/dashboard**', { timeout: 30_000 });
+    await page.waitForURL('**/dashboard**', { timeout: 30_000, waitUntil: 'commit' });
     await expect(page.getByRole('link', { name: /prehľad|dashboard/i })).toBeVisible();
   });
 });
