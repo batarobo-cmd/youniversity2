@@ -419,7 +419,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  getUsers: () => request<Array<Record<string, unknown>>>('/api/admin/users'),
+  getUsers: () => {
+    const loc = get(locale);
+    return request<Array<Record<string, unknown>>>(`/api/admin/users?locale=${loc}`);
+  },
 
   getRegistrationHistory: (params: { q?: string; from?: string; to?: string; limit?: number; offset?: number }) => {
     const sp = new URLSearchParams();

@@ -64,6 +64,7 @@
   let { data }: { data: PageData } = $props();
 
   const courseId = $derived($page.params.id);
+  const initialActivityId = $derived($page.url.searchParams.get('activity'));
   let activeTab = $state<Tab>('content');
   let loading = $state(false);
   let saving = $state(false);
@@ -896,6 +897,7 @@
             courseId={courseId}
             modules={modules as never}
             locale={$locale}
+            initialActivityId={initialActivityId}
             onChange={reloadCourse}
           />
         </div>

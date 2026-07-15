@@ -1,6 +1,6 @@
 import { eq, and, gte, lte, lt, desc, inArray } from 'drizzle-orm';
 import { db } from '../db';
-import { activityEvents, loginEvents, courses, courseTranslations } from '../db/schema';
+import { activityEvents, loginEvents, securityEvents, courses, courseTranslations } from '../db/schema';
 
 const RETENTION_MS = 183 * 24 * 60 * 60 * 1000; // ~6 months
 let lastRetentionPurge = 0;
@@ -15,6 +15,7 @@ export async function ensureLogRetention() {
   const cutoff = sixMonthsAgo();
   await db.delete(loginEvents).where(lt(loginEvents.createdAt, cutoff));
   await db.delete(activityEvents).where(lt(activityEvents.createdAt, cutoff));
+  await db.delete(securityEvents).where(lt(securityEvents.createdAt, cutoff));
 }
 
 export type UserLogEntry = {

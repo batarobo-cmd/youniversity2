@@ -6,7 +6,13 @@
   import { getMainAdminNavTiles, isAdminNavTileActive, type AdminNavTile } from '$lib/admin-nav';
   import AdminSettingsIcon from '$lib/components/AdminSettingsIcon.svelte';
 
-  let { onNavigate }: { onNavigate?: () => void } = $props();
+  let {
+    onNavigate,
+    variant = 'tiles',
+  }: {
+    onNavigate?: () => void;
+    variant?: 'tiles' | 'drawer';
+  } = $props();
 
   const tiles = $derived(getMainAdminNavTiles(isPlatformAdminUser($authUser)));
 
@@ -19,7 +25,11 @@
   }
 </script>
 
-<nav class="admin-nav-tiles" aria-label={t('nav.administration', $locale)}>
+<nav
+  class="admin-nav-tiles"
+  class:admin-nav-tiles--drawer={variant === 'drawer'}
+  aria-label={t('nav.administration', $locale)}
+>
   <div class="admin-nav-tiles-grid">
     {#each tiles as tile (tile.href)}
       <a
@@ -34,20 +44,24 @@
         </span>
         <span class="admin-nav-tile-body">
           <span class="admin-nav-tile-title">{t(tile.titleKey, $locale)}</span>
-          <span class="admin-nav-tile-desc">{t(tile.descKey, $locale)}</span>
-          {#if tile.showStatus}
-            {#if tile.ready}
-              <span class="admin-nav-tile-meta">{t('admin.settingsReady', $locale)}</span>
-            {:else}
-              <span class="admin-nav-tile-meta admin-nav-tile-meta--soon">
-                {t('admin.settingsComingSoon', $locale)}
-              </span>
+          {#if variant === 'tiles'}
+            <span class="admin-nav-tile-desc">{t(tile.descKey, $locale)}</span>
+            {#if tile.showStatus}
+              {#if tile.ready}
+                <span class="admin-nav-tile-meta">{t('admin.settingsReady', $locale)}</span>
+              {:else}
+                <span class="admin-nav-tile-meta admin-nav-tile-meta--soon">
+                  {t('admin.settingsComingSoon', $locale)}
+                </span>
+              {/if}
             {/if}
           {/if}
         </span>
-        <svg class="admin-nav-tile-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
+        {#if variant === 'tiles'}
+          <svg class="admin-nav-tile-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        {/if}
       </a>
     {/each}
   </div>

@@ -11,8 +11,10 @@
 </script>
 
 <div class="admin-shell">
-  <div class="admin-nav-bar">
-    <AdminNavTiles />
+  <div class="admin-nav-bar" class:admin-nav-bar--with-settings={showSettingsNav}>
+    <div class="admin-nav-tiles-wrap">
+      <AdminNavTiles />
+    </div>
     {#if showSettingsNav}
       <AdminSettingsTabs />
     {/if}

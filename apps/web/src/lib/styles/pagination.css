@@ -31,11 +31,16 @@
   justify-content: center;
   width: 2rem;
   height: 2rem;
+  min-width: 2rem;
+  padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text-secondary);
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: none;
+  transform: none;
   transition:
     border-color var(--duration-fast),
     background var(--duration-fast),
@@ -46,6 +51,8 @@
   color: var(--color-primary);
   border-color: rgba(99, 102, 241, 0.35);
   background: var(--color-primary-muted);
+  box-shadow: none;
+  transform: none;
 }
 
 .pagination-btn:disabled {

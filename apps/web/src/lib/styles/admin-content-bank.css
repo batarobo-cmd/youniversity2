@@ -1,0 +1,309 @@
+.content-bank {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.content-bank-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-primary, #6d5efc) 10%, var(--color-surface)) 0%,
+    var(--color-surface) 55%
+  );
+}
+
+.content-bank-hero h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.content-bank-hero p {
+  margin: 0.35rem 0 0;
+  color: var(--color-muted);
+  max-width: 40rem;
+  font-size: 0.875rem;
+}
+
+.content-bank-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.content-bank-stat {
+  min-width: 7rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-bg);
+}
+
+.content-bank-stat-label {
+  margin: 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.content-bank-stat-value {
+  margin: 0.2rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.content-bank-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  background: var(--color-surface);
+}
+
+.content-bank-toolbar input[type='search'],
+.content-bank-toolbar select {
+  min-height: 2.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--color-bg);
+  font-size: 0.875rem;
+}
+
+.content-bank-toolbar input[type='search'] {
+  flex: 1 1 14rem;
+}
+
+.content-bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.content-bank-card {
+  border: 1px solid var(--color-border);
+  border-radius: 0.95rem;
+  background: var(--color-surface);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.content-bank-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary, #6d5efc) 35%, var(--color-border));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--color-primary, #6d5efc) 8%, transparent);
+}
+
+.content-bank-card--orphan {
+  border-style: dashed;
+}
+
+.content-bank-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+}
+
+.content-bank-card-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.content-bank-card-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.content-bank-card-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.content-bank-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.content-bank-kind--video {
+  color: #5b21b6;
+  background: #ede9fe;
+}
+
+.content-bank-kind--presentation {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.content-bank-kind--scorm {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.content-bank-usages {
+  border-top: 1px solid var(--color-border);
+  padding: 0.65rem 1rem 0.85rem;
+  background: color-mix(in srgb, var(--color-border) 12%, transparent);
+}
+
+.content-bank-usages-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.content-bank-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.content-bank-usage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.55rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.8rem;
+}
+
+.content-bank-usage-path {
+  color: var(--color-text);
+}
+
+.content-bank-usage-path span {
+  color: var(--color-muted);
+}
+
+.content-bank-usage-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.content-bank-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.875rem;
+}
+
+.content-bank-rename-input {
+  width: 100%;
+  min-height: 2.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 720px) {
+  .content-bank-card-header {
+    flex-direction: column;
+  }
+
+  .content-bank-card-actions {
+    width: 100%;
+  }
+}
+
+.content-bank-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.content-bank-modal {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.content-bank-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.content-bank-modal-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.content-bank-modal-close {
+  display: inline-flex;
+  padding: 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.content-bank-modal-close:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.content-bank-modal-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.content-bank-modal-body {
+  padding: 1rem 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.content-bank-modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

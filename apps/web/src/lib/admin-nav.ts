@@ -7,6 +7,7 @@ export type AdminNavIcon =
   | 'settings'
   | 'auth'
   | 'system'
+  | 'contentBank'
   | 'email'
   | 'branding'
   | 'reporting'
@@ -58,7 +59,7 @@ export function getMainAdminNavTiles(platformAdmin: boolean): AdminNavTile[] {
       descKey: 'admin.settingsReportingSub',
       icon: 'reporting',
       matchPath: '/dashboard/admin/reporting',
-      ready: false,
+      ready: true,
       showStatus: true,
     },
   );
@@ -99,6 +100,15 @@ export function isAdminNavActive(pathname: string, platformAdmin: boolean): bool
   if (main.some((tile) => isAdminNavTileActive(pathname, tile))) return true;
   if (isAdminSettingsPath(pathname)) return true;
   return false;
+}
+
+export function isAdminOverviewPath(pathname: string): boolean {
+  return pathname === '/dashboard/admin';
+}
+
+export function getActiveAdminNavTile(pathname: string, platformAdmin: boolean): AdminNavTile | null {
+  const tiles = getMainAdminNavTiles(platformAdmin);
+  return tiles.find((tile) => isAdminNavTileActive(pathname, tile)) ?? null;
 }
 
 export { isAdminSettingsPath };

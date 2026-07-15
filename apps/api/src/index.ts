@@ -28,6 +28,8 @@ import { migrateLegacyRoles } from './db/migrate-legacy-roles';
 import { ensureSystemAdminExists } from './db/ensure-system-admin-exists';
 import { ensureSystemSettingsTable } from './db/ensure-system-settings-table';
 import { ensureScormTables } from './db/ensure-scorm-tables';
+import { ensureSecurityEventsTable } from './db/ensure-security-events-table';
+import { recordSecurityEvent } from './services/security-events';
 
 const app = new Hono();
 
@@ -67,6 +69,25 @@ app.route('/api/media', mediaRoutes);
 app.route('/api/certificates', certificateRoutes);
 app.route('/api/scorm', scormRoutes);
 
+app.onError((err, c) => {
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith('/api/')) {
+    void recordSecurityEvent({
+      category: 'api',
+      eventType: 'api.error',
+      outcome: 'failure',
+      reasonCode: err.name || 'Error',
+      payload: {
+        path,
+        method: c.req.method,
+        message: err.message?.slice(0, 500),
+      },
+    });
+  }
+  console.error('[api] unhandled error:', err);
+  return c.json({ error: 'Internal Server Error' }, 500);
+});
+
 await initRealtimeHub();
 try {
   await migrateLegacyRoles();
@@ -87,6 +108,11 @@ try {
   await ensureScormTables();
 } catch (err) {
   console.error('[startup] ensureScormTables failed:', err);
+}
+try {
+  await ensureSecurityEventsTable();
+} catch (err) {
+  console.error('[startup] ensureSecurityEventsTable failed:', err);
 }
 startPublicationScheduler();
 

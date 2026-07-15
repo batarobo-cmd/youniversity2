@@ -1,4 +1,4 @@
-export type AdminSettingsSectionId = 'auth' | 'system' | 'email' | 'branding' | 'privacy';
+export type AdminSettingsSectionId = 'auth' | 'system' | 'contentBank' | 'email' | 'branding' | 'privacy';
 
 export type AdminSettingsSection = {
   id: AdminSettingsSectionId;
@@ -25,6 +25,14 @@ export const ADMIN_SETTINGS_SECTIONS: AdminSettingsSection[] = [
     titleKey: 'admin.settingsSystemTitle',
     descKey: 'admin.settingsSystemSub',
     icon: 'system',
+    ready: true,
+  },
+  {
+    id: 'contentBank',
+    href: '/dashboard/admin/settings/content-bank',
+    titleKey: 'admin.settingsContentBankTitle',
+    descKey: 'admin.settingsContentBankSub',
+    icon: 'contentBank',
     ready: true,
   },
   {

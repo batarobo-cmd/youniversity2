@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, type AuthUser } from '../middleware/auth';
 import { canStudentViewCourse } from '../services/course-access';
 import {
   authorizePresentationFileAccess,
@@ -30,6 +30,7 @@ import { scormPackages } from '../db/schema';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { and, eq } from 'drizzle-orm';
+import { recordSecurityEvent } from '../services/security-events';
 
 export const mediaRoutes = new Hono();
 
@@ -179,6 +180,7 @@ mediaRoutes.post('/videos', authMiddleware, requireRole('admin'), async (c) => {
 });
 
 mediaRoutes.post('/scorm', authMiddleware, requireRole('admin'), async (c) => {
+  const authUser = c.get('user') as AuthUser;
   try {
     const form = await c.req.formData();
   const file = form.get('file');
@@ -281,6 +283,14 @@ mediaRoutes.post('/scorm', authMiddleware, requireRole('admin'), async (c) => {
     })
     .returning();
 
+  void recordSecurityEvent({
+    category: 'media',
+    eventType: 'media.scorm.uploaded',
+    outcome: 'success',
+    userId: authUser.id,
+    payload: { courseId, packageId: row.id, title: row.title, version: row.version, scoCount: scos.length },
+  });
+
   return c.json(
     {
       packageId: row.id,
@@ -294,6 +304,14 @@ mediaRoutes.post('/scorm', authMiddleware, requireRole('admin'), async (c) => {
   } catch (err) {
     console.error('[media/scorm] upload failed:', err);
     const message = err instanceof Error ? err.message : 'SCORM upload failed';
+    void recordSecurityEvent({
+      category: 'media',
+      eventType: 'media.scorm.upload_failed',
+      outcome: 'failure',
+      userId: authUser.id,
+      reasonCode: 'upload_failed',
+      payload: { message: message.slice(0, 300) },
+    });
     return c.json({ error: message }, 500);
   }
 });

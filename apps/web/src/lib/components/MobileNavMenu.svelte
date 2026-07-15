@@ -5,6 +5,14 @@
   import { portal } from '$lib/actions/portal';
   import AdminNavTiles from '$lib/components/AdminNavTiles.svelte';
   import { ensureStudentViewCookie } from '$lib/stores/auth';
+  import {
+    getActiveAdminNavTile,
+    getSettingsNavTiles,
+    isAdminNavTileActive,
+    isAdminPath,
+    isAdminSettingsPath,
+  } from '$lib/admin-nav';
+  import { isPlatformAdminUser, user as authUser } from '$lib/stores/auth';
   import type { User } from '@youniversity2/shared';
 
   let {
@@ -19,6 +27,13 @@
 
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
+
+  const onAdminPage = $derived(isAdminPath($page.url.pathname));
+  const inSettings = $derived(isAdminSettingsPath($page.url.pathname));
+  const settingsTabs = $derived(getSettingsNavTiles());
+  const activeAdminTile = $derived(
+    getActiveAdminNavTile($page.url.pathname, isPlatformAdminUser($authUser)),
+  );
 
   function toggle() {
     open = !open;
@@ -123,8 +138,34 @@
 
       {#if $showStaffNav && user}
         <div class="app-mobile-nav-admin">
-          <p class="app-mobile-nav-admin-label">{t('nav.administration', $locale)}</p>
-          <AdminNavTiles onNavigate={handleNavigate} />
+          {#if onAdminPage && activeAdminTile}
+            <p class="app-mobile-nav-context">
+              {t('nav.administration', $locale)} · {t(activeAdminTile.titleKey, $locale)}
+            </p>
+          {:else}
+            <p class="app-mobile-nav-admin-label">{t('nav.administration', $locale)}</p>
+          {/if}
+          <AdminNavTiles variant="drawer" onNavigate={handleNavigate} />
+
+          {#if onAdminPage && inSettings}
+            <p class="app-mobile-nav-admin-label app-mobile-nav-admin-label--sub">
+              {t('admin.menuSettings', $locale)}
+            </p>
+            <div class="app-mobile-nav-sub-links">
+              {#each settingsTabs as tab (tab.href)}
+                {@const active = isAdminNavTileActive($page.url.pathname, tab)}
+                <a
+                  href={tab.href}
+                  class="app-mobile-nav-sub-link"
+                  class:app-mobile-nav-sub-link--active={active}
+                  aria-current={active ? 'page' : undefined}
+                  onclick={handleNavigate}
+                >
+                  {t(tab.titleKey, $locale)}
+                </a>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

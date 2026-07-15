@@ -256,6 +256,48 @@ body.mobile-nav-open .app-banner {
   color: var(--color-muted);
 }
 
+.app-mobile-nav-admin-label--sub {
+  margin-top: 1rem;
+}
+
+.app-mobile-nav-context {
+  margin: 0 0 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.app-mobile-nav-sub-links {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.app-mobile-nav-sub-link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  border: 1px solid var(--color-border);
+}
+
+.app-mobile-nav-sub-link:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+  text-decoration: none;
+}
+
+.app-mobile-nav-sub-link--active {
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+  border-color: rgba(99, 102, 241, 0.25);
+  font-weight: 600;
+}
+
 .student-view-banner {
   max-width: 1280px;
   margin: 0 auto 0.75rem;
@@ -562,6 +604,27 @@ body.mobile-nav-open .app-banner {
 
   .app-banner-inner {
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+    height: 52px;
+    --app-header-height: 52px;
+  }
+
+  .app-banner {
+    --app-header-height: 52px;
+  }
+
+  .app-banner-brand {
+    gap: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .app-logo {
+    font-size: 0.9375rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .app-nav {
@@ -570,15 +633,35 @@ body.mobile-nav-open .app-banner {
 
   .app-actions {
     grid-column: 2;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .app-actions .icon-btn,
+  .app-actions .app-command-icon,
+  .app-mobile-nav-toggle {
+    width: 32px;
+    height: 32px;
   }
 
   .app-main {
-    padding: 1.25rem 1rem 2rem;
+    padding: 1rem 1rem 2rem;
+    overflow-x: clip;
   }
 }
 
 @media (max-width: 480px) {
   .app-logo span:not(.app-logo-mark) {
+    display: none;
+  }
+
+  .app-banner-inner {
+    padding: 0 0.625rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-actions .student-view-toggle {
     display: none;
   }
 }

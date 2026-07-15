@@ -5,6 +5,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { createSession } from './session';
 import { recordLogin } from './login-events';
+import { recordSecurityEvent } from './security-events';
 import {
   type CorporateProfile,
   extractEmailDomain,
@@ -264,11 +265,25 @@ export async function handleOAuthCallback(
 ): Promise<{ redirectUrl: string }> {
   const validState = await verifyState(state, provider);
   if (!validState) {
+    void recordSecurityEvent({
+      category: 'oauth',
+      eventType: 'oauth.invalid_state',
+      outcome: 'failure',
+      method: provider,
+      reasonCode: 'invalid_state',
+    });
     return { redirectUrl: `${config.oauth.webUrl}/login?error=invalid_state` };
   }
 
   try {
     if (!(await isOAuthProviderActive(provider))) {
+      void recordSecurityEvent({
+        category: 'oauth',
+        eventType: 'oauth.disabled',
+        outcome: 'blocked',
+        method: provider,
+        reasonCode: 'oauth_disabled',
+      });
       return { redirectUrl: `${config.oauth.webUrl}/login?error=oauth_disabled` };
     }
 
@@ -286,11 +301,28 @@ export async function handleOAuthCallback(
       ? settings.allowedLoginDomains
       : settings.allowedRegistrationDomains;
     if (!isEmailDomainAllowed(profile.email, domainList)) {
+      void recordSecurityEvent({
+        category: 'oauth',
+        eventType: 'oauth.domain_blocked',
+        outcome: 'blocked',
+        email: profile.email,
+        method: provider,
+        reasonCode: 'domain_not_allowed',
+      });
       return { redirectUrl: `${config.oauth.webUrl}/login?error=domain_not_allowed` };
     }
 
     const user = await findOrCreateOAuthUser(provider, profile, oauthId);
     if (user.isSuspended) {
+      void recordSecurityEvent({
+        category: 'oauth',
+        eventType: 'oauth.account_suspended',
+        outcome: 'blocked',
+        userId: user.id,
+        email: profile.email,
+        method: provider,
+        reasonCode: 'account_suspended',
+      });
       return { redirectUrl: `${config.oauth.webUrl}/login?error=account_suspended` };
     }
     const sessionId = await createSession({
@@ -303,7 +335,15 @@ export async function handleOAuthCallback(
 
     const params = new URLSearchParams({ session: sessionId });
     return { redirectUrl: `${config.oauth.webUrl}/auth/callback?${params}` };
-  } catch {
+  } catch (err) {
+    void recordSecurityEvent({
+      category: 'oauth',
+      eventType: 'oauth.callback_failed',
+      outcome: 'failure',
+      method: provider,
+      reasonCode: 'oauth_failed',
+      payload: { message: (err as Error).message?.slice(0, 300) },
+    });
     return { redirectUrl: `${config.oauth.webUrl}/login?error=oauth_failed` };
   }
 }

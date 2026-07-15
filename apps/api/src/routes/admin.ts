@@ -28,8 +28,13 @@ import {
 import { broadcastToUser, broadcastToAdmin } from '../realtime/hub';
 import { WS_EVENTS } from '@youniversity2/shared';
 import { updateSessionRoleForUser } from '../services/session';
+import { adminReportsRoutes } from './admin-reports';
+import { contentBankRoutes } from './content-bank';
 
 export const adminRoutes = new Hono();
+
+adminRoutes.route('/reports', adminReportsRoutes);
+adminRoutes.route('/content-bank', contentBankRoutes);
 
 adminRoutes.use('*', authMiddleware);
 

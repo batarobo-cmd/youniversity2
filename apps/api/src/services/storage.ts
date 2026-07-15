@@ -1,7 +1,11 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -328,4 +332,87 @@ export async function getCertificatePdfObject(fileKey: string) {
   } catch {
     return null;
   }
+}
+
+export type StorageObjectMeta = {
+  key: string;
+  size: number;
+  lastModified?: string;
+};
+
+export async function listStorageObjects(prefix: string, maxKeys = 2000): Promise<StorageObjectMeta[]> {
+  await ensureBucket();
+  const normalized = prefix.replace(/\\/g, '/').replace(/^\/+/, '');
+  const items: StorageObjectMeta[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const res = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: config.s3.bucket,
+        Prefix: normalized,
+        ContinuationToken: continuationToken,
+        MaxKeys: Math.min(1000, maxKeys - items.length),
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      if (!obj.Key || obj.Key.endsWith('/')) continue;
+      items.push({
+        key: obj.Key,
+        size: obj.Size ?? 0,
+        lastModified: obj.LastModified?.toISOString(),
+      });
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken && items.length < maxKeys);
+
+  return items;
+}
+
+export async function getStorageObjectMeta(key: string): Promise<StorageObjectMeta | null> {
+  if (!key || key.includes('..')) return null;
+  try {
+    const head = await s3.send(
+      new HeadObjectCommand({
+        Bucket: config.s3.bucket,
+        Key: key,
+      }),
+    );
+    return {
+      key,
+      size: head.ContentLength ?? 0,
+      lastModified: head.LastModified?.toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteStorageObject(key: string) {
+  if (!key || key.includes('..')) return false;
+  await ensureBucket();
+  await s3.send(new DeleteObjectCommand({ Bucket: config.s3.bucket, Key: key }));
+  return true;
+}
+
+export async function deleteStoragePrefix(prefix: string) {
+  const keys = await listStorageObjects(prefix, 5000);
+  if (keys.length === 0) return 0;
+  await ensureBucket();
+
+  let deleted = 0;
+  for (let i = 0; i < keys.length; i += 1000) {
+    const chunk = keys.slice(i, i + 1000);
+    await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: config.s3.bucket,
+        Delete: {
+          Objects: chunk.map((item) => ({ Key: item.key })),
+          Quiet: true,
+        },
+      }),
+    );
+    deleted += chunk.length;
+  }
+  return deleted;
 }

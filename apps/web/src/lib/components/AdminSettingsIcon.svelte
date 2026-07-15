@@ -51,6 +51,17 @@
     <rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" stroke-width="1.75" />
     <path d="M7 7h.01M7 17h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
   </svg>
+{:else if icon === 'contentBank'}
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M4 7.5A2.5 2.5 0 016.5 5h11A2.5 2.5 0 0120 7.5v9A2.5 2.5 0 0117.5 19h-11A2.5 2.5 0 014 16.5v-9z"
+      stroke="currentColor"
+      stroke-width="1.75"
+      stroke-linejoin="round"
+    />
+    <path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+    <circle cx="17" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5" />
+  </svg>
 {:else if icon === 'email'}
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.75" />

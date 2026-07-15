@@ -6,6 +6,7 @@ import { users } from '../db/schema';
 import { authMiddleware, type AuthUser } from '../middleware/auth';
 import { createSession, destroySession, touchSession } from '../services/session';
 import { recordLogin } from '../services/login-events';
+import { recordSecurityEvent } from '../services/security-events';
 import { recordUserActivity } from '../services/activity-log';
 import { SUSPENDED_ACCOUNT_CODE } from '../services/user-suspension';
 import {
@@ -75,6 +76,13 @@ authRoutes.get('/oauth/:provider/callback', async (c) => {
   const error = c.req.query('error');
 
   if (error || !code || !state) {
+    void recordSecurityEvent({
+      category: 'oauth',
+      eventType: 'oauth.denied',
+      outcome: 'failure',
+      reasonCode: error ?? 'missing_code_or_state',
+      method: provider,
+    });
     return c.redirect(`${config.oauth.webUrl}/login?error=oauth_denied`);
   }
 
@@ -242,41 +250,70 @@ authRoutes.post('/login', async (c) => {
   const loginIpKey = `login:ip:${clientIp ?? 'unknown'}`;
   const loginEmailKey = `login:email:${email.toLowerCase()}`;
 
+  const recordFailedLogin = async (reasonCode: string, userId?: string) => {
+    await recordRateLimitFailure(loginIpKey, LOGIN_RATE_WINDOW_SEC);
+    await recordRateLimitFailure(loginEmailKey, LOGIN_RATE_WINDOW_SEC);
+    void recordSecurityEvent({
+      category: 'auth',
+      eventType: 'auth.login.failed',
+      outcome: reasonCode === 'domain_not_allowed' ? 'blocked' : 'failure',
+      userId: userId ?? null,
+      email,
+      method: 'password',
+      ipAddress: clientIp ?? null,
+      reasonCode,
+    });
+  };
+
   if (
     (await isRateLimited(loginIpKey, LOGIN_RATE_IP_LIMIT)) ||
     (await isRateLimited(loginEmailKey, LOGIN_RATE_EMAIL_LIMIT))
   ) {
+    void recordSecurityEvent({
+      category: 'auth',
+      eventType: 'auth.login.rate_limited',
+      outcome: 'blocked',
+      email,
+      method: 'password',
+      ipAddress: clientIp ?? null,
+      reasonCode: 'rate_limited',
+    });
     return c.json({ error: 'Too many login attempts', code: 'rate_limited' }, 429);
   }
 
-  const recordFailedLogin = async () => {
-    await recordRateLimitFailure(loginIpKey, LOGIN_RATE_WINDOW_SEC);
-    await recordRateLimitFailure(loginEmailKey, LOGIN_RATE_WINDOW_SEC);
-  };
-
   if (!isEmailDomainAllowed(email, settings.allowedLoginDomains)) {
-    await recordFailedLogin();
+    await recordFailedLogin('domain_not_allowed');
     return c.json({ error: 'Email domain is not allowed', code: 'domain_not_allowed' }, 403);
   }
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
   if (!user) {
-    await recordFailedLogin();
+    await recordFailedLogin('invalid_credentials');
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
   if (!user.passwordHash) {
-    await recordFailedLogin();
+    await recordFailedLogin('oauth_only_account', user.id);
     const provider = user.oauthProvider === 'google' ? 'Google' : 'Microsoft 365';
     return c.json({ error: `Použite prihlásenie cez ${provider}` }, 401);
   }
 
   if (!(await bcrypt.compare(password, user.passwordHash))) {
-    await recordFailedLogin();
+    await recordFailedLogin('invalid_credentials', user.id);
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
   if (user.isSuspended) {
+    void recordSecurityEvent({
+      category: 'auth',
+      eventType: 'auth.login.blocked',
+      outcome: 'blocked',
+      userId: user.id,
+      email,
+      method: 'password',
+      ipAddress: clientIp ?? null,
+      reasonCode: SUSPENDED_ACCOUNT_CODE,
+    });
     return c.json({ error: SUSPENDED_ACCOUNT_CODE, code: SUSPENDED_ACCOUNT_CODE }, 403);
   }
 

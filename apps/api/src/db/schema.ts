@@ -328,6 +328,33 @@ export const loginEvents = pgTable('login_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const securityEvents = pgTable(
+  'security_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    category: varchar('category', { length: 32 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    outcome: varchar('outcome', { length: 16 }).notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    email: varchar('email', { length: 255 }),
+    method: varchar('method', { length: 32 }),
+    ipAddress: varchar('ip_address', { length: 45 }),
+    reasonCode: varchar('reason_code', { length: 64 }),
+    payload: jsonb('payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    categoryCreatedIdx: index('security_events_category_created_idx').on(
+      table.category,
+      table.createdAt,
+    ),
+    eventTypeCreatedIdx: index('security_events_event_type_created_idx').on(
+      table.eventType,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const authSettings = pgTable('auth_settings', {
   id: integer('id').primaryKey().default(1),
   settings: jsonb('settings').notNull(),

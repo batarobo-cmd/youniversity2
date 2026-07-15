@@ -94,6 +94,12 @@ export function describeUserLog(entry: LogEntry, locale: Locale): string {
     case 'auth.logout':
       return eventBaseLabel('auth.logout', locale);
 
+    case 'reports.exported': {
+      const section = (p.section as string) ?? '—';
+      const format = (p.format as string) ?? '—';
+      return `${eventBaseLabel('reports.exported', locale)}: ${section} (${format})`;
+    }
+
     default: {
       const base = eventBaseLabel(entry.eventType, locale);
       const detail = entry.courseTitle || (p.label as string) || (p.targetName as string);

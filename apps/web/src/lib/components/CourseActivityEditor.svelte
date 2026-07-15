@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { ACTIVITY_TYPES } from '@youniversity2/shared';
   import { serverMutate } from '$lib/client/form-action';
   import { t } from '$lib/i18n';
@@ -53,11 +54,13 @@
     modules = [],
     locale,
     onChange,
+    initialActivityId = null,
   }: {
     courseId: string;
     modules: ModuleRow[];
     locale: Locale;
     onChange: () => void | Promise<void>;
+    initialActivityId?: string | null;
   } = $props();
 
   let saving = $state(false);
@@ -426,6 +429,19 @@
     editConfigUrl = (cfg.audioUrl as string) || '';
   }
 
+  let initialActivityOpened = $state(false);
+
+  $effect(() => {
+    if (!initialActivityId || initialActivityOpened || orderedModules.length === 0) return;
+    const activity = findActivityById(initialActivityId);
+    if (!activity) return;
+    initialActivityOpened = true;
+    startEdit(activity);
+    void tick().then(() => {
+      document.getElementById(`activity-${initialActivityId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
   function configForType(type: string, url: string): Record<string, unknown> | undefined {
     const normalized = normalizeActivityType(type);
     if (!url.trim()) return undefined;
@@ -701,6 +717,7 @@
         <ul class="activity-list">
           {#each mod.activities as activity (activity.id)}
             <li
+              id="activity-{activity.id}"
               class="activity-row"
               class:activity-row--editing={editingId === activity.id}
               class:activity-row--drop-before={dropBeforeActivityId === activity.id && isDraggingActivity()}
